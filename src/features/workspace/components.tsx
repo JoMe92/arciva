@@ -116,7 +116,7 @@ export function DetailView({ items, index, setIndex, className = '' }: { items: 
   const cur = items[index]
   const canPrev = index > 0
   const canNext = index < items.length - 1
-  const STRIP_H = 128
+  const STRIP_H = 136
   const THUMB = 96
 
   const rootClass = ['grid', 'h-full', 'min-h-0', className].filter(Boolean).join(' ')
@@ -146,15 +146,21 @@ export function DetailView({ items, index, setIndex, className = '' }: { items: 
         )}
       </div>
 
-      <div className="border-t border-[var(--border,#E1D3B9)] overflow-x-auto whitespace-nowrap p-3 bg-[var(--surface,#FFFFFF)] relative">
+      <div className="thumb-strip border-t border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] relative">
         {items.length === 0 ? (
           <div className="h-full grid place-items-center">
             <RawPlaceholderFrame ratio="3x2" className="w-[220px] h-[132px] rounded-lg border border-[var(--border,#E1D3B9)]" title="Placeholder image" />
           </div>
         ) : (
-          <div className="flex items-center gap-8">
+          <div className="flex items-center gap-6 pr-6">
             {items.map((p, i) => (
-              <button key={p.id} onClick={() => setIndex(i)} className={`relative border ${i === index ? 'border-[var(--text,#1F1E1B)]' : 'border-[var(--border,#E1D3B9)]'} rounded`} style={{ width: THUMB, height: THUMB }}>
+              <button
+                key={p.id}
+                onClick={() => setIndex(i)}
+                className={`relative shrink-0 overflow-hidden rounded border ${i === index ? 'border-[var(--text,#1F1E1B)]' : 'border-[var(--border,#E1D3B9)]'}`}
+                style={{ width: THUMB, height: THUMB }}
+                aria-label={`View ${p.name}`}
+              >
                 <div className="absolute inset-0 flex items-center justify-center bg-[var(--placeholder-bg-beige,#F3EBDD)]">
                   {p.src ? (
                     <img src={p.src} alt={p.name} className="h-full w-full object-contain" />

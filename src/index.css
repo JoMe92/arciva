@@ -7,3 +7,27 @@
   --placeholder-motif-bar: #4a463f;
   --placeholder-motif-circle: #a56a4a;
 }
+
+.thumb-strip {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.75rem;
+  scrollbar-width: auto;
+  scrollbar-color: var(--border, #e1d3b9) transparent;
+}
+
+.thumb-strip::-webkit-scrollbar {
+  height: 12px;
+}
+
+.thumb-strip::-webkit-scrollbar-track {
+  background-color: rgba(225, 211, 185, 0.4);
+  border-radius: 9999px;
+}
+
+.thumb-strip::-webkit-scrollbar-thumb {
+  background-color: var(--border, #c9bba0);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}

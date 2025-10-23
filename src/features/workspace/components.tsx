@@ -3,6 +3,15 @@ import { RawPlaceholder, RawPlaceholderFrame } from '../../components/RawPlaceho
 import { TOKENS } from './utils'
 import type { Photo, ImgType, ColorTag } from './types'
 
+const COLOR_MAP: Record<ColorTag, string> = {
+  None: '#E5E7EB',
+  Red: '#F87171',
+  Green: '#34D399',
+  Blue: '#60A5FA',
+  Yellow: '#FBBF24',
+  Purple: '#C084FC',
+}
+
 // Brand
 export function StoneTrailIcon({ size = 28, title = 'Stone Trail', className = '' }: { size?: number; title?: string; className?: string }) {
   return (
@@ -152,23 +161,49 @@ export function DetailView({ items, index, setIndex, className = '' }: { items: 
             <RawPlaceholderFrame ratio="3x2" className="w-[220px] h-[132px] rounded-lg border border-[var(--border,#E1D3B9)]" title="Placeholder image" />
           </div>
         ) : (
-          <div className="flex items-center gap-6 pr-6">
+          <div className="flex items-end gap-6 pr-6">
             {items.map((p, i) => (
-              <button
-                key={p.id}
-                onClick={() => setIndex(i)}
-                className={`relative shrink-0 overflow-hidden rounded border ${i === index ? 'border-[var(--text,#1F1E1B)]' : 'border-[var(--border,#E1D3B9)]'}`}
-                style={{ width: THUMB, height: THUMB }}
-                aria-label={`View ${p.name}`}
-              >
-                <div className="absolute inset-0 flex items-center justify-center bg-[var(--placeholder-bg-beige,#F3EBDD)]">
-                  {p.src ? (
-                    <img src={p.src} alt={p.name} className="h-full w-full object-contain" />
-                  ) : (
-                    <RawPlaceholder ratio={p.placeholderRatio} title={p.name || 'Placeholder image'} fit="contain" />
-                  )}
+              <div key={p.id} className="flex shrink-0 w-[96px] max-w-[96px] flex-col items-stretch text-[10px] leading-tight">
+                <button
+                  onClick={() => setIndex(i)}
+                  className={`relative overflow-hidden rounded border focus:outline-none focus:ring-2 focus:ring-[var(--sand200,#E8DFC9)] ${i === index ? 'border-[var(--text,#1F1E1B)]' : 'border-[var(--border,#E1D3B9)]'}`}
+                  style={{ width: THUMB, height: THUMB }}
+                  aria-label={`View ${p.name}`}
+                >
+                  <span className="absolute top-1 left-1 rounded bg-white/90 px-1 py-[2px] text-[9px] font-medium border border-[var(--border,#E1D3B9)] text-[var(--text,#1F1E1B)]">
+                    {p.type}
+                  </span>
+                  <div className="absolute inset-0 flex items-center justify-center bg-[var(--placeholder-bg-beige,#F3EBDD)]">
+                    {p.src ? (
+                      <img src={p.src} alt={p.name} className="h-full w-full object-contain" />
+                    ) : (
+                      <RawPlaceholder ratio={p.placeholderRatio} title={p.name || 'Placeholder image'} fit="contain" />
+                    )}
+                  </div>
+                </button>
+                <div className="mt-1 truncate text-center font-medium text-[var(--text,#1F1E1B)]">{p.name}</div>
+                <div className="mt-1 rounded border border-[var(--border,#E1D3B9)] bg-[var(--sand50,#F9F4EB)] px-1 py-0.5">
+                  <div className="flex flex-col gap-0.5 text-[9px]">
+                    <span className="flex items-center justify-between gap-1">
+                      <span className="font-medium">Rating</span>
+                      <span>{p.rating}★</span>
+                    </span>
+                    <span className="flex items-center justify-between gap-1">
+                      <span className="font-medium">Color</span>
+                      <span className="flex items-center gap-1">
+                        <span className="h-2 w-2 rounded-full border border-[var(--border,#E1D3B9)]" style={{ backgroundColor: COLOR_MAP[p.tag] }} aria-hidden />
+                        <span className="truncate">{p.tag}</span>
+                      </span>
+                    </span>
+                    <span className="flex items-center justify-between gap-1">
+                      <span className="font-medium">Status</span>
+                      <span className={p.rejected ? 'text-[#B91C1C]' : p.picked ? 'text-[#166534]' : 'text-[var(--text-muted,#6B645B)]'}>
+                        {p.rejected ? 'Rejected' : p.picked ? 'Picked' : '—'}
+                      </span>
+                    </span>
+                  </div>
                 </div>
-              </button>
+              </div>
             ))}
           </div>
         )}
@@ -179,11 +214,10 @@ export function DetailView({ items, index, setIndex, className = '' }: { items: 
 
 // ----- Overlays, Filters, etc. -----
 export function ThumbContent({ p }: { p: Photo }) {
-  const colorMap: Record<ColorTag, string> = { None: '#E5E7EB', Red: '#F87171', Green: '#34D399', Blue: '#60A5FA', Yellow: '#FBBF24', Purple: '#C084FC' }
   return (
     <div className="absolute top-1 left-1 flex items-center gap-1 text-[10px]">
       <span className="px-1 py-0.5 bg-white/85 border border-[var(--border,#E1D3B9)] rounded">{p.type}</span>
-      <span className="w-2.5 h-2.5 rounded-full border border-[var(--border,#E1D3B9)]" style={{ backgroundColor: colorMap[p.tag] }} aria-hidden />
+      <span className="w-2.5 h-2.5 rounded-full border border-[var(--border,#E1D3B9)]" style={{ backgroundColor: COLOR_MAP[p.tag] }} aria-hidden />
     </div>
   )
 }

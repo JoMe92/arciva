@@ -1,1 +1,9 @@
 @import "tailwindcss";
+
+:root {
+  --placeholder-bg-beige: #f3ebdd;
+  --placeholder-bg-start: #fbf7ef;
+  --placeholder-bg-stop: #eadfcb;
+  --placeholder-motif-bar: #4a463f;
+  --placeholder-motif-circle: #a56a4a;
+}

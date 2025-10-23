@@ -1,8 +1,11 @@
 import React, { useMemo, useRef, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { makeDemo, TOKENS, ph } from '../../features/workspace/utils'
+import { makeDemo, TOKENS, randomPlaceholderRatio } from '../../features/workspace/utils'
 import type { Photo, ImgType, ColorTag } from '../../features/workspace/types'
 import { TopBar, Sidebar, GridView, DetailView, EmptyState, NoResults } from '../../features/workspace/components'
+
+const SIDEBAR_WIDTH = 288
+const INSPECTOR_WIDTH = 260
 
 export default function ProjectWorkspace() {
   const { id } = useParams()
@@ -100,7 +103,8 @@ export default function ProjectWorkspace() {
         picked: false,
         rejected: false,
         tag: 'None',
-        src: ph(1200, 800, `NEW_${i + 1}@${dest}`),
+        src: null,
+        placeholderRatio: randomPlaceholderRatio(),
       })
     }
     setPhotos((arr) => [...add, ...arr])
@@ -140,10 +144,13 @@ export default function ProjectWorkspace() {
   const hasAny = photos.length > 0
 
   return (
-    <div className="min-h-screen bg-[var(--surface-subtle,#FBF7EF)] text-[var(--text,#1F1E1B)]">
+    <div className="flex min-h-screen flex-col bg-[var(--surface-subtle,#FBF7EF)] text-[var(--text,#1F1E1B)]">
       <TopBar projectName={projectName} onBack={goBack} />
 
-      <div className="grid grid-cols-[240px_1fr_260px] gap-0 min-h-[80vh]">
+      <div
+        className="flex-1 min-h-0 grid overflow-hidden"
+        style={{ gridTemplateColumns: `${SIDEBAR_WIDTH}px minmax(0,1fr) ${INSPECTOR_WIDTH}px` }}
+      >
         <Sidebar
           dateTree={dateTree as any}
           onOpenImport={() => setImportOpen(true)}
@@ -153,7 +160,7 @@ export default function ProjectWorkspace() {
           setCustomFolder={setCustomFolder}
         />
 
-        <main ref={contentRef} className="bg-[var(--surface,#FFFFFF)] border-r border-[var(--border,#E1D3B9)] relative">
+        <main ref={contentRef} className="relative flex min-h-0 flex-col bg-[var(--surface,#FFFFFF)] border-r border-[var(--border,#E1D3B9)]">
           <div className="border-b border-[var(--border,#E1D3B9)] px-3 py-2 flex items-center gap-2 text-xs">
             <button className={`px-2 py-1 rounded border ${view === 'grid' ? 'bg-[var(--sand100,#F3EBDD)] border-[var(--border,#E1D3B9)]' : 'border-[var(--border,#E1D3B9)]'}`} onClick={() => setView('grid')}>Grid</button>
             <button className={`px-2 py-1 rounded border ${view === 'detail' ? 'bg-[var(--sand100,#F3EBDD)] border-[var(--border,#E1D3B9)]' : 'border-[var(--border,#E1D3B9)]'}`} onClick={() => setView('detail')}>Detail</button>
@@ -191,18 +198,26 @@ export default function ProjectWorkspace() {
             </div>
           </div>
 
-          {!hasAny ? (
-            <EmptyState onImport={() => setImportOpen(true)} />
-          ) : visible.length === 0 ? (
-            <NoResults onReset={() => { setMinStars(0); setFilterColor('Any'); setShowJPEG(true); setShowRAW(true); setOnlyPicked(false); setHideRejected(true) }} />
-          ) : view === 'grid' ? (
-            <GridView items={visible} size={gridSize} gap={GAP} containerWidth={contentW} onOpen={(idx) => { setCurrent(idx); setView('detail') }} />
-          ) : (
-            <DetailView items={visible} index={current} setIndex={setCurrent} />
-          )}
+          <div className="flex-1 min-h-0 overflow-hidden">
+            {!hasAny ? (
+              <div className="flex h-full items-center justify-center overflow-auto p-6">
+                <EmptyState onImport={() => setImportOpen(true)} />
+              </div>
+            ) : visible.length === 0 ? (
+              <div className="flex h-full items-center justify-center overflow-auto p-6">
+                <NoResults onReset={() => { setMinStars(0); setFilterColor('Any'); setShowJPEG(true); setShowRAW(true); setOnlyPicked(false); setHideRejected(true) }} />
+              </div>
+            ) : view === 'grid' ? (
+              <div className="h-full overflow-auto">
+                <GridView items={visible} size={gridSize} gap={GAP} containerWidth={contentW} onOpen={(idx) => { setCurrent(idx); setView('detail') }} />
+              </div>
+            ) : (
+              <DetailView items={visible} index={current} setIndex={setCurrent} className="h-full" />
+            )}
+          </div>
         </main>
 
-        <aside className="bg-[var(--surface,#FFFFFF)] p-3 text-xs">
+        <aside className="h-full overflow-y-auto bg-[var(--surface,#FFFFFF)] p-3 text-xs">
           <h4 className="font-medium mb-2">Inspector</h4>
           {visible[current] ? (
             <div className="space-y-2">

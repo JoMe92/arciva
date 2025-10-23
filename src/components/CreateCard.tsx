@@ -1,14 +1,14 @@
 import React from 'react'
 import type { Project } from '../features/projects/types'
-import { ph, phSizeFor, aspectClass } from '../features/projects/utils'
+import { aspectClass, placeholderRatioForAspect } from '../features/projects/utils'
+import { RawPlaceholder } from './RawPlaceholder'
 
 const MEDIA_MAX = 'max-h-[420px] md:max-h-[520px]'
 // tailwind v4 scan hint
-const __scan = 'aspect-[4/5] aspect-[16/9] aspect-square'
+const __scan = 'aspect-[3/4] aspect-[16/9] aspect-square'
 
 const CreateCard: React.FC<{ onClick: () => void; aspect?: Project['aspect'] }> = ({ onClick, aspect = 'portrait' }) => {
-  const [w, h] = phSizeFor(aspect)
-  const src = ph(w, h, 'Untitled project • Unassigned')
+  const ratio = placeholderRatioForAspect(aspect)
 
   return (
     <div className="relative">
@@ -20,7 +20,7 @@ const CreateCard: React.FC<{ onClick: () => void; aspect?: Project['aspect'] }> 
       >
         <div className="overflow-hidden rounded-t-xl bg-[var(--surface,#FFFFFF)]">
           <div className={`relative ${aspectClass(aspect)} w-full ${MEDIA_MAX} overflow-hidden`}>
-            <img src={src} alt="Empty project placeholder" className="absolute inset-0 h-full w-full object-cover" />
+            <RawPlaceholder ratio={ratio} className="absolute inset-0" />
           </div>
         </div>
         <div className="rounded-b-xl border border-[var(--border,#E1D3B9)] border-t-0 bg-[var(--surface,#FFFFFF)] px-1.5 sm:px-2 md:px-3 pt-2 pb-3">

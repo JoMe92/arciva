@@ -1,6 +1,7 @@
 import React from 'react'
 import type { Project } from '../features/projects/types'
-import { ph, phSizeFor, aspectClass } from '../features/projects/utils'
+import { aspectClass, placeholderRatioForAspect } from '../features/projects/utils'
+import { RawPlaceholder } from './RawPlaceholder'
 
 const MEDIA_MAX = 'max-h-[420px] md:max-h-[520px]'
 
@@ -12,8 +13,8 @@ const ProjectCard: React.FC<{
   archiveMode: boolean
   onEdit: (p: Project) => void
 }> = ({ p, onOpen, onEdit }) => {
-  const [w, h] = phSizeFor(p.aspect)
-  const src = p.image ?? ph(w, h, `${p.title} • ${p.client}`)
+  const placeholderRatio = placeholderRatioForAspect(p.aspect)
+  const hasImage = Boolean(p.image)
 
   return (
     <div className="relative">
@@ -38,11 +39,15 @@ const ProjectCard: React.FC<{
         <div className="overflow-hidden rounded-t-xl bg-[var(--surface,#FFFFFF)]">
           {/* identischer Medien-Wrapper mit vertikalem Limit */}
           <div className={`relative ${aspectClass(p.aspect)} w-full ${MEDIA_MAX} overflow-hidden`}>
-            <img
-              src={src}
-              alt={`${p.title} – ${p.client}`}
-              className="absolute inset-0 h-full w-full object-cover"
-            />
+            {hasImage ? (
+              <img
+                src={p.image ?? undefined}
+                alt={`${p.title} – ${p.client}`}
+                className="absolute inset-0 h-full w-full object-cover"
+              />
+            ) : (
+              <RawPlaceholder ratio={placeholderRatio} className="absolute inset-0" />
+            )}
           </div>
         </div>
       </div>

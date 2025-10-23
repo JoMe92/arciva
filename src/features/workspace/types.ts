@@ -1,3 +1,5 @@
+import type { PlaceholderRatio } from '../../shared/placeholder'
+
 export type ImgType = 'JPEG' | 'RAW'
 export type ColorTag = 'None' | 'Red' | 'Green' | 'Blue' | 'Yellow' | 'Purple'
 
@@ -10,5 +12,6 @@ export type Photo = {
   picked: boolean
   rejected: boolean
   tag: ColorTag
-  src: string
+  src?: string | null
+  placeholderRatio: PlaceholderRatio
 }

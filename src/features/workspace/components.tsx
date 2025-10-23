@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { RawPlaceholder, RawPlaceholderFrame } from '../../components/RawPlaceholder'
 import { TOKENS } from './utils'
 import type { Photo, ImgType, ColorTag } from './types'
 
@@ -10,15 +11,6 @@ export function StoneTrailIcon({ size = 28, title = 'Stone Trail', className = '
       <ellipse cx={12} cy={12} rx={2.2} ry={1.7} fill={TOKENS.sand500} />
       <ellipse cx={16.5} cy={8.5} rx={1.9} ry={1.5} fill={TOKENS.basalt700} />
     </svg>
-  )
-}
-
-export function Motif({ className = '', dot = TOKENS.clay500, bar = TOKENS.basalt700 }: { className?: string; dot?: string; bar?: string }) {
-  return (
-    <div className={'relative ' + className} aria-hidden>
-      <div style={{ position: 'absolute', left: 12, bottom: 12, width: 3, height: 28, background: bar, borderRadius: 2, opacity: 0.9 }} />
-      <div style={{ position: 'absolute', right: 12, top: 12, width: 8, height: 8, background: dot, borderRadius: 9999, opacity: 0.9 }} />
-    </div>
   )
 }
 
@@ -45,7 +37,7 @@ export function Sidebar({
   setCustomFolder: (s: string) => void
 }) {
   return (
-    <aside className="border-r border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-3 text-xs">
+    <aside className="flex h-full min-h-0 flex-col border-r border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-3 text-xs">
       <button onClick={onOpenImport} className="w-full mb-3 px-3 py-2 rounded-md text-xs font-medium" style={{ backgroundColor: TOKENS.clay500, color: '#fff' }}>
         Import photos…
       </button>
@@ -63,7 +55,7 @@ export function Sidebar({
           )}
         </div>
       </div>
-      <div>
+      <div className="flex-1 min-h-0 overflow-y-auto pr-1">
         <div className="text-[11px] uppercase tracking-wider text-[var(--text-muted,#6B645B)] mb-1">Folders (virtual)</div>
         <Tree nodes={dateTree} />
       </div>
@@ -100,8 +92,17 @@ export function GridView({
     <div className="p-3 grid" style={{ gridTemplateColumns: template, gap }}>
       {items.map((p, idx) => (
         <div key={p.id} className="relative group border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]">
-          <div className="aspect-square w-full overflow-hidden" role="button" tabIndex={0} onDoubleClick={() => onOpen(idx)}>
-            <img src={p.src} alt={p.name} className="h-full w-full object-cover" />
+          <div
+            className="aspect-square w-full overflow-hidden bg-[var(--placeholder-bg-beige,#F3EBDD)] flex items-center justify-center"
+            role="button"
+            tabIndex={0}
+            onDoubleClick={() => onOpen(idx)}
+          >
+            {p.src ? (
+              <img src={p.src} alt={p.name} className="h-full w-full object-contain" />
+            ) : (
+              <RawPlaceholder ratio={p.placeholderRatio} title={p.name || 'Placeholder image'} fit="contain" />
+            )}
           </div>
           <ThumbContent p={p} />
           <ThumbOverlay p={p} twoLine={twoLine} />
@@ -111,19 +112,27 @@ export function GridView({
   )
 }
 
-export function DetailView({ items, index, setIndex }: { items: Photo[]; index: number; setIndex: (n: number) => void }) {
+export function DetailView({ items, index, setIndex, className = '' }: { items: Photo[]; index: number; setIndex: (n: number) => void; className?: string }) {
   const cur = items[index]
   const canPrev = index > 0
   const canNext = index < items.length - 1
   const STRIP_H = 128
   const THUMB = 96
 
+  const rootClass = ['grid', 'h-full', 'min-h-0', className].filter(Boolean).join(' ')
+
   return (
-    <div className={`h-full grid`} style={{ gridTemplateRows: `minmax(0,1fr) ${STRIP_H}px` }}>
-      <div className="relative">
+    <div className={rootClass} style={{ gridTemplateRows: `minmax(0,1fr) ${STRIP_H}px` }}>
+      <div className="relative min-h-0 overflow-hidden">
         {cur ? (
           <>
-            <img src={cur.src} alt={cur.name} className="absolute inset-0 h-full w-full object-contain" />
+            <div className="absolute inset-0 flex items-center justify-center bg-[var(--placeholder-bg-beige,#F3EBDD)] p-6">
+              {cur.src ? (
+                <img src={cur.src} alt={cur.name} className="max-h-full max-w-full object-contain" />
+              ) : (
+                <RawPlaceholder ratio={cur.placeholderRatio} title={cur.name || 'Placeholder image'} fit="contain" />
+              )}
+            </div>
             <div className="absolute left-1/2 -translate-x-1/2 bottom-4 bg-[var(--charcoal-800,#1F1E1B)] text-white text-xs px-3 py-1.5 rounded shadow flex items-center gap-2">
               <button disabled={!canPrev} onClick={() => setIndex(Math.max(0, index - 1))} className="px-2 py-0.5 rounded border border-white/30 disabled:opacity-40">←</button>
               <span className="opacity-80">{index + 1}/{items.length}</span>
@@ -132,10 +141,7 @@ export function DetailView({ items, index, setIndex }: { items: Photo[]; index: 
           </>
         ) : (
           <div className="absolute inset-0 grid place-items-center">
-            <div className="relative w-[380px] h-[240px] rounded-xl border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]">
-              <Motif className="absolute inset-0" />
-              <div style={{ position: 'absolute', left: 14, bottom: 10, width: 4, height: 44, background: TOKENS.basalt700, borderRadius: 2 }} />
-            </div>
+            <RawPlaceholderFrame ratio="16x9" className="w-[380px] h-[240px] rounded-xl border border-[var(--border,#E1D3B9)]" title="Placeholder image" />
           </div>
         )}
       </div>
@@ -143,16 +149,19 @@ export function DetailView({ items, index, setIndex }: { items: Photo[]; index: 
       <div className="border-t border-[var(--border,#E1D3B9)] overflow-x-auto whitespace-nowrap p-3 bg-[var(--surface,#FFFFFF)] relative">
         {items.length === 0 ? (
           <div className="h-full grid place-items-center">
-            <div className="relative w-[220px] h-[132px] rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]">
-              <Motif className="absolute inset-0" />
-              <div style={{ position: 'absolute', left: 10, bottom: 8, width: 4, height: 36, background: TOKENS.basalt700, borderRadius: 2 }} />
-            </div>
+            <RawPlaceholderFrame ratio="3x2" className="w-[220px] h-[132px] rounded-lg border border-[var(--border,#E1D3B9)]" title="Placeholder image" />
           </div>
         ) : (
           <div className="flex items-center gap-8">
             {items.map((p, i) => (
               <button key={p.id} onClick={() => setIndex(i)} className={`relative border ${i === index ? 'border-[var(--text,#1F1E1B)]' : 'border-[var(--border,#E1D3B9)]'} rounded`} style={{ width: THUMB, height: THUMB }}>
-                <img src={p.src} alt={p.name} className="absolute inset-0 w-full h-full object-cover" />
+                <div className="absolute inset-0 flex items-center justify-center bg-[var(--placeholder-bg-beige,#F3EBDD)]">
+                  {p.src ? (
+                    <img src={p.src} alt={p.name} className="h-full w-full object-contain" />
+                  ) : (
+                    <RawPlaceholder ratio={p.placeholderRatio} title={p.name || 'Placeholder image'} fit="contain" />
+                  )}
+                </div>
               </button>
             ))}
           </div>
@@ -237,9 +246,8 @@ export function ColorSwatch({ value, onPick }: { value: ColorTag; onPick: (t: Co
 export function EmptyState({ onImport }: { onImport: () => void }) {
   return (
     <div className="grid place-items-center h-[60vh] text-center">
-      <div className="inline-flex flex-col items-center gap-3 p-6 rounded-xl border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] relative">
-        <Motif className="absolute inset-0 pointer-events-none" />
-        <div style={{ position: 'absolute', left: 16, bottom: 12, width: 5, height: 48, background: TOKENS.basalt700, borderRadius: 2, opacity: 0.9 }} />
+      <div className="inline-flex flex-col items-center gap-4 p-6 rounded-xl border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]">
+        <RawPlaceholderFrame ratio="3x2" className="w-[220px] h-[132px] rounded-lg border border-[var(--border,#E1D3B9)]" title="Placeholder image" />
         <div className="text-base font-semibold">Start your project</div>
         <div className="text-xs text-[var(--text-muted,#6B645B)] max-w-[420px]">Import photos to begin. You can auto-organize by date (YYYY/MM/DD) or choose a custom folder name.</div>
         <button onClick={onImport} className="mt-1 px-3 py-2 rounded-md text-xs font-medium" style={{ backgroundColor: TOKENS.clay500, color: '#fff' }}>

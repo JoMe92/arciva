@@ -15,17 +15,10 @@ export const TOKENS = {
   river500: cssVar('--river-500', '#6B7C7A'),
 }
 
-export function ph(w: number, h: number, label: string) {
-  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='${w}' height='${h}' viewBox='0 0 ${w} ${h}'>
-    <defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'>
-      <stop offset='0%' stop-color='${TOKENS.sand50}'/>
-      <stop offset='100%' stop-color='${TOKENS.sand500}'/>
-    </linearGradient></defs>
-    <rect width='100%' height='100%' fill='url(#g)'/>
-    <circle cx='${w * 0.82}' cy='${h * 0.22}' r='${Math.min(w, h) * 0.08}' fill='${TOKENS.clay500}' fill-opacity='0.9'/>
-    <text x='16' y='26' font-family='ui-sans-serif, system-ui' font-size='14' fill='${TOKENS.basalt700}' opacity='0.8'>${label}</text>
-  </svg>`
-  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`
+const DEMO_RATIOS: import('../../shared/placeholder').PlaceholderRatio[] = ['3x2', '4x3', '16x9', '2x3', '3x4', '9x16', '1x2', '2x1', '1x1']
+
+export function randomPlaceholderRatio() {
+  return DEMO_RATIOS[Math.floor(Math.random() * DEMO_RATIOS.length)]
 }
 
 export function makeDemo(n = 24) {
@@ -33,6 +26,7 @@ export function makeDemo(n = 24) {
   for (let i = 0; i < n; i++) {
     const d = new Date(2025, Math.floor(Math.random() * 12), Math.floor(Math.random() * 28) + 1)
     const type = Math.random() < 0.35 ? 'RAW' : 'JPEG'
+    const ratio = randomPlaceholderRatio()
     out.push({
       id: `ph${i + 1}`,
       name: `IMG_${String(i + 1).padStart(4, '0')}.${type === 'RAW' ? 'ARW' : 'JPG'}`,
@@ -42,7 +36,8 @@ export function makeDemo(n = 24) {
       picked: false,
       rejected: false,
       tag: 'None',
-      src: ph(900, 600, `IMG_${String(i + 1).padStart(4, '0')}`),
+      src: null,
+      placeholderRatio: ratio,
     })
   }
   return out

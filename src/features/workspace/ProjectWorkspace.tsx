@@ -272,59 +272,589 @@ function ColorFilter({ value, onChange }: { value: 'Any' | ColorTag; onChange: (
   )
 }
 
+const RAW_LIKE_EXTENSIONS = new Set(['arw', 'cr2', 'cr3', 'nef', 'raf', 'orf', 'rw2', 'dng', 'sr2', 'pef'])
+
+function inferTypeFromName(name: string): ImgType {
+  const ext = name.split('.').pop()?.toLowerCase()
+  if (!ext) return 'JPEG'
+  if (RAW_LIKE_EXTENSIONS.has(ext)) return 'RAW'
+  return 'JPEG'
+}
+
+type PendingItem = {
+  id: string
+  name: string
+  type: ImgType
+  previewUrl?: string | null
+  source: 'local' | 'hub'
+  selected: boolean
+  meta?: {
+    folder?: string
+  }
+}
+
+function makeLocalPendingItems(files: File[]): PendingItem[] {
+  if (!files.length) return []
+  const baseId = Date.now().toString(36)
+  return files.map((file, index) => {
+    const path = (file as File & { webkitRelativePath?: string }).webkitRelativePath
+    const folder = path ? (path.split('/')[0] || 'Folder') : 'Loose selection'
+    const previewUrl = typeof URL === 'undefined' ? null : URL.createObjectURL(file)
+    return {
+      id: `local-${baseId}-${index}-${Math.random().toString(36).slice(2, 6)}`,
+      name: file.name,
+      type: inferTypeFromName(file.name),
+      previewUrl,
+      source: 'local' as const,
+      selected: true,
+      meta: { folder },
+    }
+  })
+}
+
+type HubNode = {
+  id: string
+  name: string
+  assetCount?: number
+  types?: ImgType[]
+  children?: HubNode[]
+}
+
+const IMAGE_HUB_TREE: HubNode[] = [
+  {
+    id: 'proj-northern-lights',
+    name: 'Northern Lights',
+    children: [
+      {
+        id: 'proj-northern-lights/basecamp-2024',
+        name: '2024 - Basecamp Diaries',
+        assetCount: 64,
+        types: ['RAW', 'JPEG'],
+      },
+      {
+        id: 'proj-northern-lights/night-shift',
+        name: 'Night Shift Selects',
+        assetCount: 28,
+        types: ['RAW'],
+      },
+    ],
+  },
+  {
+    id: 'proj-editorial',
+    name: 'Editorial Campaigns',
+    children: [
+      {
+        id: 'proj-editorial/wild-coast',
+        name: 'Wild Coast',
+        children: [
+          {
+            id: 'proj-editorial/wild-coast/lookbook',
+            name: 'Lookbook Deliverables',
+            assetCount: 35,
+            types: ['JPEG'],
+          },
+          {
+            id: 'proj-editorial/wild-coast/bts',
+            name: 'Behind the Scenes',
+            assetCount: 12,
+            types: ['RAW', 'JPEG'],
+          },
+        ],
+      },
+      {
+        id: 'proj-editorial/urban-shapes',
+        name: 'Urban Shapes',
+        assetCount: 52,
+        types: ['RAW', 'JPEG'],
+      },
+    ],
+  },
+  {
+    id: 'proj-archive',
+    name: 'Archive',
+    children: [
+      {
+        id: 'proj-archive/35mm',
+        name: '35mm Film',
+        assetCount: 120,
+        types: ['JPEG'],
+      },
+      {
+        id: 'proj-archive/medium-format',
+        name: 'Medium Format Scans',
+        assetCount: 76,
+        types: ['RAW', 'JPEG'],
+      },
+    ],
+  },
+]
+
+type HubAggregate = { count: number; types: ImgType[] }
+
+function buildHubData(nodes: HubNode[]) {
+  const nodeMap = new Map<string, HubNode>()
+  const parentMap = new Map<string, string | null>()
+  const aggregateMap = new Map<string, HubAggregate>()
+
+  const visit = (node: HubNode, parent: string | null) => {
+    nodeMap.set(node.id, node)
+    parentMap.set(node.id, parent)
+    let count = node.assetCount ?? 0
+    const typeSet = new Set<ImgType>(node.types ?? [])
+    node.children?.forEach((child) => {
+      visit(child, node.id)
+      const agg = aggregateMap.get(child.id)
+      if (agg) {
+        count += agg.count
+        agg.types.forEach((t) => typeSet.add(t))
+      }
+    })
+    aggregateMap.set(node.id, { count, types: Array.from(typeSet) as ImgType[] })
+  }
+
+  nodes.forEach((node) => visit(node, null))
+
+  return { nodeMap, parentMap, aggregateMap }
+}
+
+const HUB_DATA = buildHubData(IMAGE_HUB_TREE)
+
+type HubAsset = { id: string; name: string; type: ImgType; folderPath: string }
+
+const HUB_LEAF_ASSET_CACHE = new Map<string, HubAsset[]>()
+const HUB_ALL_ASSET_CACHE = new Map<string, HubAsset[]>()
+
+function getHubNodePath(id: string): string[] {
+  const path: string[] = []
+  let current: string | null = id
+  while (current) {
+    const node = HUB_DATA.nodeMap.get(current)
+    if (!node) break
+    path.unshift(node.name)
+    current = HUB_DATA.parentMap.get(current) ?? null
+  }
+  return path
+}
+
+function ensureLeafAssets(node: HubNode): HubAsset[] {
+  if (!node.assetCount) return []
+  if (!HUB_LEAF_ASSET_CACHE.has(node.id)) {
+    const path = getHubNodePath(node.id)
+    const baseName = path[path.length - 1] || node.name
+    const types = node.types && node.types.length ? node.types : (['JPEG'] as ImgType[])
+    const assets: HubAsset[] = []
+    for (let i = 0; i < node.assetCount; i++) {
+      const type = types[i % types.length]
+      const suffix = type === 'RAW' ? 'ARW' : 'JPG'
+      const index = String(i + 1).padStart(4, '0')
+      assets.push({
+        id: `${node.id}::${index}`,
+        name: `${baseName.replace(/\s+/g, '_')}_${index}.${suffix}`,
+        type,
+        folderPath: path.join(' / ') || baseName,
+      })
+    }
+    HUB_LEAF_ASSET_CACHE.set(node.id, assets)
+  }
+  return HUB_LEAF_ASSET_CACHE.get(node.id)!
+}
+
+function getAssetsForNode(node: HubNode): HubAsset[] {
+  if (HUB_ALL_ASSET_CACHE.has(node.id)) return HUB_ALL_ASSET_CACHE.get(node.id)!
+  let assets: HubAsset[] = []
+  if (node.assetCount) {
+    assets = ensureLeafAssets(node)
+  } else {
+    node.children?.forEach((child) => {
+      assets = assets.concat(getAssetsForNode(child))
+    })
+  }
+  HUB_ALL_ASSET_CACHE.set(node.id, assets)
+  return assets
+}
+
+function PendingMiniGrid({ items, onToggle }: { items: PendingItem[]; onToggle: (id: string) => void }) {
+  if (!items.length) {
+    return (
+      <div className="rounded-md border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-4 text-center text-xs text-[var(--text-muted,#6B645B)]">
+        Nothing selected yet.
+      </div>
+    )
+  }
+  return (
+    <div className="rounded-md border border-[var(--border,#E1D3B9)] bg-[var(--sand-50,#FBF7EF)] p-2">
+      <div className="max-h-48 overflow-y-auto pr-1">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(88px,1fr))] gap-2">
+          {items.map((item) => (
+            <label
+              key={item.id}
+              className={`relative block overflow-hidden rounded-md border text-left ${item.selected ? 'border-[var(--charcoal-800,#1F1E1B)] bg-[var(--surface,#FFFFFF)]' : 'border-[var(--border,#E1D3B9)] bg-[var(--sand-100,#F3EBDD)] opacity-70'}`}
+            >
+              <input
+                type="checkbox"
+                checked={item.selected}
+                onChange={() => onToggle(item.id)}
+                className="absolute left-1 top-1 h-4 w-4 accent-[var(--charcoal-800,#1F1E1B)]"
+                aria-label={`Toggle ${item.name}`}
+              />
+              <div className="h-16 w-full bg-[var(--sand-100,#F3EBDD)]">
+                {item.previewUrl ? (
+                  <img src={item.previewUrl} alt={item.name} className="h-16 w-full object-cover" />
+                ) : (
+                  <div className="flex h-16 w-full items-center justify-center text-[10px] font-medium text-[var(--text-muted,#6B645B)]">
+                    {item.type}
+                  </div>
+                )}
+              </div>
+              <div className="truncate px-2 py-1 text-[10px] text-[var(--text-muted,#6B645B)]">{item.name}</div>
+            </label>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function collectDescendantIds(node: HubNode, acc: string[] = []) {
+  node.children?.forEach((child) => {
+    acc.push(child.id)
+    collectDescendantIds(child, acc)
+  })
+  return acc
+}
+
+function hasAncestorSelected(id: string, selection: Set<string>, parentMap: Map<string, string | null>) {
+  let parent = parentMap.get(id) ?? null
+  while (parent) {
+    if (selection.has(parent)) return true
+    parent = parentMap.get(parent) ?? null
+  }
+  return false
+}
+
 function ImportSheet({ onClose, onImport, folderMode, customFolder }: { onClose: () => void; onImport: (args: { count: number; types: ImgType[]; dest: string }) => void; folderMode: 'date' | 'custom'; customFolder: string }) {
-  const [count, setCount] = useState(24)
-  const [jpeg, setJpeg] = useState(true)
-  const [raw, setRaw] = useState(true)
+  const [mode, setMode] = useState<'choose' | 'local' | 'hub'>('choose')
+  const [localItems, setLocalItems] = useState<PendingItem[]>([])
+  const [hubSelected, setHubSelected] = useState<Set<string>>(() => new Set())
+  const [expandedHub, setExpandedHub] = useState<Set<string>>(() => new Set(IMAGE_HUB_TREE.map((node) => node.id)))
   const [ignoreDup, setIgnoreDup] = useState(true)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const folderInputRef = useRef<HTMLInputElement | null>(null)
+  const [hubItems, setHubItems] = useState<PendingItem[]>([])
+  const localPreviewUrlsRef = useRef<string[]>([])
+
   const dest = folderMode === 'date' ? 'YYYY/MM/DD' : customFolder.trim() || 'Custom'
 
   useEffect(() => { (document.getElementById('import-sheet') as HTMLDivElement | null)?.focus() }, [])
 
+  useEffect(() => {
+    if (!folderInputRef.current) return
+    folderInputRef.current.setAttribute('webkitdirectory', '')
+    folderInputRef.current.setAttribute('directory', '')
+  }, [])
+
+  useEffect(() => () => {
+    localPreviewUrlsRef.current.forEach((url) => URL.revokeObjectURL(url))
+    localPreviewUrlsRef.current = []
+  }, [])
+
+  useEffect(() => {
+    setHubItems((prev) => {
+      const prevSelectionMap = new Map(prev.map((item) => [item.id, item.selected]))
+      const rootIds = Array.from(hubSelected).filter((id) => !hasAncestorSelected(id, hubSelected, HUB_DATA.parentMap))
+      const items: PendingItem[] = []
+      rootIds.forEach((id) => {
+        const node = HUB_DATA.nodeMap.get(id)
+        if (!node) return
+        const assets = getAssetsForNode(node)
+        assets.forEach((asset) => {
+          const itemId = `hub-${asset.id}`
+          items.push({
+            id: itemId,
+            name: asset.name,
+            type: asset.type,
+            previewUrl: null,
+            source: 'hub',
+            selected: prevSelectionMap.get(itemId) ?? true,
+            meta: { folder: asset.folderPath },
+          })
+        })
+      })
+      return items
+    })
+  }, [hubSelected])
+
+  const pendingItems = mode === 'hub' ? hubItems : localItems
+  const selectedItems = pendingItems.filter((item) => item.selected)
+  const selectedTypes = Array.from(new Set(selectedItems.map((item) => item.type))) as ImgType[]
+  const selectedFolders = selectedItems.length ? new Set(selectedItems.map((item) => item.meta?.folder ?? 'Selection')) : new Set<string>()
+  const selectionSummaryText = selectedItems.length
+    ? `${selectedItems.length} item${selectedItems.length === 1 ? '' : 's'} across ${Math.max(1, selectedFolders.size)} folder${Math.max(1, selectedFolders.size) === 1 ? '' : 's'}`
+    : 'Nothing selected yet'
+  const localSelectedItems = useMemo(() => localItems.filter((item) => item.selected), [localItems])
+  const hubSelectedItems = useMemo(() => hubItems.filter((item) => item.selected), [hubItems])
+  const localSelectedFolderCount = localSelectedItems.length ? new Set(localSelectedItems.map((item) => item.meta?.folder ?? 'Selection')).size : 0
+  const hubSelectedFolderCount = hubSelectedItems.length ? new Set(hubSelectedItems.map((item) => item.meta?.folder ?? 'Selection')).size : 0
+
+  const hubSelectionList = useMemo(() => {
+    if (!hubSelected.size) return []
+    const ids = Array.from(hubSelected).filter((id) => !hasAncestorSelected(id, hubSelected, HUB_DATA.parentMap))
+    return ids.map((id) => HUB_DATA.nodeMap.get(id)?.name).filter(Boolean) as string[]
+  }, [hubSelected])
+
+  const canSubmit = selectedItems.length > 0
+
+  function startLocalFlow() {
+    setMode('local')
+    setTimeout(() => fileInputRef.current?.click(), 0)
+  }
+
+  function handleLocalFilesChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? [])
+    if (!files.length) {
+      event.target.value = ''
+      return
+    }
+    const newItems = makeLocalPendingItems(files)
+    const newUrls = newItems.map((item) => item.previewUrl).filter((url): url is string => !!url)
+    localPreviewUrlsRef.current = [...localPreviewUrlsRef.current, ...newUrls]
+    setLocalItems((prev) => [...prev, ...newItems])
+    event.target.value = ''
+  }
+
+  function clearLocalSelection() {
+    localPreviewUrlsRef.current.forEach((url) => URL.revokeObjectURL(url))
+    localPreviewUrlsRef.current = []
+    setLocalItems([])
+  }
+
+  function toggleLocalItem(id: string) {
+    setLocalItems((prev) => prev.map((item) => (item.id === id ? { ...item, selected: !item.selected } : item)))
+  }
+
+  function toggleHubItem(id: string) {
+    setHubItems((prev) => prev.map((item) => (item.id === id ? { ...item, selected: !item.selected } : item)))
+  }
+
+  function toggleExpand(id: string) {
+    setExpandedHub((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function toggleHubNode(id: string) {
+    const node = HUB_DATA.nodeMap.get(id)
+    if (!node) return
+    setHubSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+        collectDescendantIds(node).forEach((childId) => next.delete(childId))
+        let parent = HUB_DATA.parentMap.get(id) ?? null
+        while (parent) {
+          next.delete(parent)
+          parent = HUB_DATA.parentMap.get(parent) ?? null
+        }
+      }
+      return next
+    })
+  }
+
+  function renderHubNodes(nodes: HubNode[], depth = 0): React.ReactNode {
+    return nodes.map((node) => {
+      const hasChildren = !!node.children?.length
+      const expanded = expandedHub.has(node.id)
+      const selected = hubSelected.has(node.id)
+      const aggregate = HUB_DATA.aggregateMap.get(node.id) ?? { count: node.assetCount ?? 0, types: node.types ?? [] }
+      const typeLabel = aggregate.types.length ? aggregate.types.join(' / ') : 'JPEG'
+      return (
+        <li key={node.id}>
+          <div className="flex items-start gap-2 py-1" style={{ paddingLeft: depth * 16 }}>
+            {hasChildren ? (
+              <button type="button" onClick={() => toggleExpand(node.id)} className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded border border-[var(--border,#E1D3B9)] bg-[var(--sand-50,#FBF7EF)] text-xs font-medium">
+                {expanded ? '-' : '+'}
+              </button>
+            ) : (
+              <span className="inline-flex h-6 w-6 items-center justify-center text-xs text-[var(--text-muted,#6B645B)]">-</span>
+            )}
+            <label className="flex flex-1 cursor-pointer items-start gap-2">
+              <input type="checkbox" checked={selected} onChange={() => toggleHubNode(node.id)} className="mt-1 accent-[var(--text,#1F1E1B)]" />
+              <span className="flex-1">
+                <div className="text-sm font-medium text-[var(--text,#1F1E1B)]">{node.name}</div>
+                <div className="text-xs text-[var(--text-muted,#6B645B)]">{aggregate.count} assets / {typeLabel}</div>
+              </span>
+            </label>
+          </div>
+          {hasChildren && expanded && (
+            <ul className="ml-8">
+              {renderHubNodes(node.children!, depth + 1)}
+            </ul>
+          )}
+        </li>
+      )
+    })
+  }
+
   function submit() {
-    const types: ImgType[] = [jpeg && 'JPEG', raw && 'RAW'].filter(Boolean) as ImgType[]
-    if (types.length === 0) return alert('Select at least one type (JPEG/RAW)')
-    onImport({ count: Math.max(1, Math.min(200, count)), types, dest })
+    if (!canSubmit) {
+      if (mode === 'local') startLocalFlow()
+      return
+    }
+    const types = selectedTypes.length ? selectedTypes : (mode === 'hub' ? (['RAW', 'JPEG'] as ImgType[]) : (['JPEG'] as ImgType[]))
+    const count = Math.max(1, Math.min(200, selectedItems.length))
+    onImport({ count, types, dest })
   }
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/20">
-      <div id="import-sheet" tabIndex={-1} className="w-[720px] rounded-md bg-[var(--surface,#FFFFFF)] border border-[var(--border,#E1D3B9)] shadow-2xl p-4 outline-none">
-        <div className="flex items-center justify-between mb-2">
+      <div id="import-sheet" tabIndex={-1} className="w-[760px] rounded-md bg-[var(--surface,#FFFFFF)] border border-[var(--border,#E1D3B9)] shadow-2xl p-5 outline-none">
+        <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-5 h-5 rounded-full" style={{ backgroundColor: TOKENS.clay500 }} />
+            <div className="h-5 w-5 rounded-full" style={{ backgroundColor: TOKENS.clay500 }} />
             <div className="text-sm font-semibold">Import photos</div>
           </div>
-          <button onClick={onClose} className="px-2 py-1 rounded border border-[var(--border,#E1D3B9)]" aria-label="Close">Close</button>
+          <button onClick={onClose} className="px-2 py-1 text-sm rounded border border-[var(--border,#E1D3B9)]" aria-label="Close">Close</button>
         </div>
-        <div className="grid grid-cols-3 gap-4 text-sm">
-          <div>
-            <div className="font-medium mb-2">Source</div>
-            <ul className="space-y-2">
-              <li><label className="flex items-center gap-2"><input type="radio" name="src" defaultChecked className="accent-[var(--text,#1F1E1B)]" />Camera / SD</label></li>
-              <li><label className="flex items-center gap-2"><input type="radio" name="src" className="accent-[var(--text,#1F1E1B)]" />Folder…</label></li>
-              <li><label className="flex items-center gap-2"><input type="radio" name="src" className="accent-[var(--text,#1F1E1B)]" />Recent Source</label></li>
-            </ul>
-          </div>
-          <div>
-            <div className="font-medium mb-2">Types</div>
-            <label className="flex items-center gap-2 mb-1"><input type="checkbox" checked={jpeg} onChange={(e) => setJpeg(e.target.checked)} className="accent-[var(--text,#1F1E1B)]" />JPEG</label>
-            <label className="flex items-center gap-2"><input type="checkbox" checked={raw} onChange={(e) => setRaw(e.target.checked)} className="accent-[var(--text,#1F1E1B)]" />RAW</label>
-            <div className="mt-3 font-medium mb-1">Duplicates</div>
-            <label className="flex items-center gap-2"><input type="checkbox" checked={ignoreDup} onChange={(e) => setIgnoreDup(e.target.checked)} className="accent-[var(--text,#1F1E1B)]" />Ignore duplicates</label>
-          </div>
-          <div>
-            <div className="font-medium mb-2">Destination</div>
-            <div className="border rounded p-2 text-xs">{dest}</div>
-            <div className="mt-3 font-medium mb-1">Count</div>
-            <input type="number" min={1} max={200} value={count} onChange={(e) => setCount(Number(e.target.value))} className="w-24 border rounded px-2 py-1" />
-          </div>
+        <div className="mt-4 text-sm text-[var(--text,#1F1E1B)]">
+          {mode === 'choose' && (
+            <div className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <button type="button" onClick={startLocalFlow} className="flex flex-col items-start gap-3 rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-5 text-left transition hover:border-[var(--charcoal-800,#1F1E1B)]">
+                  <div className="text-base font-semibold">Upload Photo</div>
+                  <p className="text-xs text-[var(--text-muted,#6B645B)]">Open the native picker to choose individual images or entire folders from your computer.</p>
+                  <span className="mt-auto inline-flex items-center gap-1 text-xs font-medium text-[var(--charcoal-800,#1F1E1B)]">Choose files…</span>
+                </button>
+                <button type="button" onClick={() => setMode('hub')} className="flex flex-col items-start gap-3 rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-5 text-left transition hover:border-[var(--charcoal-800,#1F1E1B)]">
+                  <div className="text-base font-semibold">Upload from ImageHub</div>
+                  <p className="text-xs text-[var(--text-muted,#6B645B)]">Browse the shared ImageHub library to pull complete project folders into this workspace.</p>
+                  <span className="mt-auto inline-flex items-center gap-1 text-xs font-medium text-[var(--charcoal-800,#1F1E1B)]">Open ImageHub</span>
+                </button>
+              </div>
+              <p className="text-xs text-[var(--text-muted,#6B645B)]">You can switch sources at any time before importing.</p>
+            </div>
+          )}
+
+          {mode !== 'choose' && (
+            <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_240px]">
+              <div className="space-y-4">
+                {mode === 'local' && (
+                  <div className="space-y-4">
+                    <div className="rounded-lg border border-dashed border-[var(--border,#E1D3B9)] bg-[var(--sand-50,#FBF7EF)] p-6 text-center">
+                      <div className="text-sm font-medium">Select photos or folders from your computer</div>
+                      <div className="mt-1 text-xs text-[var(--text-muted,#6B645B)]">We support JPEG and RAW formats. Picking a folder pulls in everything inside.</div>
+                      <div className="mt-4 flex justify-center gap-3 text-sm">
+                        <button type="button" onClick={() => fileInputRef.current?.click()} className="rounded-md bg-[var(--charcoal-800,#1F1E1B)] px-3 py-2 font-medium text-white">Choose files…</button>
+                        <button type="button" onClick={() => folderInputRef.current?.click()} className="rounded-md border border-[var(--border,#E1D3B9)] px-3 py-2">Choose folder…</button>
+                      </div>
+                    </div>
+                    {localItems.length > 0 && (
+                      <div className="rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-4">
+                        <div className="flex items-center justify-between">
+                          <div className="text-sm font-semibold">Ready to import</div>
+                          <div className="text-xs text-[var(--text-muted,#6B645B)]">{localSelectedItems.length} selected / {localItems.length} total</div>
+                        </div>
+                        <div className="mt-1 text-xs text-[var(--text-muted,#6B645B)]">
+                          {localSelectedItems.length
+                            ? `${localSelectedItems.length} item${localSelectedItems.length === 1 ? '' : 's'} across ${Math.max(1, localSelectedFolderCount)} folder${Math.max(1, localSelectedFolderCount) === 1 ? '' : 's'}`
+                            : 'No items selected yet. Check filenames to include them.'}
+                        </div>
+                        <div className="mt-3">
+                          <PendingMiniGrid items={localItems} onToggle={toggleLocalItem} />
+                        </div>
+                        {localSelectedItems.length > 0 && (
+                          <ul className="mt-3 space-y-1 text-xs text-[var(--text-muted,#6B645B)]">
+                            {localSelectedItems.slice(0, 5).map((item) => (
+                              <li key={item.id} className="truncate">{item.name}</li>
+                            ))}
+                            {localSelectedItems.length > 5 && (
+                              <li>+ {localSelectedItems.length - 5} more</li>
+                            )}
+                          </ul>
+                        )}
+                        <div className="mt-3 text-xs">
+                          <button type="button" onClick={clearLocalSelection} className="text-[var(--river-500,#6B7C7A)] underline">Clear selection</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {mode === 'hub' && (
+                  <div className="space-y-4">
+                    <div className="rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-4">
+                      <div className="text-sm font-semibold">Browse ImageHub</div>
+                      <div className="mt-1 text-xs text-[var(--text-muted,#6B645B)]">Select one or more folders. Importing a parent folder includes everything inside.</div>
+                      <ul className="mt-3 space-y-1">
+                        {renderHubNodes(IMAGE_HUB_TREE)}
+                      </ul>
+                    </div>
+                    {hubItems.length > 0 && (
+                      <div className="rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-4">
+                        <div className="flex items-center justify-between">
+                          <div className="text-sm font-semibold">Ready to import</div>
+                          <div className="text-xs text-[var(--text-muted,#6B645B)]">{hubSelectedItems.length} selected / {hubItems.length} total</div>
+                        </div>
+                        <div className="mt-1 text-xs text-[var(--text-muted,#6B645B)]">
+                          {hubSelectedItems.length
+                            ? `${hubSelectedItems.length} asset${hubSelectedItems.length === 1 ? '' : 's'} across ${Math.max(1, hubSelectedFolderCount)} folder${Math.max(1, hubSelectedFolderCount) === 1 ? '' : 's'}`
+                            : 'No assets selected yet. Check thumbnails to include them.'}
+                        </div>
+                        <div className="mt-3">
+                          <PendingMiniGrid items={hubItems} onToggle={toggleHubItem} />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <aside className="flex flex-col gap-4 rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--sand-50,#FBF7EF)] p-4 text-xs">
+                <div>
+                  <div className="font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">Destination</div>
+                  <div className="mt-1 text-sm font-medium text-[var(--text,#1F1E1B)]">{dest}</div>
+                </div>
+                <div>
+                  <div className="font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">Duplicates</div>
+                  <label className="mt-1 flex items-center gap-2 text-sm">
+                    <input type="checkbox" checked={ignoreDup} onChange={(e) => setIgnoreDup(e.target.checked)} className="accent-[var(--text,#1F1E1B)]" />
+                    Ignore duplicates on import
+                  </label>
+                </div>
+                <div>
+                  <div className="font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">Selection</div>
+                  <div className="mt-1 text-sm font-medium text-[var(--text,#1F1E1B)]">{selectedItems.length ? `${selectedItems.length} asset${selectedItems.length === 1 ? '' : 's'} selected` : 'Nothing selected yet'}</div>
+                  <div className="mt-1 text-xs text-[var(--text-muted,#6B645B)]">
+                    {selectedTypes.length ? selectedTypes.join(' / ') : 'Waiting for selection'}
+                  </div>
+                  <div className="mt-1 text-xs text-[var(--text-muted,#6B645B)]">{selectionSummaryText}</div>
+                  {mode === 'hub' && hubSelectionList.length > 0 && (
+                    <ul className="mt-2 space-y-1 text-xs text-[var(--text-muted,#6B645B)]">
+                      {hubSelectionList.slice(0, 4).map((name) => <li key={name} className="truncate">- {name}</li>)}
+                      {hubSelectionList.length > 4 && <li>- +{hubSelectionList.length - 4} more</li>}
+                    </ul>
+                  )}
+                </div>
+              </aside>
+            </div>
+          )}
         </div>
-        <div className="mt-4 flex items-center justify-end gap-2 text-sm">
+        <div className="mt-6 flex items-center justify-end gap-2 text-sm">
+          {mode !== 'choose' && (
+            <button onClick={() => setMode('choose')} className="px-3 py-1.5 rounded border border-[var(--border,#E1D3B9)]">Back</button>
+          )}
           <button onClick={onClose} className="px-3 py-1.5 rounded border border-[var(--border,#E1D3B9)]">Cancel</button>
-          <button onClick={submit} className="px-3 py-1.5 rounded bg-[var(--basalt-700,#4A463F)] text-white">Import</button>
+          {mode !== 'choose' && (
+            <button onClick={submit} disabled={!canSubmit} className={`px-3 py-1.5 rounded text-white ${canSubmit ? 'bg-[var(--basalt-700,#4A463F)]' : 'bg-[var(--sand-300,#E1D3B9)] cursor-not-allowed'}`}>Import</button>
+          )}
         </div>
       </div>
+      <input ref={fileInputRef} type="file" multiple onChange={handleLocalFilesChange} className="hidden" accept="image/*" />
+      <input ref={folderInputRef} type="file" multiple onChange={handleLocalFilesChange} className="hidden" accept="image/*" />
     </div>
   )
 }

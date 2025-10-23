@@ -1,7 +1,6 @@
 # AGENTS.md
 
-This guide provides programming and contribution standards for agents contributing to this repository. It outlines expectations regarding architecture, code quality, testing, and commit messaging. This project uses a **React frontend** and a **FastAPI backend**, structured as a modular full-stack application.
-
+ This document provides recommended steps for the OpenAI Codex assistant when making changes 
 ## 🧠 Architectural Principles
 
 - **Decoupled Frontend and Backend**:
@@ -162,6 +161,4 @@ Every code change must conclude with a commit that follows the **Conventional Co
 3. Run appropriate test suites (backend or frontend).
 4. Ensure documentation is updated (if public APIs or UX is changed).
 5. Create a single, meaningful commit using the Conventional Commits format.
-6. Push and submit the change.
 
-**All AI-generated code must be validated with automated tools and must pass tests before final submission.**

@@ -1,14 +1,22 @@
 import React, { useState } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import ProjectIndex from '../pages/ProjectIndex'
+import ProjectWorkspace from '../features/workspace'
 
 export default function App() {
   const [client] = useState(() => new QueryClient())
+
   return (
     <QueryClientProvider client={client}>
-      <div className="min-h-screen bg-[var(--surface-subtle,#FBF7EF)] text-[var(--text,#1F1E1B)]">
-        <ProjectIndex />
-      </div>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<ProjectIndex />} />
+          <Route path="/projects/:id" element={<ProjectWorkspace />} />
+          {/* fallback */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </BrowserRouter>
     </QueryClientProvider>
   )
 }

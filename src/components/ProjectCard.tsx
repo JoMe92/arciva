@@ -2,12 +2,14 @@ import React from 'react'
 import type { Project } from '../features/projects/types'
 import { ph, phSizeFor, aspectClass } from '../features/projects/utils'
 
+const MEDIA_MAX = 'max-h-[420px] md:max-h-[520px]'
+
 const ProjectCard: React.FC<{
   p: Project
   onOpen: (id: string) => void
-  onArchive: (id: string) => void // bleibt als Prop für Konsistenz, wird hier jedoch NICHT mehr genutzt
-  onUnarchive: (id: string) => void // dito
-  archiveMode: boolean // dito
+  onArchive: (id: string) => void
+  onUnarchive: (id: string) => void
+  archiveMode: boolean
   onEdit: (p: Project) => void
 }> = ({ p, onOpen, onEdit }) => {
   const [w, h] = phSizeFor(p.aspect)
@@ -34,7 +36,8 @@ const ProjectCard: React.FC<{
         className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus,#6B7C7A)] rounded-xl"
       >
         <div className="overflow-hidden rounded-t-xl bg-[var(--surface,#FFFFFF)]">
-          <div className={`relative ${aspectClass(p.aspect)} w-full`}>
+          {/* identischer Medien-Wrapper mit vertikalem Limit */}
+          <div className={`relative ${aspectClass(p.aspect)} w-full ${MEDIA_MAX} overflow-hidden`}>
             <img
               src={src}
               alt={`${p.title} – ${p.client}`}
@@ -44,18 +47,13 @@ const ProjectCard: React.FC<{
         </div>
       </div>
 
-      {/* Weißer Info-Bereich unten – mit Titel/Client links und Aktionen rechts */}
+      {/* Weißer Footer unten */}
       <div className="rounded-b-xl border border-[var(--border,#E1D3B9)] border-t-0 bg-[var(--surface,#FFFFFF)] px-1.5 sm:px-2 md:px-3 pt-2 pb-3">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <div className="text-[13px] font-medium tracking-tight text-[var(--text,#1F1E1B)]">
-              {p.title}
-            </div>
-            <div className="text-[11px] uppercase tracking-wide text-[var(--text-muted,#6B645B)]">
-              {p.client}
-            </div>
+            <div className="text-[13px] font-medium tracking-tight text-[var(--text,#1F1E1B)]">{p.title}</div>
+            <div className="text-[11px] uppercase tracking-wide text-[var(--text-muted,#6B645B)]">{p.client}</div>
           </div>
-
           <div className="flex items-center gap-1" role="group" aria-label="Project actions">
             <button
               type="button"
@@ -75,8 +73,6 @@ const ProjectCard: React.FC<{
             >
               Edit
             </button>
-            {/* WICHTIG: Kein Archive/Unarchive-Button mehr hier.
-               Archivieren ausschließlich im Edit-Dialog. */}
           </div>
         </div>
       </div>

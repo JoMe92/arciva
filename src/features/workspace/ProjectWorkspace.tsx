@@ -473,17 +473,18 @@ function getAssetsForNode(node: HubNode): HubAsset[] {
   return assets
 }
 
-function PendingMiniGrid({ items, onToggle }: { items: PendingItem[]; onToggle: (id: string) => void }) {
+function PendingMiniGrid({ items, onToggle, className }: { items: PendingItem[]; onToggle: (id: string) => void; className?: string }) {
+  const extra = className ? ` ${className}` : ''
   if (!items.length) {
     return (
-      <div className="rounded-md border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-4 text-center text-xs text-[var(--text-muted,#6B645B)]">
+      <div className={`rounded-md border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-4 text-center text-xs text-[var(--text-muted,#6B645B)]${extra}`}>
         Nothing selected yet.
       </div>
     )
   }
   return (
-    <div className="rounded-md border border-[var(--border,#E1D3B9)] bg-[var(--sand-50,#FBF7EF)] p-2">
-      <div className="max-h-48 overflow-y-auto pr-1">
+    <div className={`rounded-md border border-[var(--border,#E1D3B9)] bg-[var(--sand-50,#FBF7EF)] p-2${extra}`}>
+      <div className="h-full overflow-y-auto pr-1">
         <div className="grid grid-cols-[repeat(auto-fill,minmax(88px,1fr))] gap-2">
           {items.map((item) => (
             <label
@@ -603,6 +604,27 @@ function ImportSheet({ onClose, onImport, folderMode, customFolder }: { onClose:
   }, [hubSelected])
 
   const canSubmit = selectedItems.length > 0
+  const isHubMode = mode === 'hub'
+  const isLocalMode = mode === 'local'
+  const usesExpandedModal = mode !== 'choose'
+
+  const localFolderGroups = useMemo(() => {
+    if (!localItems.length) return []
+    const map = new Map<string, { items: PendingItem[]; selected: number }>()
+    localItems.forEach((item) => {
+      const folder = item.meta?.folder ?? 'Loose selection'
+      if (!map.has(folder)) map.set(folder, { items: [], selected: 0 })
+      const entry = map.get(folder)!
+      entry.items.push(item)
+      if (item.selected) entry.selected += 1
+    })
+    return Array.from(map.entries()).map(([folder, value]) => ({
+      folder,
+      items: value.items,
+      selected: value.selected,
+      total: value.items.length,
+    })).sort((a, b) => a.folder.localeCompare(b.folder))
+  }, [localItems])
 
   function startLocalFlow() {
     setMode('local')
@@ -700,150 +722,181 @@ function ImportSheet({ onClose, onImport, folderMode, customFolder }: { onClose:
     })
   }
 
+  function renderSummaryCard(wrapperClass: string, includeHubSelection: boolean) {
+    return (
+      <aside className={`${wrapperClass} flex h-full min-h-0 flex-col gap-3 rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--sand-50,#FBF7EF)] p-3 text-[11px] leading-tight`}>
+        <div>
+          <div className="font-semibold uppercase tracking-[0.08em] text-[10px] text-[var(--text-muted,#6B645B)]">Destination</div>
+          <div className="mt-1 truncate text-sm font-medium text-[var(--text,#1F1E1B)]">{dest}</div>
+        </div>
+        <div>
+          <div className="font-semibold uppercase tracking-[0.08em] text-[10px] text-[var(--text-muted,#6B645B)]">Duplicates</div>
+          <label className="mt-1 flex items-center gap-2 text-[11px]">
+            <input type="checkbox" checked={ignoreDup} onChange={(e) => setIgnoreDup(e.target.checked)} className="h-4 w-4 accent-[var(--text,#1F1E1B)]" />
+            Ignore duplicates
+          </label>
+        </div>
+        <div>
+          <div className="font-semibold uppercase tracking-[0.08em] text-[10px] text-[var(--text-muted,#6B645B)]">Selection</div>
+          <div className="mt-1 text-sm font-medium text-[var(--text,#1F1E1B)]">{selectedItems.length ? `${selectedItems.length} asset${selectedItems.length === 1 ? '' : 's'} selected` : 'Nothing selected yet'}</div>
+          <div className="mt-1 text-[11px] text-[var(--text-muted,#6B645B)]">
+            {selectedTypes.length ? selectedTypes.join(' / ') : 'Waiting for selection'}
+          </div>
+          <div className="mt-1 text-[11px] text-[var(--text-muted,#6B645B)]">{selectionSummaryText}</div>
+          {includeHubSelection && hubSelectionList.length > 0 && (
+            <ul className="mt-2 space-y-1 text-[11px] text-[var(--text-muted,#6B645B)]">
+              {hubSelectionList.slice(0, 4).map((name) => <li key={name} className="truncate">- {name}</li>)}
+              {hubSelectionList.length > 4 && <li>- +{hubSelectionList.length - 4} more</li>}
+            </ul>
+          )}
+        </div>
+      </aside>
+    )
+  }
+
   function submit() {
     if (!canSubmit) {
       if (mode === 'local') startLocalFlow()
       return
     }
-    const types = selectedTypes.length ? selectedTypes : (mode === 'hub' ? (['RAW', 'JPEG'] as ImgType[]) : (['JPEG'] as ImgType[]))
+    const types = selectedTypes.length ? selectedTypes : (isHubMode ? (['RAW', 'JPEG'] as ImgType[]) : (['JPEG'] as ImgType[]))
     const count = Math.max(1, Math.min(200, selectedItems.length))
     onImport({ count, types, dest })
   }
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/20">
-      <div id="import-sheet" tabIndex={-1} className="w-[760px] rounded-md bg-[var(--surface,#FFFFFF)] border border-[var(--border,#E1D3B9)] shadow-2xl p-5 outline-none">
-        <div className="flex items-center justify-between">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 p-4">
+      <div
+        id="import-sheet"
+        tabIndex={-1}
+        className={`${usesExpandedModal ? 'h-[min(92vh,820px)] w-[min(95vw,1240px)]' : 'w-[760px] max-h-[90vh]'} flex min-h-0 flex-col overflow-hidden rounded-md bg-[var(--surface,#FFFFFF)] border border-[var(--border,#E1D3B9)] shadow-2xl outline-none`}
+      >
+        <div className="flex flex-shrink-0 items-center justify-between px-5 py-3">
           <div className="flex items-center gap-2">
             <div className="h-5 w-5 rounded-full" style={{ backgroundColor: TOKENS.clay500 }} />
             <div className="text-sm font-semibold">Import photos</div>
           </div>
           <button onClick={onClose} className="px-2 py-1 text-sm rounded border border-[var(--border,#E1D3B9)]" aria-label="Close">Close</button>
         </div>
-        <div className="mt-4 text-sm text-[var(--text,#1F1E1B)]">
+        <div className="flex-1 min-h-0 px-5 pb-5 pt-2 text-sm text-[var(--text,#1F1E1B)]">
           {mode === 'choose' && (
-            <div className="space-y-4">
+            <div className="flex h-full flex-col justify-center gap-6">
               <div className="grid gap-4 md:grid-cols-2">
-                <button type="button" onClick={startLocalFlow} className="flex flex-col items-start gap-3 rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-5 text-left transition hover:border-[var(--charcoal-800,#1F1E1B)]">
+                <button type="button" onClick={startLocalFlow} className="flex flex-col items-start gap-3 rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-6 text-left transition hover:border-[var(--charcoal-800,#1F1E1B)]">
                   <div className="text-base font-semibold">Upload Photo</div>
                   <p className="text-xs text-[var(--text-muted,#6B645B)]">Open the native picker to choose individual images or entire folders from your computer.</p>
                   <span className="mt-auto inline-flex items-center gap-1 text-xs font-medium text-[var(--charcoal-800,#1F1E1B)]">Choose files…</span>
                 </button>
-                <button type="button" onClick={() => setMode('hub')} className="flex flex-col items-start gap-3 rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-5 text-left transition hover:border-[var(--charcoal-800,#1F1E1B)]">
+                <button type="button" onClick={() => setMode('hub')} className="flex flex-col items-start gap-3 rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-6 text-left transition hover:border-[var(--charcoal-800,#1F1E1B)]">
                   <div className="text-base font-semibold">Upload from ImageHub</div>
                   <p className="text-xs text-[var(--text-muted,#6B645B)]">Browse the shared ImageHub library to pull complete project folders into this workspace.</p>
                   <span className="mt-auto inline-flex items-center gap-1 text-xs font-medium text-[var(--charcoal-800,#1F1E1B)]">Open ImageHub</span>
                 </button>
               </div>
-              <p className="text-xs text-[var(--text-muted,#6B645B)]">You can switch sources at any time before importing.</p>
+              <p className="text-xs text-[var(--text-muted,#6B645B)] text-center md:text-left">You can switch sources at any time before importing.</p>
             </div>
           )}
 
-          {mode !== 'choose' && (
-            <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_240px]">
-              <div className="space-y-4">
-                {mode === 'local' && (
-                  <div className="space-y-4">
-                    <div className="rounded-lg border border-dashed border-[var(--border,#E1D3B9)] bg-[var(--sand-50,#FBF7EF)] p-6 text-center">
-                      <div className="text-sm font-medium">Select photos or folders from your computer</div>
-                      <div className="mt-1 text-xs text-[var(--text-muted,#6B645B)]">We support JPEG and RAW formats. Picking a folder pulls in everything inside.</div>
-                      <div className="mt-4 flex justify-center gap-3 text-sm">
-                        <button type="button" onClick={() => fileInputRef.current?.click()} className="rounded-md bg-[var(--charcoal-800,#1F1E1B)] px-3 py-2 font-medium text-white">Choose files…</button>
-                        <button type="button" onClick={() => folderInputRef.current?.click()} className="rounded-md border border-[var(--border,#E1D3B9)] px-3 py-2">Choose folder…</button>
-                      </div>
-                    </div>
-                    {localItems.length > 0 && (
-                      <div className="rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-4">
-                        <div className="flex items-center justify-between">
-                          <div className="text-sm font-semibold">Ready to import</div>
-                          <div className="text-xs text-[var(--text-muted,#6B645B)]">{localSelectedItems.length} selected / {localItems.length} total</div>
-                        </div>
-                        <div className="mt-1 text-xs text-[var(--text-muted,#6B645B)]">
-                          {localSelectedItems.length
-                            ? `${localSelectedItems.length} item${localSelectedItems.length === 1 ? '' : 's'} across ${Math.max(1, localSelectedFolderCount)} folder${Math.max(1, localSelectedFolderCount) === 1 ? '' : 's'}`
-                            : 'No items selected yet. Check filenames to include them.'}
-                        </div>
-                        <div className="mt-3">
-                          <PendingMiniGrid items={localItems} onToggle={toggleLocalItem} />
-                        </div>
-                        {localSelectedItems.length > 0 && (
-                          <ul className="mt-3 space-y-1 text-xs text-[var(--text-muted,#6B645B)]">
-                            {localSelectedItems.slice(0, 5).map((item) => (
-                              <li key={item.id} className="truncate">{item.name}</li>
-                            ))}
-                            {localSelectedItems.length > 5 && (
-                              <li>+ {localSelectedItems.length - 5} more</li>
-                            )}
-                          </ul>
-                        )}
-                        <div className="mt-3 text-xs">
-                          <button type="button" onClick={clearLocalSelection} className="text-[var(--river-500,#6B7C7A)] underline">Clear selection</button>
-                        </div>
-                      </div>
-                    )}
+          {isLocalMode && (
+            <div className="flex h-full min-h-0 gap-5 overflow-hidden">
+              <div className="flex w-72 flex-shrink-0 flex-col gap-4 overflow-hidden">
+                <div className="rounded-lg border border-dashed border-[var(--border,#E1D3B9)] bg-[var(--sand-50,#FBF7EF)] p-6 text-center">
+                  <div className="text-sm font-medium">Select photos or folders from your computer</div>
+                  <div className="mt-1 text-xs text-[var(--text-muted,#6B645B)]">We support JPEG and RAW formats. Picking a folder pulls in everything inside.</div>
+                  <div className="mt-4 flex justify-center gap-3 text-sm">
+                    <button type="button" onClick={() => fileInputRef.current?.click()} className="rounded-md bg-[var(--charcoal-800,#1F1E1B)] px-3 py-2 font-medium text-white">Choose files…</button>
+                    <button type="button" onClick={() => folderInputRef.current?.click()} className="rounded-md border border-[var(--border,#E1D3B9)] px-3 py-2">Choose folder…</button>
                   </div>
-                )}
-
-                {mode === 'hub' && (
-                  <div className="space-y-4">
-                    <div className="rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-4">
-                      <div className="text-sm font-semibold">Browse ImageHub</div>
-                      <div className="mt-1 text-xs text-[var(--text-muted,#6B645B)]">Select one or more folders. Importing a parent folder includes everything inside.</div>
-                      <ul className="mt-3 space-y-1">
-                        {renderHubNodes(IMAGE_HUB_TREE)}
+                </div>
+                {localItems.length > 0 && (
+                  <div className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]">
+                    <div className="flex items-center justify-between px-4 pt-3">
+                      <div className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">Selected files & folders</div>
+                      <div className="text-[11px] text-[var(--text-muted,#6B645B)]">{localSelectedItems.length}/{localItems.length}</div>
+                    </div>
+                    <div className="mt-2 flex-1 overflow-y-auto px-4 pb-3">
+                      <ul className="space-y-3 text-[11px] text-[var(--text-muted,#6B645B)]">
+                        {localFolderGroups.map(({ folder, items, selected, total }) => (
+                          <li key={folder}>
+                            <div className="flex items-center justify-between text-[var(--text,#1F1E1B)]">
+                              <span className="text-xs font-medium">{folder}</span>
+                              <span>{selected}/{total}</span>
+                            </div>
+                            <ul className="mt-1 space-y-1">
+                              {items.map((item) => (
+                                <li key={item.id}>
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleLocalItem(item.id)}
+                                    className={`flex w-full items-center gap-2 rounded px-2 py-1 text-left transition ${item.selected ? 'bg-[var(--sand-50,#FBF7EF)] text-[var(--text,#1F1E1B)]' : 'text-[var(--text-muted,#6B645B)]'}`}
+                                  >
+                                    <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border border-[var(--border,#E1D3B9)] text-[10px]">
+                                      {item.selected ? '✓' : ''}
+                                    </span>
+                                    <span className="truncate">{item.name}</span>
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+                          </li>
+                        ))}
                       </ul>
                     </div>
-                    {hubItems.length > 0 && (
-                      <div className="rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-4">
-                        <div className="flex items-center justify-between">
-                          <div className="text-sm font-semibold">Ready to import</div>
-                          <div className="text-xs text-[var(--text-muted,#6B645B)]">{hubSelectedItems.length} selected / {hubItems.length} total</div>
-                        </div>
-                        <div className="mt-1 text-xs text-[var(--text-muted,#6B645B)]">
-                          {hubSelectedItems.length
-                            ? `${hubSelectedItems.length} asset${hubSelectedItems.length === 1 ? '' : 's'} across ${Math.max(1, hubSelectedFolderCount)} folder${Math.max(1, hubSelectedFolderCount) === 1 ? '' : 's'}`
-                            : 'No assets selected yet. Check thumbnails to include them.'}
-                        </div>
-                        <div className="mt-3">
-                          <PendingMiniGrid items={hubItems} onToggle={toggleHubItem} />
-                        </div>
-                      </div>
-                    )}
                   </div>
                 )}
               </div>
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-4">
+                <div className="flex items-center justify-between">
+                  <div className="text-sm font-semibold">Ready to import</div>
+                  <div className="text-xs text-[var(--text-muted,#6B645B)]">{localSelectedItems.length} selected / {localItems.length} total</div>
+                </div>
+                <div className="mt-1 text-xs text-[var(--text-muted,#6B645B)]">
+                  {localSelectedItems.length
+                    ? `${localSelectedItems.length} item${localSelectedItems.length === 1 ? '' : 's'} across ${Math.max(1, localSelectedFolderCount)} folder${Math.max(1, localSelectedFolderCount) === 1 ? '' : 's'}`
+                    : 'No items selected yet. Check thumbnails to include them.'}
+                </div>
+                <div className="mt-3 flex-1 min-h-0">
+                  <PendingMiniGrid items={localItems} onToggle={toggleLocalItem} className="h-full" />
+                </div>
+                <div className="mt-3 flex-shrink-0 text-xs">
+                  <button type="button" onClick={clearLocalSelection} className="text-[var(--river-500,#6B7C7A)] underline">Clear selection</button>
+                </div>
+              </div>
+              {renderSummaryCard('w-56 flex-shrink-0', false)}
+            </div>
+          )}
 
-              <aside className="flex flex-col gap-4 rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--sand-50,#FBF7EF)] p-4 text-xs">
-                <div>
-                  <div className="font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">Destination</div>
-                  <div className="mt-1 text-sm font-medium text-[var(--text,#1F1E1B)]">{dest}</div>
+          {isHubMode && (
+            <div className="flex h-full min-h-0 gap-5 overflow-hidden">
+              <div className="flex w-64 flex-shrink-0 flex-col overflow-hidden rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]">
+                <div className="px-4 py-3 text-sm font-semibold">ImageHub projects</div>
+                <div className="flex-1 overflow-y-auto px-3 pb-4">
+                  <ul className="space-y-1">
+                    {renderHubNodes(IMAGE_HUB_TREE)}
+                  </ul>
                 </div>
-                <div>
-                  <div className="font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">Duplicates</div>
-                  <label className="mt-1 flex items-center gap-2 text-sm">
-                    <input type="checkbox" checked={ignoreDup} onChange={(e) => setIgnoreDup(e.target.checked)} className="accent-[var(--text,#1F1E1B)]" />
-                    Ignore duplicates on import
-                  </label>
-                </div>
-                <div>
-                  <div className="font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">Selection</div>
-                  <div className="mt-1 text-sm font-medium text-[var(--text,#1F1E1B)]">{selectedItems.length ? `${selectedItems.length} asset${selectedItems.length === 1 ? '' : 's'} selected` : 'Nothing selected yet'}</div>
-                  <div className="mt-1 text-xs text-[var(--text-muted,#6B645B)]">
-                    {selectedTypes.length ? selectedTypes.join(' / ') : 'Waiting for selection'}
+              </div>
+              <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
+                <div className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm font-semibold">Ready to import</div>
+                    <div className="text-xs text-[var(--text-muted,#6B645B)]">{hubSelectedItems.length} selected / {hubItems.length} total</div>
                   </div>
-                  <div className="mt-1 text-xs text-[var(--text-muted,#6B645B)]">{selectionSummaryText}</div>
-                  {mode === 'hub' && hubSelectionList.length > 0 && (
-                    <ul className="mt-2 space-y-1 text-xs text-[var(--text-muted,#6B645B)]">
-                      {hubSelectionList.slice(0, 4).map((name) => <li key={name} className="truncate">- {name}</li>)}
-                      {hubSelectionList.length > 4 && <li>- +{hubSelectionList.length - 4} more</li>}
-                    </ul>
-                  )}
+                  <div className="mt-1 text-xs text-[var(--text-muted,#6B645B)]">
+                    {hubSelectedItems.length
+                      ? `${hubSelectedItems.length} asset${hubSelectedItems.length === 1 ? '' : 's'} across ${Math.max(1, hubSelectedFolderCount)} folder${Math.max(1, hubSelectedFolderCount) === 1 ? '' : 's'}`
+                      : 'No assets selected yet. Check thumbnails to include them.'}
+                  </div>
+                  <div className="mt-3 flex-1 min-h-0">
+                    <PendingMiniGrid items={hubItems} onToggle={toggleHubItem} className="h-full" />
+                  </div>
                 </div>
-              </aside>
+              </div>
+              {renderSummaryCard('w-56 flex-shrink-0', true)}
             </div>
           )}
         </div>
-        <div className="mt-6 flex items-center justify-end gap-2 text-sm">
+        <div className="flex flex-shrink-0 items-center justify-end gap-2 border-t border-[var(--border,#E1D3B9)] px-5 py-4 text-sm">
           {mode !== 'choose' && (
             <button onClick={() => setMode('choose')} className="px-3 py-1.5 rounded border border-[var(--border,#E1D3B9)]">Back</button>
           )}

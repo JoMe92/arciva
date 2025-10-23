@@ -1,6 +1,7 @@
 # AGENTS.md
 
  This document provides recommended steps for the OpenAI Codex assistant when making changes 
+ 
 ## 🧠 Architectural Principles
 
 - **Decoupled Frontend and Backend**:

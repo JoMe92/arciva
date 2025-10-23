@@ -64,7 +64,7 @@ export function Sidebar({
           )}
         </div>
       </div>
-      <div className="flex-1 min-h-0 overflow-y-auto pr-1">
+      <div className="folder-tree flex-1 min-h-0 pr-1">
         <div className="text-[11px] uppercase tracking-wider text-[var(--text-muted,#6B645B)] mb-1">Folders (virtual)</div>
         <Tree nodes={dateTree} />
       </div>
@@ -100,20 +100,22 @@ export function GridView({
   return (
     <div className="p-3 grid" style={{ gridTemplateColumns: template, gap }}>
       {items.map((p, idx) => (
-        <div key={p.id} className="relative group border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]">
-          <div
-            className="aspect-square w-full overflow-hidden bg-[var(--placeholder-bg-beige,#F3EBDD)] flex items-center justify-center"
-            role="button"
-            tabIndex={0}
-            onDoubleClick={() => onOpen(idx)}
-          >
-            {p.src ? (
-              <img src={p.src} alt={p.name} className="h-full w-full object-contain" />
-            ) : (
-              <RawPlaceholder ratio={p.placeholderRatio} title={p.name || 'Placeholder image'} fit="contain" />
-            )}
+        <div key={p.id} className="group border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] flex flex-col">
+          <div className="relative aspect-square w-full overflow-hidden bg-[var(--placeholder-bg-beige,#F3EBDD)] flex items-center justify-center">
+            <button
+              className="absolute inset-0 flex items-center justify-center focus:outline-none"
+              type="button"
+              onDoubleClick={() => onOpen(idx)}
+              aria-label={`Open ${p.name || 'photo'}`}
+            >
+              {p.src ? (
+                <img src={p.src} alt={p.name} className="h-full w-full object-contain" />
+              ) : (
+                <RawPlaceholder ratio={p.placeholderRatio} title={p.name || 'Placeholder image'} fit="contain" />
+              )}
+            </button>
+            <ThumbContent p={p} />
           </div>
-          <ThumbContent p={p} />
           <ThumbOverlay p={p} twoLine={twoLine} />
         </div>
       ))}
@@ -215,7 +217,7 @@ export function DetailView({ items, index, setIndex, className = '' }: { items: 
 // ----- Overlays, Filters, etc. -----
 export function ThumbContent({ p }: { p: Photo }) {
   return (
-    <div className="absolute top-1 left-1 flex items-center gap-1 text-[10px]">
+    <div className="pointer-events-none absolute top-1 left-1 flex items-center gap-1 text-[10px]">
       <span className="px-1 py-0.5 bg-white/85 border border-[var(--border,#E1D3B9)] rounded">{p.type}</span>
       <span className="w-2.5 h-2.5 rounded-full border border-[var(--border,#E1D3B9)]" style={{ backgroundColor: COLOR_MAP[p.tag] }} aria-hidden />
     </div>
@@ -228,7 +230,7 @@ export function ThumbOverlay({ p, twoLine }: { p: Photo; twoLine?: boolean }) {
     const ev = new CustomEvent(name, { detail }); window.dispatchEvent(ev)
   }
   return (
-    <div className={`absolute inset-x-0 bottom-0 bg-white/85 backdrop-blur border-t border-[var(--border,#E1D3B9)] px-2 py-1 text-[11px]`}>
+    <div className="border-t border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-2 py-1 text-[11px]">
       {twoLine ? (
         <div className="flex flex-col gap-1">
           <div className="flex items-center justify-between gap-2"><span className="truncate">{p.name}</span><StarRow value={p.rating} onChange={(r) => emit('rate', { id: p.id, r })} /></div>

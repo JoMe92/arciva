@@ -144,7 +144,7 @@ export default function ProjectWorkspace() {
   const hasAny = photos.length > 0
 
   return (
-    <div className="flex min-h-screen flex-col bg-[var(--surface-subtle,#FBF7EF)] text-[var(--text,#1F1E1B)]">
+    <div className="flex h-screen flex-col overflow-hidden bg-[var(--surface-subtle,#FBF7EF)] text-[var(--text,#1F1E1B)]">
       <TopBar projectName={projectName} onBack={goBack} />
 
       <div

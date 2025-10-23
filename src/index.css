@@ -1,5 +1,13 @@
 @import "tailwindcss";
 
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+}
+
 :root {
   --placeholder-bg-beige: #f3ebdd;
   --placeholder-bg-start: #fbf7ef;
@@ -26,6 +34,29 @@
 }
 
 .thumb-strip::-webkit-scrollbar-thumb {
+  background-color: var(--border, #c9bba0);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+.folder-tree {
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: auto;
+  scrollbar-color: var(--border, #e1d3b9) transparent;
+}
+
+.folder-tree::-webkit-scrollbar {
+  width: 10px;
+}
+
+.folder-tree::-webkit-scrollbar-track {
+  background-color: rgba(225, 211, 185, 0.4);
+  border-radius: 9999px;
+}
+
+.folder-tree::-webkit-scrollbar-thumb {
   background-color: var(--border, #c9bba0);
   border-radius: 9999px;
   border: 2px solid transparent;

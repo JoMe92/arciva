@@ -1,8 +1,8 @@
 import React, { useMemo, useRef, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { makeDemo, TOKENS, randomPlaceholderRatio } from '../../features/workspace/utils'
-import type { Photo, ImgType, ColorTag } from '../../features/workspace/types'
-import { TopBar, Sidebar, GridView, DetailView, EmptyState, NoResults } from '../../features/workspace/components'
+import { makeDemo, TOKENS, randomPlaceholderRatio } from './utils'
+import type { Photo, ImgType, ColorTag } from './types'
+import { TopBar, Sidebar, GridView, DetailView, EmptyState, NoResults } from './components'
 
 const SIDEBAR_WIDTH = 288
 const INSPECTOR_WIDTH = 260

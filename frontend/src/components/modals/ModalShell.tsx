@@ -1,5 +1,5 @@
 import React from 'react';
-import StoneTrailIcon from '../../components/StoneTrailIcon';
+import StoneTrailIcon from '../StoneTrailIcon';
 
 export interface ModalShellProps {
   title: string;

@@ -70,3 +70,10 @@ Thumbs.db
 
 # Misc Backups
 *.bak
+backend/__pycache__/*
+__pycache__/*
+
+backend/app/__pycache__/*
+backend/app/routers/__pycache__/*
+backend/worker/__pycache__/*
+img/*

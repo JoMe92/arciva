@@ -27,22 +27,21 @@ VENV_DIR="${BACKEND_DIR}/.venv"
 
 mkdir -p "${STATE_DIR}" "${LOG_DIR}" "${ARCHIVE_DIR}"
 
-bold() { printf "[1m%s[0m
-" "$*"; }
-info() { printf "[dev] %s
-" "$*"; }
-warn() { printf "[33m[dev] %s[0m
-" "$*"; }
-fail() { printf "[31m[dev] %s[0m
-" "$*"; exit 1; }
+bold() { printf "\033[1m%s\033[0m\n" "$*"; }
+info() { printf "[dev] %s\n" "$*"; }
+warn() { printf "\033[33m[dev] %s\033[0m\n" "$*"; }
+fail() { printf "\033[31m[dev] %s\033[0m\n" "$*"; exit 1; }
 
 ensure_env() {
   if [[ ! -f "${ROOT_DIR}/.env" ]]; then
     info "Creating .env with sane defaults"
     cat > "${ROOT_DIR}/.env" <<'ENV'
 APP_ENV=dev
-# FastAPI CORS for Vite dev server
-ALLOWED_ORIGINS=["http://localhost:5173","http://127.0.0.1:5173"]
+# FastAPI CORS for Vite dev server (use exploded keys to avoid JSON parsing issues)
+# ALLOWED_ORIGINS=["http://localhost:5173","http://127.0.0.1:5173"]
+ALLOWED_ORIGINS__0=http://localhost:5173
+ALLOWED_ORIGINS__1=http://127.0.0.1:5173
+
 # Async SQLAlchemy URL for Postgres (local defaults)
 DATABASE_URL=postgresql+asyncpg://nivio:1234@127.0.0.1:5432/nivio_dev
 # Redis URL for tasks/caching (local default)
@@ -56,6 +55,7 @@ CONDA_ENV=nivio
 USE_DOCKER=auto
 ENV
   fi
+  # Export .env so pydantic can read via EnvSettingsSource
   set -a; source "${ROOT_DIR}/.env"; set +a
 }
 
@@ -99,7 +99,6 @@ is_port_open() { # host port
 }
 
 ensure_compose_up() {
-  # Decide whether to use Docker
   case "${USE_DOCKER:-auto}" in
     false|False|FALSE|no|NO)
       info "USE_DOCKER=false → Reusing local Postgres/Redis"
@@ -113,13 +112,11 @@ ensure_compose_up() {
 
   command -v docker >/dev/null 2>&1 || fail "Docker is required (set USE_DOCKER=false to skip)."
 
-  # Pick host ports, avoiding conflicts
   HOST_DB_PORT=5432; HOST_REDIS_PORT=6379
   is_port_open 127.0.0.1 5432 && HOST_DB_PORT=5433
   is_port_open 127.0.0.1 6379 && HOST_REDIS_PORT=6380
   export HOST_DB_PORT HOST_REDIS_PORT
 
-  # If we run Docker, align runtime env to match compose credentials
   export NEW_DATABASE_URL="postgresql+asyncpg://nivio:nivio@127.0.0.1:${HOST_DB_PORT}/nivio"
   export NEW_REDIS_URL="redis://127.0.0.1:${HOST_REDIS_PORT}/0"
 
@@ -132,7 +129,8 @@ ensure_compose_up() {
 
 wait_tcp() { # host port timeout_seconds
   local host=$1 port=$2 timeout=${3:-30}
-  local start=$(date +%s)
+  local start
+  start=$(date +%s)
   until (echo >"/dev/tcp/${host}/${port}") >/dev/null 2>&1; do
     sleep 1
     if (( $(date +%s) - start > timeout )); then return 1; fi
@@ -156,9 +154,15 @@ start_backend() {
   [[ -d "${BACKEND_DIR}" ]] || fail "Backend directory not found at ${BACKEND_DIR}"
   pushd "${BACKEND_DIR}" >/dev/null
 
+  # Prevent stray JSON-style ALLOWED_ORIGINS from overriding exploded keys
+  unset ALLOWED_ORIGINS || true
+
+  info "Env check → ALLOWED_ORIGINS='${ALLOWED_ORIGINS-}' ALLOWED_ORIGINS__0='${ALLOWED_ORIGINS__0-}' ALLOWED_ORIGINS__1='${ALLOWED_ORIGINS__1-}'"
+  info "Starting FastAPI dev server"
+
   if command -v conda >/dev/null 2>&1 || command -v micromamba >/dev/null 2>&1; then
     conda_activate
-    info "Starting FastAPI dev server with conda env: ${CONDA_ENV:-nivio}"
+    info "Conda env: ${CONDA_ENV:-nivio}"
     DATABASE_URL="${NEW_DATABASE_URL:-$DATABASE_URL}" \
       REDIS_URL="${NEW_REDIS_URL:-$REDIS_URL}" \
       python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload \
@@ -175,10 +179,11 @@ start_backend() {
       python3 -m venv "${VENV_DIR}"
       "${VENV_DIR}/bin/pip" install --upgrade pip >/dev/null
       if [[ -f requirements.txt ]]; then "${VENV_DIR}/bin/pip" install -r requirements.txt; fi
-      "${VENV_DIR}/bin/pip" install uvicorn[standard] fastapi sqlalchemy[asyncio] asyncpg pydantic pydantic-settings pillow >/dev/null || true
+      "${VENV_DIR}/bin/pip" install 'uvicorn[standard]' fastapi 'sqlalchemy[asyncio]' asyncpg pydantic pydantic-settings pillow >/dev/null || true
     fi
     info "Starting FastAPI dev server (venv)"
-    DATABASE_URL="${NEW_DATABASE_URL:-$DATABASE_URL}" REDIS_URL="${NEW_REDIS_URL:-$REDIS_URL}" \
+    DATABASE_URL="${NEW_DATABASE_URL:-$DATABASE_URL}" \
+      REDIS_URL="${NEW_REDIS_URL:-$REDIS_URL}" \
       "${VENV_DIR}/bin/uvicorn" app.main:app --host 0.0.0.0 --port 8000 --reload \
       >>"${LOG_DIR}/backend.out.log" 2>>"${LOG_DIR}/backend.err.log" &
   fi
@@ -195,7 +200,7 @@ pkg_manager() {
 start_frontend() {
   [[ -d "${FRONTEND_DIR}" ]] || { warn "Frontend directory not found at ${FRONTEND_DIR}; skipping."; return; }
   pushd "${FRONTEND_DIR}" >/dev/null
-  local pm=$(pkg_manager)
+  local pm; pm=$(pkg_manager)
   info "Using frontend package manager: ${pm}"
   case "$pm" in
     pnpm)
@@ -216,7 +221,6 @@ start_frontend() {
 }
 
 start_worker() {
-  # Optional background worker
   if [[ -f "${BACKEND_DIR}/worker/worker.py" ]]; then
     pushd "${BACKEND_DIR}" >/dev/null
     if command -v conda >/dev/null 2>&1 || command -v micromamba >/dev/null 2>&1; then
@@ -287,19 +291,28 @@ cmd_logs() {
 }
 
 cmd_ps() {
-  if [[ -f "${COMPOSE_FILE}" ]]; then compose ps || true; else warn "Infra is not started via Docker."; fi
-  pgrep -f "uvicorn app.main:app" >/dev/null && echo "backend: running" || echo "backend: stopped"
+  if [[ -f "${COMPOSE_FILE}" ]]; then
+    compose ps || true
+  else
+    warn "Infra is not started via Docker."
+  fi
+  pgrep -f "uvicorn app\.main:app" >/dev/null && echo "backend: running" || echo "backend: stopped"
   pgrep -f "worker\.worker" >/dev/null && echo "worker: running" || echo "worker: stopped"
   pgrep -f "vite" >/dev/null && echo "frontend: running" || echo "frontend: stopped"
 }
 
 doctor() {
   bold "Running diagnostics"
-  echo "== System =="; echo "uname: $(uname -a)"; echo "docker: $(docker --version 2>/dev/null || echo 'not installed')"; echo "conda: $(conda --version 2>/dev/null || echo 'not installed')"; echo "python: $(python --version 2>/dev/null || echo 'not found')"; echo "node: $(node --version 2>/dev/null || echo 'not found')"; echo "npm: $(npm --version 2>/dev/null || echo 'not found')"
+  echo "== System =="; echo "uname: $(uname -a)"
+  echo "docker: $(docker --version 2>/dev/null || echo 'not installed')"
+  echo "conda: $(conda --version 2>/dev/null || echo 'not installed')"
+  echo "python: $(python --version 2>/dev/null || echo 'not found')"
+  echo "node: $(node --version 2>/dev/null || echo 'not found')"
+  echo "npm: $(npm --version 2>/dev/null || echo 'not found')"
   echo; echo "== Ports =="; for p in 5432 5433 6379 6380 8000 5173; do (echo >/dev/tcp/127.0.0.1/$p) >/dev/null 2>&1 && echo "port $p: open" || echo "port $p: closed"; done
-  echo; echo "== HTTP health =="; curl -fsS http://localhost:8000/health || echo "health endpoint failed"; echo; [[ -f "${COMPOSE_FILE}" ]] && compose ps || true
+  echo; echo "== HTTP health =="; curl -fsS http://localhost:8000/health || echo "health endpoint failed"
+  echo; [[ -f "${COMPOSE_FILE}" ]] && compose ps || true
 }
-
 
 dump_logs() {
   ts=$(date +%Y%m%d_%H%M%S)

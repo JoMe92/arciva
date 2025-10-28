@@ -92,9 +92,10 @@ MIME=$(file --mime-type -b "$FILE")
 # 1) Project create
 curl -s -X POST "$API/v1/projects" \
   -H 'Content-Type: application/json' \
-  -d '{ "title": "First Shoot", "client": "Acme", "note": "MVP demo" }'
+  -d '{ "title": "First Shoot 2", "client": "Acme", "note": "MVP demo" }'
 
 # copy the returned "id" → PROJECT
+5e597321-4420-4505-8ce0-11a49a69ea99
 
 # 2) Upload init
 curl -s -X POST "$API/v1/projects/$PROJECT/uploads/init" \
@@ -102,6 +103,8 @@ curl -s -X POST "$API/v1/projects/$PROJECT/uploads/init" \
   -d "{ \"filename\": \"$(basename \"$FILE\")\", \"size_bytes\": $SIZE, \"mime\": \"$MIME\" }"
 
 # copy "asset_id" → ASSET and "upload_token" → TOKEN
+ASSET=b0504927-da05-4f50-babf-6d2f744bd257
+TOKEN=9R3w6Zg1kj6YlnwRJPJyk6vBZtiE3gbu
 
 # 3) Upload file
 curl -s -X PUT "$API/v1/uploads/$ASSET" \

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -42,21 +42,70 @@ const FilterBar: React.FC<{
 }> = ({ projects, q, setQ, client, setClient, tags, setTags }) => {
   const clients = useMemo(() => unique(projects.map((p) => p.client)), [projects])
   const allTags = useMemo(() => unique(projects.flatMap((p) => p.tags || [])), [projects])
+  const [tagSearch, setTagSearch] = React.useState('')
+  const visibleTags = useMemo(() => {
+    if (!tagSearch) return allTags
+    const s = tagSearch.toLowerCase()
+    return allTags.filter((t) => t.toLowerCase().includes(s))
+  }, [allTags, tagSearch])
+
   return (
-    <div className="mb-8 flex flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by title…" className="h-8 rounded-full border border-[var(--border,#E1D3B9)] bg-white px-3 text-[12px] outline-none placeholder:text-[var(--text-muted,#6B645B)]" />
-        <select value={client} onChange={(e) => setClient(e.target.value)} className="h-8 rounded-full border border-[var(--border,#E1D3B9)] bg-white px-3 text-[12px] outline-none">
+    <div className="mb-8">
+      {/* Single row with compact tag area and improved tag search */}
+      <div className="flex items-center gap-2 overflow-x-auto flex-nowrap">
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Search by title…"
+          className="h-9 rounded-full border border-[var(--border,#E1D3B9)] bg-white px-3 text-[12px] outline-none placeholder:text-[var(--text-muted,#6B645B)]"
+        />
+        <select
+          value={client}
+          onChange={(e) => setClient(e.target.value)}
+          className="h-9 rounded-full border border-[var(--border,#E1D3B9)] bg-white px-3 text-[12px] outline-none"
+        >
           <option value="">All clients</option>
-          {clients.map((c) => <option key={c} value={c}>{c}</option>)}
-        </select>
-        <div className="flex flex-wrap items-center gap-1">
-          {allTags.map((t) => (
-            <button key={t} onClick={() => setTags(tags.includes(t) ? tags.filter((x) => x !== t) : [...tags, t])}
-              className={`px-2 py-1 rounded-full text-[11px] border ${tags.includes(t) ? 'bg-[var(--basalt-700,#4A463F)] text-white border-transparent' : 'border-[var(--border,#E1D3B9)] text-[var(--text-muted,#6B645B)] hover:border-[var(--text-muted,#6B645B)]'}`}>
-              {t}
-            </button>
+          {clients.map((c) => (
+            <option key={c} value={c}>{c}</option>
           ))}
+        </select>
+
+        {/* Better looking tag search */}
+        <div className="relative">
+          <input
+            value={tagSearch}
+            onChange={(e) => setTagSearch(e.target.value)}
+            placeholder="Find tag…"
+            className="h-9 w-[160px] rounded-full border border-[var(--border,#E1D3B9)] bg-white px-3 pr-6 text-[12px] outline-none placeholder:text-[var(--text-muted,#6B645B)]"
+          />
+          {tagSearch && (
+            <button
+              onClick={() => setTagSearch('')}
+              aria-label="Clear tag search"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-[12px] text-[var(--text-muted,#6B645B)]"
+            >
+              ×
+            </button>
+          )}
+        </div>
+
+        {/* Compact, horizontally scrollable tag strip (expanded) */}
+        <div className="flex-1 min-w-[200px] rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-2 h-9 flex items-center">
+          <div className="flex gap-1 overflow-x-auto w-full whitespace-nowrap py-1">
+            {visibleTags.length ? (
+              visibleTags.map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setTags(tags.includes(t) ? tags.filter((x) => x !== t) : [...tags, t])}
+                  className={`inline-block px-2 py-0.5 rounded-full text-[11px] border ${tags.includes(t) ? 'bg-[var(--basalt-700,#4A463F)] text-white border-transparent' : 'border-[var(--border,#E1D3B9)] text-[var(--text-muted,#6B645B)] hover:border-[var(--text-muted,#6B645B)]'}`}
+                >
+                  {t}
+                </button>
+              ))
+            ) : (
+              <span className="text-[12px] text-[var(--text-muted,#6B645B)]">No tags</span>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -82,6 +131,9 @@ export default function ProjectIndex() {
     queryFn: listProjects,
   })
 
+  // Local overlays for edits so tags and other changes reflect immediately
+  const [localEdits, setLocalEdits] = useState<Record<string, Partial<Project>>>({})
+
   const dynamicProjects = useMemo<Project[]>(() => {
     if (!apiProjects) return []
     return apiProjects.map((proj) => ({
@@ -99,7 +151,10 @@ export default function ProjectIndex() {
     }))
   }, [apiProjects])
 
-  const baseProjects = useMemo(() => [...dynamicProjects, ...PROJECTS], [dynamicProjects])
+  const baseProjects = useMemo(() => {
+    const combined = [...dynamicProjects, ...PROJECTS]
+    return combined.map((p) => ({ ...p, ...(localEdits[p.id] || {}) }))
+  }, [dynamicProjects, localEdits])
 
   const allTags = useMemo(() => unique(baseProjects.flatMap((p) => p.tags || [])), [baseProjects])
   const visible = useMemo(() => baseProjects.filter((p) => (archiveMode ? isArchived(p.id) : !isArchived(p.id))), [archiveMode, baseProjects, isArchived])
@@ -117,6 +172,8 @@ export default function ProjectIndex() {
     setModalOpen(true)
   }, [])
 
+  const createTagsRef = useRef<string[] | null>(null)
+
   const createMutation = useMutation({
     mutationFn: createProject,
     onSuccess: (proj) => {
@@ -124,6 +181,14 @@ export default function ProjectIndex() {
       closeCreateModal()
       queryClient.invalidateQueries({ queryKey: ['projects'] })
       const newId = proj.id
+      // Overlay tags chosen during creation so filters include them
+      if (createTagsRef.current && createTagsRef.current.length) {
+        setLocalEdits((prev) => ({
+          ...prev,
+          [newId]: { ...(prev[newId] || {}), tags: [...createTagsRef.current!] },
+        }))
+      }
+      createTagsRef.current = null
       update(newId)
       navigate(`/projects/${newId}`)
     },
@@ -138,6 +203,8 @@ export default function ProjectIndex() {
       client: clientName || undefined,
       note: desc || undefined,
     }
+    // Persist tags locally after creation succeeds
+    createTagsRef.current = tgs || []
     createMutation.mutate(payload)
   }
 
@@ -177,6 +244,18 @@ export default function ProjectIndex() {
       }
       return next
     })
+
+    // Overlay tags and other edits locally (works for API + static projects)
+    setLocalEdits((prev) => ({
+      ...prev,
+      [updated.id]: {
+        ...(prev[updated.id] || {}),
+        title: updated.title,
+        client: updated.client,
+        note: updated.note ?? updated.blurb,
+        tags: updated.tags,
+      },
+    }))
 
     setEditOpen(false)
   }

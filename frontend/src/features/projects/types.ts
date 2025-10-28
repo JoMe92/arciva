@@ -5,11 +5,16 @@
  * thumbnails and placeholders.
  */
 export type Project = {
-  id: string;
-  title: string;
-  client: string;
-  blurb?: string;
-  aspect: 'portrait' | 'landscape' | 'square';
-  image?: string | null;
-  tags?: string[];
-};
+  id: string
+  title: string
+  client: string
+  blurb?: string
+  note?: string | null
+  aspect: 'portrait' | 'landscape' | 'square'
+  image?: string | null
+  tags?: string[]
+  assetCount?: number
+  createdAt?: string
+  updatedAt?: string
+  source?: 'static' | 'api'
+}

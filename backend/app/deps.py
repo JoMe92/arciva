@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     thumb_sizes: List[int] = [256]
     max_upload_mb: int = 200
     worker_concurrency: int = 2
+    logs_dir: str = "logs"
 
     @field_validator("allowed_origins", mode="before")
     @classmethod
@@ -56,6 +57,12 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     s = Settings()
-    for p in [s.fs_root, s.fs_uploads_dir, s.fs_originals_dir, s.fs_derivatives_dir]:
+    fs_paths = [s.fs_root, s.fs_uploads_dir, s.fs_originals_dir, s.fs_derivatives_dir]
+    for p in fs_paths:
         os.makedirs(p, exist_ok=True)
+    logs_path = Path(s.logs_dir).expanduser()
+    if not logs_path.is_absolute():
+        logs_path = Path.cwd() / logs_path
+    logs_path.mkdir(parents=True, exist_ok=True)
+    s.logs_dir = str(logs_path)
     return s

@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import StoneTrailIcon from '../components/StoneTrailIcon'
 import Splash from '../components/Splash'
 import { Project } from '../features/projects/types'
@@ -12,6 +13,7 @@ import ProjectGrid from '../components/ProjectGrid'
 import StateHint from '../components/StateHint'
 import CreateModal from '../components/modals/CreateModal'
 import EditModal from '../components/modals/EditModal'
+import { createProject, listProjects, type ProjectApiResponse } from '../shared/api/projects'
 
 const AppBar: React.FC<{ onCreate: () => void; onToggleArchive: () => void; archiveMode: boolean }> = ({ onCreate, onToggleArchive, archiveMode }) => (
   <div className="sticky top-0 z-40 border-b border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]/90 backdrop-blur">
@@ -65,34 +67,84 @@ export default function ProjectIndex() {
   const navigate = useNavigate()
   const [ready, setReady] = useState(false)
   const { update } = useLastOpened()
+  const queryClient = useQueryClient()
 
   const [q, setQ] = useState(''); const [client, setClient] = useState(''); const [tags, setTags] = useState<string[]>([])
   const [modalOpen, setModalOpen] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
   const { archived, isArchived, archive, unarchive } = useArchive()
   const [archiveMode, setArchiveMode] = useState(false)
 
   useEffect(() => { const t = setTimeout(() => setReady(true), 400); return () => clearTimeout(t) }, [])
 
-  const allTags = useMemo(() => unique(PROJECTS.flatMap((p) => p.tags || [])), [])
-  const visible = useMemo(() => PROJECTS.filter((p) => (archiveMode ? isArchived(p.id) : !isArchived(p.id))), [archiveMode, archived, isArchived])
+  const { data: apiProjects, isLoading: loadingProjects, isError: projectsError, error: projectsErrorObj } = useQuery<ProjectApiResponse[], Error>({
+    queryKey: ['projects'],
+    queryFn: listProjects,
+  })
+
+  const dynamicProjects = useMemo<Project[]>(() => {
+    if (!apiProjects) return []
+    return apiProjects.map((proj) => ({
+      id: proj.id,
+      title: proj.title,
+      client: proj.client ?? 'Unassigned',
+      note: proj.note,
+      aspect: 'portrait',
+      image: null,
+      tags: [],
+      assetCount: proj.asset_count,
+      createdAt: proj.created_at,
+      updatedAt: proj.updated_at,
+      source: 'api',
+    }))
+  }, [apiProjects])
+
+  const baseProjects = useMemo(() => [...dynamicProjects, ...PROJECTS], [dynamicProjects])
+
+  const allTags = useMemo(() => unique(baseProjects.flatMap((p) => p.tags || [])), [baseProjects])
+  const visible = useMemo(() => baseProjects.filter((p) => (archiveMode ? isArchived(p.id) : !isArchived(p.id))), [archiveMode, baseProjects, isArchived])
   const filtered = useMemo(() => visible.filter((p) =>
       (!q || p.title.toLowerCase().includes(q.toLowerCase())) && (!client || p.client === client) && (!tags.length || (p.tags || []).some((t) => tags.includes(t)))),
     [q, client, tags, visible])
 
-  function createProject() { setModalOpen(true) }
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'n') { e.preventDefault(); setModalOpen(true) } }
-    window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey)
+  const closeCreateModal = useCallback(() => {
+    setModalOpen(false)
+    setCreateError(null)
   }, [])
 
-  const onCreate = (name: string, desc: string, clientName: string, tgs: string[]) => {
-    // Hier später: POST an Backend → Projekt-ID vom Server nehmen.
-    const newId = 'new_' + Date.now().toString(36)
-    // Optional: PROJECTS.push(...) wenn du lokal spiegeln willst.
-    setModalOpen(false)
-    update(newId)
-    navigate(`/projects/${newId}`)
+  const openCreateModal = useCallback(() => {
+    setCreateError(null)
+    setModalOpen(true)
+  }, [])
+
+  const createMutation = useMutation({
+    mutationFn: createProject,
+    onSuccess: (proj) => {
+      setCreateError(null)
+      closeCreateModal()
+      queryClient.invalidateQueries({ queryKey: ['projects'] })
+      const newId = proj.id
+      update(newId)
+      navigate(`/projects/${newId}`)
+    },
+    onError: (err: unknown) => {
+      setCreateError(err instanceof Error ? err.message : 'Failed to create project')
+    },
+  })
+
+  function createProjectHandler(title: string, desc: string, clientName: string, tgs: string[]) {
+    const payload = {
+      title: title || 'Untitled project',
+      client: clientName || undefined,
+      note: desc || undefined,
+    }
+    createMutation.mutate(payload)
   }
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'n') { e.preventDefault(); openCreateModal() } }
+    window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey)
+  }, [openCreateModal])
 
   const onOpen = (id: string) => { update(id); navigate(`/projects/${id}`) }
   const onArchive = (id: string) => archive(id)
@@ -104,11 +156,12 @@ export default function ProjectIndex() {
 
   const handleToggleArchive = () => setArchiveMode(a => !a)
   const hasAnyFilters = Boolean(q || client || tags.length)
+  const clearFilters = () => { setQ(''); setClient(''); setTags([]) }
 
   return (
     <div className="min-h-screen bg-[var(--surface-subtle,#FBF7EF)]">
       <div className="sticky top-0 z-40">
-        <AppBar onCreate={createProject} onToggleArchive={handleToggleArchive} archiveMode={archiveMode} />
+        <AppBar onCreate={openCreateModal} onToggleArchive={handleToggleArchive} archiveMode={archiveMode} />
         <AnimatePresence>{!ready && <Splash />}</AnimatePresence>
       </div>
       <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-10">
@@ -121,14 +174,27 @@ export default function ProjectIndex() {
           </p>
         </header>
 
-        {!archiveMode && <FilterBar projects={PROJECTS} q={q} setQ={setQ} client={client} setClient={setClient} tags={tags} setTags={setTags} />}
+        {!archiveMode && <FilterBar projects={baseProjects} q={q} setQ={setQ} client={client} setClient={setClient} tags={tags} setTags={setTags} />}
+        {projectsError && (
+          <StateHint message={`Could not load projects from server: ${projectsErrorObj?.message ?? 'Unknown error'}`} />
+        )}
+        {createError && (
+          <StateHint message={`Project could not be created: ${createError}`} actionLabel="Try again" onAction={openCreateModal} />
+        )}
+        {!loadingProjects && !filtered.length && (
+          <StateHint
+            message={hasAnyFilters ? 'No projects match your current filters.' : 'No projects yet — create one to get started.'}
+            actionLabel={hasAnyFilters ? 'Clear filters' : 'Create project'}
+            onAction={hasAnyFilters ? clearFilters : openCreateModal}
+          />
+        )}
 
         <ProjectGrid
           items={filtered}
           onOpen={onOpen}
           onArchive={onArchive}
           onUnarchive={onUnarchive}
-          onCreate={createProject}
+          onCreate={openCreateModal}
           archiveMode={archiveMode}
           onEdit={openEditor}
         />
@@ -146,7 +212,13 @@ export default function ProjectIndex() {
         />
       </main>
 
-      <CreateModal open={modalOpen} onClose={() => setModalOpen(false)} onCreate={onCreate} existingTags={allTags} />
+      <CreateModal
+        open={modalOpen}
+        onClose={closeCreateModal}
+        onCreate={createProjectHandler}
+        existingTags={allTags}
+        busy={createMutation.isPending}
+      />
     </div>
   )
 }

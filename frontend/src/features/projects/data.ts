@@ -24,13 +24,13 @@ export const U = {
  * placeholder rendering.
  */
 export const PROJECTS: Project[] = [
-  { id: 'p1', title: 'Red XPLR', client: 'SRAM', aspect: 'portrait', image: U.bike, tags: ['gravel', 'outdoor'] },
-  { id: 'p2', title: 'Polo Country', client: 'Element × Ralph Lauren', aspect: 'portrait', image: U.knit, tags: ['fashion', 'editorial'] },
-  { id: 'p3', title: 'Lena Mantler', client: 'SZ Magazin', aspect: 'portrait', image: U.portrait, tags: ['portrait'] },
-  { id: 'p4', title: 'Mayer of Munich', client: 'Monocle', aspect: 'portrait', image: U.felt, tags: ['reportage', 'color'] },
-  { id: 'p5', title: 'Glacier Line', client: 'Editorial', aspect: 'landscape', image: null, tags: ['landscape', 'travel'] },
-  { id: 'p6', title: 'Trail Push', client: 'Patagonia', aspect: 'landscape', image: U.trail, tags: ['brand', 'outdoor'] },
-  { id: 'p7', title: 'Stone Trail', client: 'CI', aspect: 'square', image: U.stone, tags: ['identity'] },
-  { id: 'p8', title: 'Atelier', client: 'Studio', aspect: 'portrait', image: U.studio, tags: ['studio'] },
-  { id: 'p9', title: 'Urban Grid', client: 'City Works', aspect: 'landscape', image: U.city, tags: ['architecture'] }
+  { id: 'p1', title: 'Red XPLR', client: 'SRAM', aspect: 'portrait', image: U.bike, tags: ['gravel', 'outdoor'], source: 'static' },
+  { id: 'p2', title: 'Polo Country', client: 'Element × Ralph Lauren', aspect: 'portrait', image: U.knit, tags: ['fashion', 'editorial'], source: 'static' },
+  { id: 'p3', title: 'Lena Mantler', client: 'SZ Magazin', aspect: 'portrait', image: U.portrait, tags: ['portrait'], source: 'static' },
+  { id: 'p4', title: 'Mayer of Munich', client: 'Monocle', aspect: 'portrait', image: U.felt, tags: ['reportage', 'color'], source: 'static' },
+  { id: 'p5', title: 'Glacier Line', client: 'Editorial', aspect: 'landscape', image: null, tags: ['landscape', 'travel'], source: 'static' },
+  { id: 'p6', title: 'Trail Push', client: 'Patagonia', aspect: 'landscape', image: U.trail, tags: ['brand', 'outdoor'], source: 'static' },
+  { id: 'p7', title: 'Stone Trail', client: 'CI', aspect: 'square', image: U.stone, tags: ['identity'], source: 'static' },
+  { id: 'p8', title: 'Atelier', client: 'Studio', aspect: 'portrait', image: U.studio, tags: ['studio'], source: 'static' },
+  { id: 'p9', title: 'Urban Grid', client: 'City Works', aspect: 'landscape', image: U.city, tags: ['architecture'], source: 'static' }
 ];

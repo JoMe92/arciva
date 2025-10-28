@@ -154,6 +154,33 @@ export default function ProjectIndex() {
   const [editProject, setEditProject] = useState<Project | null>(null)
   const openEditor = (p: Project) => { setEditProject(p); setEditOpen(true) }
 
+  // Apply edits locally so the grid reflects changes immediately.
+  // We optimistically update the React Query cache for 'projects'.
+  const handleSave = (updated: Project) => {
+    // Keep modal state in sync
+    setEditProject(updated)
+
+    // Update API-backed projects in cache so derived lists re-render
+    queryClient.setQueryData<ProjectApiResponse[] | undefined>(['projects'], (old) => {
+      if (!old) return old
+      const idx = old.findIndex((p) => p.id === updated.id)
+      if (idx === -1) return old
+      const next = old.slice()
+      next[idx] = {
+        ...next[idx],
+        title: updated.title,
+        client: updated.client || null,
+        // Map optional description fields; prefer 'note' if present, fallback to 'blurb'
+        note: updated.note ?? updated.blurb ?? next[idx].note ?? null,
+        // Touch updated_at to reflect change locally
+        updated_at: new Date().toISOString(),
+      }
+      return next
+    })
+
+    setEditOpen(false)
+  }
+
   const handleToggleArchive = () => setArchiveMode(a => !a)
   const hasAnyFilters = Boolean(q || client || tags.length)
   const clearFilters = () => { setQ(''); setClient(''); setTags([]) }
@@ -203,7 +230,7 @@ export default function ProjectIndex() {
           open={editOpen}
           project={editProject}
           onClose={() => setEditOpen(false)}
-          onSave={() => setEditOpen(false)}
+          onSave={handleSave}
           onOpen={(id) => { update(id); navigate(`/projects/${id}`) }}
           archived={editProject ? isArchived(editProject.id) : false}
           onArchive={onArchive}

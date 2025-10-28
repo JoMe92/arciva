@@ -18,32 +18,7 @@
   - Update or create documentation for any public API changes (backend) or UI workflows (frontend).
 
 ---
-
-## 🧑‍💻 React Programming Guidelines
-
-- **Component Structure**:
-  - Use **functional components** only.
-  - Use **hooks** (`useState`, `useEffect`, `useReducer`, etc.) for state and lifecycle.
-  - Separate **UI components** from **logic containers** where possible.
-- **Styling**:
-  - Prefer CSS Modules, TailwindCSS, or styled-components. Follow the project’s chosen convention.
-- **Code Style**:
-  - Max line length: **100 characters**
-  - Indentation: **2 spaces**
-  - Prefer `const` over `let`; never use `var`.
-  - Use `camelCase` for variables/functions and `PascalCase` for components.
-- **Patterns**:
-  - Avoid prop drilling; use Context API or composition.
-  - Avoid anonymous inline functions when unnecessary.
-  - Memoize expensive functions with `useMemo` and `useCallback`.
-  - Lazy-load routes or components when needed.
-- **Testing**:
-  - Use **Jest** and **React Testing Library**.
-  - Write tests for components, hooks, and services.
-  - Prefer behavioral tests over snapshot tests.
-
----
-### 🐍 Python / FastAPI Programming Guidelines
+### 🐍 Python 
 
 - **Language Features**:
   - Use **Python 3.10+** features such as structural pattern matching and modern typing syntax (`list[int]` instead of `List[int]`).
@@ -105,25 +80,7 @@
   - No global mutable state.
   - Use `dataclass` or `pydantic.BaseModel` where applicable.
 
-- **Testing**:
-  - Use **pytest**
-  - Write both **unit tests** and **integration tests**.
-  - Use `pytest-mock` or `unittest.mock` to isolate external dependencies.
-  - Validate response codes, data shape, and behavior under error conditions.
 
-
-## ✅ Testing Requirements
-
-- All code must be covered with automated tests.
-- For backend:
-  - Run tests with `pytest --cov=app`
-- For frontend:
-  - Use `npm test` or `vitest` depending on the stack.
-- Snapshot tests (frontend) must be reviewed and accepted manually when changed.
-- Avoid blind test coverage; write meaningful assertions.
-- CI must pass before merging.
-
----
 
 ## 📝 Commit Messages
 

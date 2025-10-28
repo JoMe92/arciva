@@ -6,6 +6,7 @@ export interface ModalShellProps {
   onClose: () => void;
   onPrimary: () => void;
   primaryLabel: string;
+  primaryDisabled?: boolean;
   headerRight?: React.ReactNode;
   footerLeft?: React.ReactNode;
   children: React.ReactNode;
@@ -16,7 +17,7 @@ export interface ModalShellProps {
  * branded header, body content slot and footer with primary and
  * secondary actions. A backdrop darkens the rest of the page.
  */
-const ModalShell: React.FC<ModalShellProps> = ({ title, onClose, onPrimary, primaryLabel, headerRight, footerLeft, children }) => {
+const ModalShell: React.FC<ModalShellProps> = ({ title, onClose, onPrimary, primaryLabel, primaryDisabled, headerRight, footerLeft, children }) => {
   return (
     <div className="fixed inset-0 z-[60] grid place-items-center bg-black/20">
       <div className="w-full max-w-lg rounded-2xl bg-white p-4 shadow-lg border border-[var(--border,#E1D3B9)]">
@@ -36,7 +37,15 @@ const ModalShell: React.FC<ModalShellProps> = ({ title, onClose, onPrimary, prim
             <button onClick={onClose} className="h-8 rounded-full border border-[var(--border,#E1D3B9)] px-3 text-[12px]">
               Cancel
             </button>
-            <button onClick={onPrimary} className="h-8 rounded-full bg-[var(--basalt-700,#4A463F)] text-white px-3 text-[12px]">
+            <button
+              onClick={onPrimary}
+              disabled={primaryDisabled}
+              className={`h-8 rounded-full px-3 text-[12px] ${
+                primaryDisabled
+                  ? 'bg-[var(--border,#E1D3B9)] text-[var(--text-muted,#6B645B)] cursor-not-allowed'
+                  : 'bg-[var(--basalt-700,#4A463F)] text-white'
+              }`}
+            >
               {primaryLabel}
             </button>
           </div>

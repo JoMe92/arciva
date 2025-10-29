@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, Header, Request
+from datetime import datetime, timezone
+from fastapi import APIRouter, Depends, HTTPException, Header, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from uuid import UUID
@@ -71,22 +72,36 @@ async def upload_file(asset_id: UUID, request: Request, x_upload_token: str = He
 @router.post("/uploads/complete")
 async def upload_complete(body: schemas.UploadCompleteIn, db: AsyncSession = Depends(get_db)):
     sid = str(body.asset_id)
-    token = UPLOAD_TOKENS.get(sid)
+    token = UPLOAD_TOKENS.pop(sid, None)
     if not token:
         raise HTTPException(400, "no upload in progress")
 
-    # check asset exists
-    from sqlalchemy import select
     asset = (await db.execute(select(models.Asset).where(models.Asset.id==body.asset_id))).scalar_one_or_none()
     if not asset:
         raise HTTPException(404, "asset not found")
+
+    now = datetime.now(timezone.utc)
+    asset.status = models.AssetStatus.QUEUED
+    asset.queued_at = now
+    asset.processing_started_at = None
+    asset.completed_at = None
+    asset.last_error = None
+    await db.commit()
 
     # enqueue ARQ job
     from arq.connections import RedisSettings, ArqRedis
     from ..deps import get_settings
     settings = get_settings()
-    redis = await ArqRedis.create(RedisSettings.from_dsn(settings.redis_url))
-    await redis.enqueue_job("ingest_asset", str(asset.id))
-    await redis.close(close_connection_pool=True)
+    try:
+        redis = await ArqRedis.create(RedisSettings.from_dsn(settings.redis_url))
+        await redis.enqueue_job("ingest_asset", str(asset.id))
+    except Exception as exc:
+        asset.status = models.AssetStatus.ERROR
+        asset.last_error = f"enqueue_failed: {exc!r}"
+        await db.commit()
+        raise HTTPException(503, "failed to enqueue ingest job")
+    finally:
+        if 'redis' in locals():
+            await redis.close(close_connection_pool=True)
 
-    return {"status": "QUEUED"}
+    return {"status": models.AssetStatus.QUEUED.value}

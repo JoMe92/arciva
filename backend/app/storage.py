@@ -1,9 +1,9 @@
 from dataclasses import dataclass
-from .deps import get_settings
 from pathlib import Path
-import hashlib
-import os
+from uuid import UUID
 import shutil
+
+from .deps import get_settings
 
 @dataclass
 class PosixStorage:
@@ -19,9 +19,19 @@ class PosixStorage:
     def temp_path_for(self, asset_id: str) -> Path:
         return self.uploads / f"{asset_id}.upload"
 
-    def move_to_originals(self, temp_path: Path, sha256_hex: str, ext: str) -> Path:
+    def remove_temp(self, asset_id: str | UUID) -> None:
+        aid = str(asset_id)
+        self.temp_path_for(aid).unlink(missing_ok=True)
+
+    def original_path_for(self, sha256_hex: str, ext: str) -> Path:
+        if not ext.startswith("."):
+            ext = f".{ext}"
         dest = self.originals / f"{sha256_hex}{ext}"
         dest.parent.mkdir(parents=True, exist_ok=True)
+        return dest
+
+    def move_to_originals(self, temp_path: Path, sha256_hex: str, ext: str) -> Path:
+        dest = self.original_path_for(sha256_hex, ext)
         # If already exists (dedupe), remove temp and return existing
         if dest.exists():
             temp_path.unlink(missing_ok=True)

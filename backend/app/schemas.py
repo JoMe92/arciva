@@ -54,6 +54,8 @@ class AssetListItem(BaseModel):
     queued_at: Optional[datetime] = None
     processing_started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
 
 class AssetDerivativeOut(BaseModel):
     variant: str
@@ -80,3 +82,12 @@ class AssetDetail(BaseModel):
     metadata_warnings: List[str] = Field(default_factory=list)
     thumb_url: Optional[str]
     derivatives: List[AssetDerivativeOut] = Field(default_factory=list)
+
+# Project-asset linking
+class ProjectAssetsLinkIn(BaseModel):
+    asset_ids: List[UUID]
+
+class ProjectAssetsLinkOut(BaseModel):
+    linked: int
+    duplicates: int
+    items: List[AssetListItem]

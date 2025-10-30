@@ -1,15 +1,19 @@
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, Header, Request
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from uuid import UUID
+import logging
 import secrets
 from pathlib import Path
+from uuid import UUID
 
-from ..db import get_db
+from fastapi import APIRouter, Depends, HTTPException, Header, Request
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from .. import models, schemas
+from ..db import get_db
 from ..deps import get_settings
 from ..storage import PosixStorage
+
+logger = logging.getLogger("nivio.uploads")
 
 router = APIRouter(prefix="/v1", tags=["uploads"])
 
@@ -19,7 +23,6 @@ UPLOAD_TOKENS: dict[str, str] = {}
 @router.post("/projects/{project_id}/uploads/init", response_model=schemas.UploadInitOut, status_code=201)
 async def upload_init(project_id: UUID, body: schemas.UploadInitIn, db: AsyncSession = Depends(get_db)):
     # Ensure project exists
-    from sqlalchemy import select
     proj = (await db.execute(select(models.Project).where(models.Project.id==project_id))).scalar_one_or_none()
     if not proj:
         raise HTTPException(404, "Project not found")
@@ -39,6 +42,15 @@ async def upload_init(project_id: UUID, body: schemas.UploadInitIn, db: AsyncSes
     await db.flush()
     await db.commit()
 
+    logger.info(
+        "upload_init: project=%s asset=%s filename=%s size=%s mime=%s",
+        project_id,
+        asset.id,
+        body.filename,
+        body.size_bytes,
+        body.mime,
+    )
+
     token = secrets.token_urlsafe(24)
     UPLOAD_TOKENS[str(asset.id)] = token
     return schemas.UploadInitOut(asset_id=asset.id, upload_token=token, max_bytes=body.size_bytes)
@@ -55,7 +67,6 @@ async def upload_file(asset_id: UUID, request: Request, x_upload_token: str = He
     temp_path: Path = storage.temp_path_for(sid)
 
     # stream to temp file with a conservative size guard
-    from ..deps import get_settings
     s = get_settings()
     max_bytes = s.max_upload_mb * 1024 * 1024
     total = 0
@@ -66,6 +77,13 @@ async def upload_file(asset_id: UUID, request: Request, x_upload_token: str = He
                 temp_path.unlink(missing_ok=True)
                 raise HTTPException(413, "file too large")
             f.write(chunk)
+
+    logger.info(
+        "upload_file: asset=%s wrote_bytes=%s temp_path=%s",
+        sid,
+        total,
+        temp_path,
+    )
 
     return {"ok": True, "bytes": total}
 
@@ -81,6 +99,11 @@ async def upload_complete(body: schemas.UploadCompleteIn, db: AsyncSession = Dep
         raise HTTPException(404, "asset not found")
 
     now = datetime.now(timezone.utc)
+    logger.info(
+        "upload_complete: asset=%s status=%s -> QUEUED",
+        asset.id,
+        asset.status,
+    )
     asset.status = models.AssetStatus.QUEUED
     asset.queued_at = now
     asset.processing_started_at = None
@@ -99,9 +122,11 @@ async def upload_complete(body: schemas.UploadCompleteIn, db: AsyncSession = Dep
         asset.status = models.AssetStatus.ERROR
         asset.last_error = f"enqueue_failed: {exc!r}"
         await db.commit()
+        logger.exception("upload_complete: enqueue failed asset=%s", asset.id)
         raise HTTPException(503, "failed to enqueue ingest job")
     finally:
         if 'redis' in locals():
             await redis.close(close_connection_pool=True)
 
+    logger.info("upload_complete: enqueue success asset=%s", asset.id)
     return {"status": models.AssetStatus.QUEUED.value}

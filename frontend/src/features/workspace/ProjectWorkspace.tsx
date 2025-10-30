@@ -1,20 +1,108 @@
-import React, { useMemo, useRef, useEffect, useState, useCallback, useReducer } from 'react'
+import React, { useMemo, useRef, useEffect, useState, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { makeDemo, TOKENS, randomPlaceholderRatio } from './utils'
+import { TOKENS } from './utils'
+import { listProjectAssets, assetThumbUrl, type AssetListItem } from '../../shared/api/assets'
+import { initUpload, putUpload, completeUpload } from '../../shared/api/uploads'
+import { placeholderRatioForAspect } from '../../shared/placeholder'
 import type { Photo, ImgType, ColorTag } from './types'
 import { TopBar, Sidebar, GridView, DetailView, EmptyState, NoResults, computeCols } from './components'
 
 const SIDEBAR_WIDTH = 288
 const INSPECTOR_WIDTH = 260
 
+function detectAspect(width?: number | null, height?: number | null): 'portrait' | 'landscape' | 'square' {
+  if (!width || !height) return 'square'
+  if (width > height) return 'landscape'
+  if (height > width) return 'portrait'
+  return 'square'
+}
+
+function mapAssetToPhoto(item: AssetListItem, existing?: Photo): Photo {
+  const name = item.original_filename ?? existing?.name ?? 'Untitled asset'
+  const type = inferTypeFromName(name)
+  const date = item.taken_at ?? item.completed_at ?? existing?.date ?? new Date().toISOString()
+  const src = assetThumbUrl(item) ?? existing?.src ?? null
+  const aspect = detectAspect(item.width, item.height)
+  const placeholderRatio = existing?.placeholderRatio ?? placeholderRatioForAspect(aspect)
+
+  return {
+    id: item.id,
+    name,
+    type,
+    date,
+    rating: existing?.rating ?? 0,
+    picked: existing?.picked ?? false,
+    rejected: existing?.rejected ?? false,
+    tag: existing?.tag ?? 'None',
+    src,
+    placeholderRatio,
+  }
+}
+
 export default function ProjectWorkspace() {
   const { id } = useParams()
   const navigate = useNavigate()
   const [projectName] = useState(() => `Project ${id || '—'}`)
 
-  const [photos, setPhotos] = useState<Photo[]>(() => makeDemo())
+  const [photos, setPhotos] = useState<Photo[]>([])
+  const [loadingAssets, setLoadingAssets] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const prevPhotosRef = useRef<Photo[]>([])
+  const currentIndexRef = useRef(0)
+  const currentPhotoIdRef = useRef<string | null>(null)
   const [view, setView] = useState<'grid' | 'detail'>('detail')
   const [current, setCurrent] = useState(0)
+  const importInFlightRef = useRef(false)
+
+  const refreshAssets = useCallback(async (focusNewest: boolean = false) => {
+    if (!id) return
+    setLoadingAssets(true)
+    try {
+      const items = await listProjectAssets(id)
+      setLoadError(null)
+      const prevPhotos = prevPhotosRef.current
+      const prevIds = new Set(prevPhotos.map((p) => p.id))
+      const prevMap = new Map(prevPhotos.map((p) => [p.id, p]))
+      const mapped = items.map((item) => mapAssetToPhoto(item, prevMap.get(item.id)))
+      const newItems = mapped.filter((p) => !prevIds.has(p.id))
+
+      prevPhotosRef.current = mapped
+      setPhotos(mapped)
+
+      let nextIndex = currentIndexRef.current
+      if (focusNewest && newItems.length) {
+        const newestId = newItems[0].id
+        const idx = mapped.findIndex((p) => p.id === newestId)
+        nextIndex = idx >= 0 ? idx : 0
+      } else if (currentPhotoIdRef.current) {
+        const idx = mapped.findIndex((p) => p.id === currentPhotoIdRef.current)
+        if (idx >= 0) {
+          nextIndex = idx
+        } else if (mapped.length) {
+          nextIndex = Math.min(nextIndex, mapped.length - 1)
+        } else {
+          nextIndex = 0
+        }
+      } else if (mapped.length) {
+        nextIndex = 0
+      } else {
+        nextIndex = 0
+      }
+
+      if (mapped.length === 0) {
+        nextIndex = 0
+      } else {
+        nextIndex = Math.max(0, Math.min(nextIndex, mapped.length - 1))
+      }
+
+      setCurrent(nextIndex)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to load assets'
+      setLoadError(message)
+    } finally {
+      setLoadingAssets(false)
+    }
+  }, [id])
 
   const [showJPEG, setShowJPEG] = useState(true)
   const [showRAW, setShowRAW] = useState(true)
@@ -22,6 +110,15 @@ export default function ProjectWorkspace() {
   const [onlyPicked, setOnlyPicked] = useState(false)
   const [hideRejected, setHideRejected] = useState(true)
   const [filterColor, setFilterColor] = useState<'Any' | ColorTag>('Any')
+
+  useEffect(() => {
+    prevPhotosRef.current = photos
+  }, [photos])
+
+  useEffect(() => {
+    currentIndexRef.current = current
+    currentPhotoIdRef.current = photos[current]?.id ?? null
+  }, [photos, current])
 
   const contentRef = useRef<HTMLDivElement | null>(null)
   const [contentW, setContentW] = useState(1200)
@@ -87,29 +184,32 @@ export default function ProjectWorkspace() {
     }
   }, [])
 
+  useEffect(() => {
+    if (!id) return
+    refreshAssets()
+  }, [id, refreshAssets])
+
+  useEffect(() => {
+    if (!id) return
+    if (!photos.some((p) => !p.src)) return
+    const timer = window.setInterval(() => {
+      refreshAssets()
+    }, 4000)
+    return () => window.clearInterval(timer)
+  }, [id, photos, refreshAssets])
+
   // Import Sheet
   const [importOpen, setImportOpen] = useState(false)
-  function handleImport({ count, types, dest }: { count: number; types: ImgType[]; dest: string }) {
-    const add: Photo[] = []
-    for (let i = 0; i < count; i++) {
-      const t: ImgType = types[Math.floor(Math.random() * types.length)] || 'JPEG'
-      const d = new Date(2025, Math.floor(Math.random() * 12), Math.floor(Math.random() * 28) + 1)
-      add.push({
-        id: `new_${Date.now()}_${i}`,
-        name: `NEW_${String(i + 1).padStart(4, '0')}.${t === 'RAW' ? 'ARW' : 'JPG'}`,
-        type: t,
-        date: d.toISOString(),
-        rating: 0,
-        picked: false,
-        rejected: false,
-        tag: 'None',
-        src: null,
-        placeholderRatio: randomPlaceholderRatio(),
-      })
+  const handleImport = useCallback(async (_args: { count: number; types: ImgType[]; dest: string }) => {
+    if (importInFlightRef.current) return
+    importInFlightRef.current = true
+    try {
+      await refreshAssets(true)
+      setImportOpen(false)
+    } finally {
+      importInFlightRef.current = false
     }
-    setPhotos((arr) => [...add, ...arr])
-    setImportOpen(false)
-  }
+  }, [refreshAssets])
 
   // Back to projects
   function goBack() { navigate('/') }
@@ -170,6 +270,15 @@ export default function ProjectWorkspace() {
                 <input type="range" min={minThumbForSix} max={240} value={gridSize} onChange={(e) => setGridSize(Number(e.target.value))} />
               </div>
             )}
+            <button
+              className="ml-2 inline-flex items-center gap-1 rounded border border-[var(--border,#E1D3B9)] px-2 py-1 text-[11px] hover:border-[var(--text,#1F1E1B)]"
+              onClick={() => refreshAssets()}
+              type="button"
+            >
+              Refresh
+            </button>
+            {loadingAssets && <span className="text-[11px] text-[var(--text-muted,#6B645B)]">Syncing…</span>}
+            {loadError && <span className="text-[11px] text-[#B42318]">{loadError}</span>}
             <span className="ml-auto text-[var(--text-muted,#6B645B)]">{visible.length} photos</span>
           </div>
 
@@ -235,7 +344,15 @@ export default function ProjectWorkspace() {
         </aside>
       </div>
 
-      {importOpen && <ImportSheet onClose={() => setImportOpen(false)} onImport={handleImport} folderMode={folderMode} customFolder={customFolder} />}
+      {importOpen && (
+        <ImportSheet
+          projectId={id}
+          onClose={() => setImportOpen(false)}
+          onImport={handleImport}
+          folderMode={folderMode}
+          customFolder={customFolder}
+        />
+      )}
     </div>
   )
 }
@@ -428,209 +545,26 @@ async function collectFilesFromDataTransfer(dataTransfer: DataTransfer): Promise
   return descriptors
 }
 
-type UploadStatus = 'queued' | 'uploading' | 'paused' | 'success' | 'error' | 'canceled'
+type UploadPhase = 'pending' | 'initializing' | 'uploading' | 'finalizing' | 'success' | 'error' | 'blocked'
 
-type UploadTask = PendingItem & {
-  status: UploadStatus
+type UploadTaskState = {
+  id: string
+  name: string
+  type: ImgType
+  size: number
+  file: File
+  source: 'local' | 'hub'
+  mimeType: string
   bytesUploaded: number
   progress: number
-  attempt: number
+  status: UploadPhase
   error: string | null
+  assetId?: string
+  uploadToken?: string
+  meta?: PendingItem['meta']
 }
 
-type UploadState = {
-  tasks: UploadTask[]
-  running: boolean
-}
-
-type UploadAction =
-  | { type: 'INIT'; payload: UploadTask[] }
-  | { type: 'TICK'; delta: number }
-  | { type: 'PAUSE_ALL' }
-  | { type: 'RESUME_ALL' }
-  | { type: 'CANCEL_ALL' }
-  | { type: 'PAUSE_ITEM'; id: string }
-  | { type: 'RESUME_ITEM'; id: string }
-  | { type: 'CANCEL_ITEM'; id: string }
-  | { type: 'RETRY_ITEM'; id: string }
-
-const MAX_CONCURRENT_UPLOADS = 3
-const BASE_UPLOAD_SPEED_BPS = 6 * 1024 * 1024 // ~6 MB/s baseline
-const MIN_UPLOAD_SPEED_BPS = 1.5 * 1024 * 1024 // ensure slow networks still move
-const FAILURE_RATE_PER_SECOND = 0.035
-
-function createUploadTasks(items: PendingItem[]): UploadTask[] {
-  return items.map((item, index) => ({
-    ...item,
-    id: `${item.id}-upload-${index}`,
-    status: 'queued' as UploadStatus,
-    bytesUploaded: item.size ? Math.min(item.size * 0.02, item.size) : 0,
-    progress: item.size ? Math.min(1, Math.min(item.size * 0.02, item.size) / Math.max(item.size, 1)) : 1,
-    attempt: 1,
-    error: null,
-  }))
-}
-
-function normalizeProgress(bytesUploaded: number, size: number) {
-  if (!Number.isFinite(size) || size <= 0) return 1
-  return Math.min(1, bytesUploaded / size)
-}
-
-function uploadReducer(state: UploadState, action: UploadAction): UploadState {
-  switch (action.type) {
-    case 'INIT': {
-      const tasks = action.payload
-      return { tasks, running: tasks.length > 0 }
-    }
-    case 'PAUSE_ALL': {
-      if (!state.tasks.length) return state
-      let changed = false
-      const tasks = state.tasks.map((task) => {
-        if (task.status === 'uploading' || task.status === 'queued') {
-          changed = true
-          return { ...task, status: 'paused' as UploadStatus }
-        }
-        return task
-      })
-      return changed ? { tasks, running: false } : state
-    }
-    case 'RESUME_ALL': {
-      if (!state.tasks.length) return state
-      let changed = false
-      const tasks = state.tasks.map((task) => {
-        if (task.status === 'paused') {
-          changed = true
-          return { ...task, status: 'queued' as UploadStatus, error: task.error }
-        }
-        return task
-      })
-      if (!changed) return state
-      const hasQueued = tasks.some((task) => task.status === 'queued')
-      return { tasks, running: hasQueued ? true : state.running }
-    }
-    case 'CANCEL_ALL': {
-      if (!state.tasks.length) return state
-      let changed = false
-      const tasks = state.tasks.map((task) => {
-        if (task.status === 'success' || task.status === 'canceled') return task
-        changed = true
-        return { ...task, status: 'canceled' as UploadStatus, error: null }
-      })
-      return changed ? { tasks, running: false } : state
-    }
-    case 'PAUSE_ITEM': {
-      let changed = false
-      const tasks = state.tasks.map((task) => {
-        if (task.id === action.id && (task.status === 'uploading' || task.status === 'queued')) {
-          changed = true
-          return { ...task, status: 'paused' as UploadStatus }
-        }
-        return task
-      })
-      if (!changed) return state
-      const hasActive = tasks.some((task) => task.status === 'queued' || task.status === 'uploading')
-      return { tasks, running: hasActive && state.running }
-    }
-    case 'RESUME_ITEM': {
-      let changed = false
-      const tasks = state.tasks.map((task) => {
-        if (task.id === action.id && (task.status === 'paused' || task.status === 'error')) {
-          changed = true
-          return { ...task, status: 'queued' as UploadStatus, error: null, attempt: task.attempt + (task.status === 'error' ? 1 : 0) }
-        }
-        return task
-      })
-      if (!changed) return state
-      return { tasks, running: true }
-    }
-    case 'CANCEL_ITEM': {
-      let changed = false
-      const tasks = state.tasks.map((task) => {
-        if (task.id === action.id && task.status !== 'success' && task.status !== 'canceled') {
-          changed = true
-          return { ...task, status: 'canceled' as UploadStatus, error: null }
-        }
-        return task
-      })
-      if (!changed) return state
-      const hasActive = tasks.some((task) => task.status === 'queued' || task.status === 'uploading')
-      return { tasks, running: hasActive && state.running }
-    }
-    case 'RETRY_ITEM': {
-      let changed = false
-      const tasks = state.tasks.map((task) => {
-        if (task.id === action.id && (task.status === 'error' || task.status === 'canceled')) {
-          changed = true
-          return {
-            ...task,
-            status: 'queued' as UploadStatus,
-            error: null,
-            attempt: task.attempt + 1,
-          }
-        }
-        return task
-      })
-      if (!changed) return state
-      return { tasks, running: true }
-    }
-    case 'TICK': {
-      if (!state.running) return state
-      if (!state.tasks.length) return { tasks: [], running: false }
-      let changed = false
-      const deltaSeconds = Math.max(0.01, action.delta / 1000)
-      const tasks = state.tasks.map((task) => ({ ...task })) as UploadTask[]
-
-      let currentlyUploading = tasks.filter((task) => task.status === 'uploading').length
-      tasks.forEach((task) => {
-        if (task.status === 'queued' && currentlyUploading < MAX_CONCURRENT_UPLOADS) {
-          task.status = 'uploading' as UploadStatus
-          changed = true
-          currentlyUploading += 1
-        }
-      })
-
-      tasks.forEach((task) => {
-        if (task.status !== 'uploading') return
-        const randomFactor = 0.75 + Math.random() * 0.5
-        const throughput = Math.max(
-          MIN_UPLOAD_SPEED_BPS,
-          BASE_UPLOAD_SPEED_BPS * randomFactor,
-        )
-        const increment = throughput * deltaSeconds
-        const nextBytes = Math.min(task.size, task.bytesUploaded + increment)
-
-        // Simulate intermittent failures once some progress has been made
-        const failureChance = 1 - Math.exp(-FAILURE_RATE_PER_SECOND * deltaSeconds)
-        const allowFailure = task.size > 0 && task.bytesUploaded > task.size * 0.1 && task.attempt <= 3
-        if (allowFailure && Math.random() < failureChance) {
-          task.status = 'error' as UploadStatus
-          task.error = 'Network interruption. Retry to continue.'
-          changed = true
-          return
-        }
-
-        if (nextBytes >= task.size || task.size === 0) {
-          task.bytesUploaded = task.size
-          task.progress = 1
-          task.status = 'success' as UploadStatus
-          task.error = null
-          changed = true
-          return
-        }
-
-        task.bytesUploaded = nextBytes
-        task.progress = normalizeProgress(task.bytesUploaded, task.size)
-        changed = true
-      })
-
-      const hasActive = tasks.some((task) => task.status === 'queued' || task.status === 'uploading')
-      const running = hasActive
-      return changed ? { tasks, running } : { tasks, running }
-    }
-    default:
-      return state
-  }
-}
+const BLOCKED_UPLOAD_MESSAGE = 'Blocked by earlier upload failure.'
 
 type HubNode = {
   id: string
@@ -918,7 +852,19 @@ function hasAncestorSelected(id: string, selection: Set<string>, parentMap: Map<
   return false
 }
 
-function ImportSheet({ onClose, onImport, folderMode, customFolder }: { onClose: () => void; onImport: (args: { count: number; types: ImgType[]; dest: string }) => void; folderMode: 'date' | 'custom'; customFolder: string }) {
+function ImportSheet({
+  projectId,
+  onClose,
+  onImport,
+  folderMode,
+  customFolder,
+}: {
+  projectId?: string
+  onClose: () => void
+  onImport: (args: { count: number; types: ImgType[]; dest: string }) => void
+  folderMode: 'date' | 'custom'
+  customFolder: string
+}) {
   const [mode, setMode] = useState<'choose' | 'local' | 'hub' | 'upload'>('choose')
   const [localItems, setLocalItems] = useState<PendingItem[]>([])
   const [hubSelected, setHubSelected] = useState<Set<string>>(() => new Set())
@@ -933,16 +879,23 @@ function ImportSheet({ onClose, onImport, folderMode, customFolder }: { onClose:
 
   const derivedDest = folderMode === 'date' ? 'YYYY/MM/DD' : customFolder.trim() || 'Custom'
   const [uploadDestination, setUploadDestination] = useState(derivedDest)
-  const [uploadState, dispatchUpload] = useReducer(uploadReducer, { tasks: [], running: false })
-  const [uploadSelection, setUploadSelection] = useState<UploadTask[]>([])
+  const [uploadTasks, setUploadTasks] = useState<UploadTaskState[]>([])
+  const [uploadRunning, setUploadRunning] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
   const uploadTypesRef = useRef<ImgType[]>([])
   const uploadCompletionNotifiedRef = useRef(false)
+  const uploadProcessingRef = useRef(false)
+  const uploadTasksRef = useRef<UploadTaskState[]>([])
 
   useEffect(() => {
     if (mode !== 'upload') {
       setUploadDestination(derivedDest)
     }
   }, [derivedDest, mode])
+
+  useEffect(() => {
+    uploadTasksRef.current = uploadTasks
+  }, [uploadTasks])
 
   useEffect(() => { (document.getElementById('import-sheet') as HTMLDivElement | null)?.focus() }, [])
 
@@ -994,9 +947,21 @@ function ImportSheet({ onClose, onImport, folderMode, customFolder }: { onClose:
   const localSelectedItems = useMemo(() => localItems.filter((item) => item.selected), [localItems])
   const hubSelectedItems = useMemo(() => hubItems.filter((item) => item.selected), [hubItems])
   const selectedItems = useMemo<PendingItem[]>(() => {
-    if (isUploadMode) return uploadSelection
+    if (isUploadMode) {
+      return uploadTasks.map((task) => ({
+        id: task.id,
+        name: task.name,
+        type: task.type,
+        previewUrl: null,
+        source: task.source,
+        selected: true,
+        size: task.size,
+        file: task.file,
+        meta: task.meta,
+      }))
+    }
     return isHubMode ? hubSelectedItems : localSelectedItems
-  }, [isUploadMode, uploadSelection, isHubMode, hubSelectedItems, localSelectedItems])
+  }, [isUploadMode, uploadTasks, isHubMode, hubSelectedItems, localSelectedItems])
   const selectedTypes = useMemo(() => Array.from(new Set(selectedItems.map((item) => item.type))) as ImgType[], [selectedItems])
   const totalSelectedBytes = useMemo(() => selectedItems.reduce((acc, item) => acc + (item.size || 0), 0), [selectedItems])
   const selectedFolders = useMemo(() => {
@@ -1005,19 +970,14 @@ function ImportSheet({ onClose, onImport, folderMode, customFolder }: { onClose:
     return folders
   }, [selectedItems])
 
-  const uploadTasks = uploadState.tasks
   const uploadUploadedBytes = useMemo(() => uploadTasks.reduce((acc, task) => acc + task.bytesUploaded, 0), [uploadTasks])
   const uploadTotalBytes = useMemo(() => uploadTasks.reduce((acc, task) => acc + task.size, 0), [uploadTasks])
+  const uploadCompletedCount = uploadTasks.filter((task) => task.status === 'success').length
   const uploadOverallProgress = uploadTotalBytes > 0
     ? uploadUploadedBytes / uploadTotalBytes
-    : (uploadTasks.length ? uploadTasks.filter((task) => task.status === 'success').length / uploadTasks.length : 0)
+    : (uploadTasks.length ? uploadCompletedCount / uploadTasks.length : 0)
   const uploadOverallPercent = Math.max(0, Math.min(100, Math.round(uploadOverallProgress * 100)))
-  const uploadCompletedCount = uploadTasks.filter((task) => task.status === 'success').length
-  const uploadHasErrors = uploadTasks.some((task) => task.status === 'error')
-  const uploadHasActive = uploadTasks.some((task) => task.status === 'uploading' || task.status === 'queued')
-  const uploadHasPaused = uploadTasks.some((task) => task.status === 'paused')
-  const uploadHasCancelable = uploadTasks.some((task) => task.status !== 'success' && task.status !== 'canceled')
-  const uploadIncludesHub = uploadSelection.some((item) => item.source === 'hub')
+  const uploadIncludesHub = uploadTasks.some((item) => item.source === 'hub')
 
   const selectionSummaryText = useMemo(() => {
     if (!selectedItems.length) return 'Nothing selected yet'
@@ -1220,14 +1180,39 @@ function ImportSheet({ onClose, onImport, folderMode, customFolder }: { onClose:
     })
   }
 
-  function getStatusLabel(task: UploadTask): string {
+  const mutateTask = useCallback((taskId: string, updater: (task: UploadTaskState) => UploadTaskState) => {
+    setUploadTasks((tasks) => tasks.map((task) => (task.id === taskId ? updater(task) : task)))
+  }, [])
+
+  const markBlockedAfter = useCallback((failedId: string) => {
+    setUploadTasks((tasks) => {
+      let seenFailed = false
+      return tasks.map((task) => {
+        if (task.id === failedId) {
+          seenFailed = true
+          return task
+        }
+        if (!seenFailed) return task
+        if (task.status === 'success' || task.status === 'error') return task
+        if (task.status === 'blocked' && task.error) return task
+        return {
+          ...task,
+          status: 'blocked',
+          error: task.error ?? BLOCKED_UPLOAD_MESSAGE,
+        }
+      })
+    })
+  }, [])
+
+  function getStatusLabel(task: UploadTaskState): string {
     switch (task.status) {
-      case 'queued': return 'Queued'
+      case 'pending': return 'Queued'
+      case 'initializing': return 'Preparing'
       case 'uploading': return 'Uploading'
-      case 'paused': return 'Paused'
+      case 'finalizing': return 'Finalizing'
       case 'success': return 'Completed'
       case 'error': return 'Error'
-      case 'canceled': return 'Canceled'
+      case 'blocked': return 'Blocked'
       default: return 'Pending'
     }
   }
@@ -1270,37 +1255,176 @@ function ImportSheet({ onClose, onImport, folderMode, customFolder }: { onClose:
       return
     }
     if (!selectedItems.length) return
-    const tasks = createUploadTasks(selectedItems)
+    const missingFiles = selectedItems.filter((item) => !item.file)
+    if (missingFiles.length) {
+      console.error('Upload aborted: missing File blobs for items', missingFiles.map((item) => item.id))
+      setUploadError('Some selected items are missing file data. Please reselect the files and try again.')
+      return
+    }
+    const tasks: UploadTaskState[] = selectedItems.map((item) => {
+      const file = item.file as File
+      const mimeType = file.type && file.type.trim() ? file.type : 'application/octet-stream'
+      return {
+        id: item.id,
+        name: item.name,
+        type: item.type,
+        size: file.size,
+        file,
+        source: item.source,
+        mimeType,
+        bytesUploaded: 0,
+        progress: 0,
+        status: 'pending',
+        error: null,
+        meta: item.meta,
+      }
+    })
     if (!tasks.length) return
-    const fallbackTypes = selectedTypes.length ? selectedTypes : (isHubMode ? (['RAW', 'JPEG'] as ImgType[]) : (['JPEG'] as ImgType[]))
+    const fallbackTypes = selectedTypes.length ? selectedTypes : (['JPEG'] as ImgType[])
     uploadTypesRef.current = fallbackTypes
     uploadCompletionNotifiedRef.current = false
-    setUploadSelection(tasks)
+    uploadProcessingRef.current = false
+    uploadTasksRef.current = tasks
+    setUploadTasks(tasks)
+    setUploadError(null)
     setUploadDestination(derivedDest)
-    dispatchUpload({ type: 'INIT', payload: tasks })
+    setUploadRunning(true)
     setMode('upload')
   }
 
   useEffect(() => {
-    if (!isUploadMode || !uploadState.running) return
-    const interval = window.setInterval(() => dispatchUpload({ type: 'TICK', delta: 250 }), 250)
-    return () => window.clearInterval(interval)
-  }, [isUploadMode, uploadState.running])
-
-  useEffect(() => {
-    if (!isUploadMode) return
-    if (!uploadTasks.length) return
-    const allSucceeded = uploadTasks.every((task) => task.status === 'success')
-    if (allSucceeded && !uploadCompletionNotifiedRef.current) {
-      uploadCompletionNotifiedRef.current = true
-      const successTypes = Array.from(new Set(uploadTasks.map((task) => task.type))) as ImgType[]
-      const fallbackTypes = successTypes.length
-        ? successTypes
-        : (uploadTypesRef.current.length ? uploadTypesRef.current : (['JPEG'] as ImgType[]))
-      const count = Math.max(1, Math.min(200, uploadTasks.length))
-      onImport({ count, types: fallbackTypes, dest: uploadDestination })
+    if (!isUploadMode || !uploadRunning) return
+    if (uploadProcessingRef.current) return
+    if (!projectId) {
+      const message = 'Cannot start upload: missing project context.'
+      console.error(message)
+      setUploadError(`${message} Please reopen the project and try again.`)
+      setUploadTasks((tasks) => tasks.map((task) => ({
+        ...task,
+        status: 'error',
+        error: task.error ?? message,
+      })))
+      setUploadRunning(false)
+      return
     }
-  }, [isUploadMode, uploadTasks, onImport, uploadDestination])
+
+    let canceled = false
+    uploadProcessingRef.current = true
+
+    const processTask = async (task: UploadTaskState) => {
+      const taskId = task.id
+      const file = task.file
+      mutateTask(taskId, (prev) => ({
+        ...prev,
+        status: 'initializing',
+        error: null,
+        bytesUploaded: 0,
+        progress: 0,
+      }))
+
+      try {
+        const init = await initUpload(projectId, {
+          filename: file.name,
+          sizeBytes: file.size,
+          mimeType: task.mimeType,
+        })
+
+        mutateTask(taskId, (prev) => ({
+          ...prev,
+          assetId: init.assetId,
+          uploadToken: init.uploadToken,
+        }))
+
+        await putUpload(init.assetId, file, init.uploadToken, (event) => {
+          const total = event.lengthComputable && event.total ? event.total : file.size
+          const loaded = typeof event.loaded === 'number' ? event.loaded : 0
+          mutateTask(taskId, (prev) => {
+            const bytesUploaded = Math.min(total, loaded)
+            const progress = total > 0 ? Math.min(1, bytesUploaded / total) : prev.progress
+            return {
+              ...prev,
+              status: 'uploading',
+              bytesUploaded,
+              progress,
+            }
+          })
+        })
+
+        mutateTask(taskId, (prev) => ({
+          ...prev,
+          status: 'finalizing',
+          bytesUploaded: file.size,
+          progress: 1,
+        }))
+
+        await completeUpload(init.assetId, init.uploadToken, { ignoreDuplicates: ignoreDup })
+
+        mutateTask(taskId, (prev) => ({
+          ...prev,
+          status: 'success',
+          bytesUploaded: file.size,
+          progress: 1,
+          error: null,
+        }))
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Upload failed'
+        console.error(`Upload failed for ${task.name}`, err)
+        setUploadError(`${task.name}: ${message}. Please retry.`)
+        mutateTask(taskId, (prev) => ({
+          ...prev,
+          status: 'error',
+          error: message,
+        }))
+        markBlockedAfter(taskId)
+        throw err
+      }
+    }
+
+    const processQueue = async () => {
+      let encounteredError = false
+      for (const task of uploadTasksRef.current) {
+        if (canceled) return
+        if (task.status === 'success') continue
+        try {
+          await processTask(task)
+        } catch {
+          encounteredError = true
+          break
+        }
+      }
+
+      if (canceled) return
+      setUploadRunning(false)
+      if (encounteredError) return
+
+      setUploadError(null)
+      if (!uploadCompletionNotifiedRef.current) {
+        uploadCompletionNotifiedRef.current = true
+        const successTypes = Array.from(new Set(uploadTasksRef.current.map((task) => task.type))) as ImgType[]
+        const fallbackTypes = successTypes.length
+          ? successTypes
+          : (uploadTypesRef.current.length ? uploadTypesRef.current : (['JPEG'] as ImgType[]))
+        const count = uploadTasksRef.current.length
+        if (count > 0) {
+          onImport({ count, types: fallbackTypes, dest: uploadDestination })
+        }
+      }
+    }
+
+    processQueue()
+      .catch((err) => {
+        if (!canceled) {
+          console.error('Upload queue aborted', err)
+        }
+      })
+      .finally(() => {
+        uploadProcessingRef.current = false
+      })
+
+    return () => {
+      canceled = true
+    }
+  }, [ignoreDup, isUploadMode, markBlockedAfter, mutateTask, onImport, projectId, uploadDestination, uploadRunning])
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 p-4">
@@ -1462,41 +1586,16 @@ function ImportSheet({ onClose, onImport, folderMode, customFolder }: { onClose:
                 <div className="border-b border-[var(--border,#E1D3B9)] px-4 py-3">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <div className="text-sm font-semibold text-[var(--text,#1F1E1B)]">Uploading {uploadCompletedCount}/{uploadSelection.length} assets</div>
+                      <div className="text-sm font-semibold text-[var(--text,#1F1E1B)]">Uploading {uploadCompletedCount}/{uploadTasks.length} assets</div>
                       <div className="mt-1 text-xs text-[var(--text-muted,#6B645B)]">
                         {formatBytes(uploadUploadedBytes)} of {formatBytes(uploadTotalBytes)} • {uploadOverallPercent}%
                       </div>
                     </div>
-                    <div className="flex flex-wrap gap-2 text-xs">
-                      <button
-                        type="button"
-                        onClick={() => dispatchUpload({ type: 'PAUSE_ALL' })}
-                        disabled={!uploadHasActive}
-                        className={`rounded border border-[var(--border,#E1D3B9)] px-3 py-1.5 ${uploadHasActive ? 'hover:border-[var(--charcoal-800,#1F1E1B)]' : 'opacity-50 cursor-not-allowed'}`}
-                      >
-                        Pause all
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => dispatchUpload({ type: 'RESUME_ALL' })}
-                        disabled={!uploadHasPaused}
-                        className={`rounded border border-[var(--border,#E1D3B9)] px-3 py-1.5 ${uploadHasPaused ? 'hover:border-[var(--charcoal-800,#1F1E1B)]' : 'opacity-50 cursor-not-allowed'}`}
-                      >
-                        Resume all
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => dispatchUpload({ type: 'CANCEL_ALL' })}
-                        disabled={!uploadHasCancelable}
-                        className={`rounded border border-[var(--border,#E1D3B9)] px-3 py-1.5 ${uploadHasCancelable ? 'hover:border-[var(--charcoal-800,#1F1E1B)]' : 'opacity-50 cursor-not-allowed'}`}
-                      >
-                        Cancel all
-                      </button>
-                    </div>
+                    <span className="text-xs text-[var(--text-muted,#6B645B)]">{uploadRunning ? 'In progress…' : 'Queue stopped'}</span>
                   </div>
-                  {uploadHasErrors && (
-                    <div className="mt-3 rounded-md border border-[var(--border,#E1D3B9)] bg-[var(--sand-50,#FBF7EF)] px-3 py-2 text-xs text-[var(--text-muted,#6B645B)]">
-                      Some uploads hit network issues. Retry individual items below.
+                  {uploadError && (
+                    <div className="mt-3 rounded border border-[#F7C9C9] bg-[#FDF2F2] px-3 py-2 text-xs text-[#B42318]">
+                      {uploadError} You can close this sheet and retry once the issue is resolved.
                     </div>
                   )}
                 </div>
@@ -1506,10 +1605,11 @@ function ImportSheet({ onClose, onImport, folderMode, customFolder }: { onClose:
                       {uploadTasks.map((task) => {
                         const progressPercent = Math.max(0, Math.min(100, Math.round(task.progress * 100)))
                         const statusLabel = getStatusLabel(task)
-                        const showPause = task.status === 'uploading' || task.status === 'queued'
-                        const showResume = task.status === 'paused'
-                        const showRetry = task.status === 'error' || task.status === 'canceled'
-                        const showCancel = task.status !== 'success' && task.status !== 'canceled'
+                        const barColor = task.status === 'error'
+                          ? 'bg-[#B42318]'
+                          : task.status === 'blocked'
+                            ? 'bg-[var(--sand-300,#E1D3B9)]'
+                            : 'bg-[var(--charcoal-800,#1F1E1B)]'
                         return (
                           <li key={task.id} className="rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-3 shadow-sm">
                             <div className="flex items-start justify-between gap-3">
@@ -1522,53 +1622,15 @@ function ImportSheet({ onClose, onImport, folderMode, customFolder }: { onClose:
                                 </div>
                                 <div className="mt-1 text-xs text-[var(--text-muted,#6B645B)]">
                                   {formatBytes(task.bytesUploaded)} / {formatBytes(task.size)} • {statusLabel}
-                                  {task.attempt > 1 && <span className="ml-1">· Attempt {task.attempt}</span>}
                                 </div>
                                 {task.error && (
                                   <div className="mt-1 text-xs text-[#B42318]">{task.error}</div>
                                 )}
                               </div>
-                              <div className="flex shrink-0 flex-wrap gap-1 text-xs">
-                                {showPause && (
-                                  <button
-                                    type="button"
-                                    onClick={() => dispatchUpload({ type: 'PAUSE_ITEM', id: task.id })}
-                                    className="rounded border border-[var(--border,#E1D3B9)] px-2 py-1 hover:border-[var(--charcoal-800,#1F1E1B)]"
-                                  >
-                                    Pause
-                                  </button>
-                                )}
-                                {showResume && (
-                                  <button
-                                    type="button"
-                                    onClick={() => dispatchUpload({ type: 'RESUME_ITEM', id: task.id })}
-                                    className="rounded bg-[var(--charcoal-800,#1F1E1B)] px-2 py-1 text-white"
-                                  >
-                                    Resume
-                                  </button>
-                                )}
-                                {showRetry && (
-                                  <button
-                                    type="button"
-                                    onClick={() => dispatchUpload({ type: 'RETRY_ITEM', id: task.id })}
-                                    className="rounded bg-[var(--river-500,#6B7C7A)] px-2 py-1 text-white"
-                                  >
-                                    Retry
-                                  </button>
-                                )}
-                                {showCancel && (
-                                  <button
-                                    type="button"
-                                    onClick={() => dispatchUpload({ type: 'CANCEL_ITEM', id: task.id })}
-                                    className="rounded border border-[var(--border,#E1D3B9)] px-2 py-1 hover:border-[var(--charcoal-800,#1F1E1B)]"
-                                  >
-                                    Cancel
-                                  </button>
-                                )}
-                              </div>
+                              <span className="text-xs text-[var(--text-muted,#6B645B)]">{progressPercent}%</span>
                             </div>
                             <div className="mt-3 h-2 rounded bg-[var(--sand-100,#F3EBDD)]">
-                              <div className="h-2 rounded bg-[var(--charcoal-800,#1F1E1B)]" style={{ width: `${progressPercent}%` }} />
+                              <div className={`h-2 rounded ${barColor}`} style={{ width: `${progressPercent}%` }} />
                             </div>
                           </li>
                         )

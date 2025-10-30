@@ -15,9 +15,14 @@ from backend.app import models
 from backend.app.deps import get_settings
 from backend.app.db import SessionLocal
 from backend.app.imaging import make_thumb, read_exif, sha256_file
+from backend.app.logging_utils import setup_logging
 from backend.app.storage import PosixStorage
 
+SETTINGS = get_settings()
+setup_logging(SETTINGS.logs_dir)
+
 logger = logging.getLogger("nivio.worker.ingest")
+logger.info("worker process started")
 
 DERIVATIVE_PRESETS: list[Tuple[str, int]] = [
     ("thumb_256", 256),
@@ -63,6 +68,14 @@ async def ingest_asset(ctx, asset_id: str):
             logger.warning("ingest_asset: asset=%s not found", asset_id)
             return {"error": "asset not found"}
 
+        logger.info(
+            "ingest_asset: start asset=%s status=%s size=%s filename=%s",
+            asset_id,
+            asset.status,
+            asset.size_bytes,
+            asset.original_filename,
+        )
+
         temp_path = storage.temp_path_for(asset_id)
         temp_exists = temp_path.exists()
         original_path: Path | None = Path(asset.storage_key) if asset.storage_key else None
@@ -74,12 +87,17 @@ async def ingest_asset(ctx, asset_id: str):
         elif original_path and original_path.exists():
             source_path = original_path
         else:
+            logger.error(
+                "ingest_asset: missing source asset=%s temp=%s original=%s",
+                asset_id,
+                temp_path,
+                original_path,
+            )
             asset.status = models.AssetStatus.MISSING_SOURCE
             asset.completed_at = now
             asset.last_error = "missing_source"
             asset.metadata_warnings = _warnings_to_text(["MISSING_ORIGINAL"])
             await db.commit()
-            logger.error("ingest_asset: asset=%s missing source files", asset_id)
             return {"error": "missing source"}
 
         if asset.status != models.AssetStatus.PROCESSING:
@@ -90,6 +108,7 @@ async def ingest_asset(ctx, asset_id: str):
 
         try:
             sha = await _sha256_async(source_path)
+            logger.info("ingest_asset: asset=%s sha256=%s source=%s", asset_id, sha, source_path)
 
             if temp_exists:
                 duplicate = (
@@ -101,6 +120,9 @@ async def ingest_asset(ctx, asset_id: str):
                     )
                 ).scalar_one_or_none()
                 if duplicate:
+                    logger.info(
+                        "ingest_asset: asset=%s duplicate_of=%s", asset_id, duplicate.id
+                    )
                     await _handle_duplicate(db, asset, duplicate, storage, temp_path, now)
                     return {"duplicate_of": str(duplicate.id)}
 
@@ -196,7 +218,14 @@ async def ingest_asset(ctx, asset_id: str):
             asset.metadata_warnings = _warnings_to_text(warnings)
             asset.reference_count = max(asset.reference_count or 1, 1)
             await db.commit()
-            logger.info("ingest_asset: asset=%s ready sha=%s", asset_id, sha)
+            logger.info(
+                "ingest_asset: complete asset=%s sha=%s width=%s height=%s warnings=%s",
+                asset_id,
+                sha,
+                width,
+                height,
+                warnings,
+            )
             return {"ok": True, "sha256": sha}
 
         except Exception as exc:  # pragma: no cover - protection
@@ -258,14 +287,15 @@ async def _handle_duplicate(
     storage.remove_temp(new_asset.id)
     await db.commit()
     logger.info(
-        "ingest_asset: duplicate asset=%s linked_to=%s new_links=%s",
+        "ingest_asset: duplicate asset=%s linked_to=%s new_links=%s total_refs=%s",
         new_asset.id,
         existing_asset.id,
         linked,
+        existing_asset.reference_count,
     )
 
 
 class WorkerSettings:
-    redis_settings = RedisSettings.from_dsn(get_settings().redis_url)
+    redis_settings = RedisSettings.from_dsn(SETTINGS.redis_url)
     functions = [ingest_asset]
-    max_jobs = get_settings().worker_concurrency
+    max_jobs = SETTINGS.worker_concurrency

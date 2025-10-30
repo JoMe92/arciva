@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import logging
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
@@ -76,6 +77,7 @@ async def _asset_detail(
     )
 
 router = APIRouter(prefix="/v1", tags=["assets"])
+logger = logging.getLogger("nivio.assets")
 
 @router.get("/projects/{project_id}/assets", response_model=list[schemas.AssetListItem])
 async def list_assets(project_id: UUID, limit: int = 50, db: AsyncSession = Depends(get_db)):
@@ -105,6 +107,8 @@ async def list_assets(project_id: UUID, limit: int = 50, db: AsyncSession = Depe
                 queued_at=asset.queued_at,
                 processing_started_at=asset.processing_started_at,
                 completed_at=asset.completed_at,
+                width=asset.width,
+                height=asset.height,
             )
         )
     return items
@@ -171,3 +175,115 @@ async def get_derivative(asset_id: UUID, variant: str, db: AsyncSession = Depend
     if not path.exists():
         raise HTTPException(404, "derivative not found")
     return FileResponse(path=str(path), media_type="image/jpeg")
+
+
+@router.post("/projects/{project_id}/assets:link", response_model=schemas.ProjectAssetsLinkOut)
+async def link_existing_assets(
+    project_id: UUID,
+    body: schemas.ProjectAssetsLinkIn,
+    db: AsyncSession = Depends(get_db),
+):
+    # validate project
+    proj = (
+        await db.execute(select(models.Project).where(models.Project.id == project_id))
+    ).scalar_one_or_none()
+    if not proj:
+        raise HTTPException(404, "project not found")
+
+    # dedupe ids
+    want_ids: list[UUID] = list(dict.fromkeys(body.asset_ids))
+    if not want_ids:
+        return schemas.ProjectAssetsLinkOut(linked=0, duplicates=0, items=[])
+
+    logger.info(
+        "link_existing_assets: project=%s requested=%s",
+        project_id,
+        want_ids,
+    )
+
+    # fetch existing assets
+    assets = (
+        await db.execute(select(models.Asset).where(models.Asset.id.in_(want_ids)))
+    ).scalars().all()
+    found_ids = {a.id for a in assets}
+    missing = [aid for aid in want_ids if aid not in found_ids]
+    if missing:
+        logger.warning(
+            "link_existing_assets: project=%s missing_assets=%s",
+            project_id,
+            missing,
+        )
+        raise HTTPException(404, f"assets not found: {missing}")
+
+    # link, ignoring duplicates
+    linked = 0
+    duplicates = 0
+    for a in assets:
+        exists = (
+            await db.execute(
+                select(models.ProjectAsset).where(
+                    models.ProjectAsset.project_id == project_id,
+                    models.ProjectAsset.asset_id == a.id,
+                )
+            )
+        ).scalar_one_or_none()
+        if exists:
+            duplicates += 1
+            logger.info(
+                "link_existing_assets: project=%s asset=%s already linked", project_id, a.id
+            )
+            continue
+        db.add(models.ProjectAsset(project_id=project_id, asset_id=a.id))
+        linked += 1
+        logger.info(
+            "link_existing_assets: project=%s linked asset=%s", project_id, a.id
+        )
+    await db.commit()
+
+    logger.info(
+        "link_existing_assets: project=%s linked=%s duplicates=%s",
+        project_id,
+        linked,
+        duplicates,
+    )
+
+    # update reference counts for linked assets
+    if linked:
+        for a in assets:
+            count = (
+                await db.execute(
+                    select(func.count()).select_from(models.ProjectAsset).where(
+                        models.ProjectAsset.asset_id == a.id
+                    )
+                )
+            ).scalar_one()
+            a.reference_count = max(int(count), 1)
+        await db.commit()
+
+    # return items for provided order
+    storage = PosixStorage.from_env()
+    items_map = {}
+    for a in assets:
+        items_map[a.id] = schemas.AssetListItem(
+            id=a.id,
+            status=schemas.AssetStatus(a.status.value),
+            taken_at=a.taken_at,
+            thumb_url=_thumb_url(a, storage),
+            original_filename=a.original_filename,
+            size_bytes=a.size_bytes,
+            last_error=a.last_error,
+            metadata_warnings=_warnings_from_text(a.metadata_warnings),
+            queued_at=a.queued_at,
+            processing_started_at=a.processing_started_at,
+            completed_at=a.completed_at,
+            width=a.width,
+            height=a.height,
+        )
+
+    ordered_items = [items_map[aid] for aid in want_ids if aid in items_map]
+    logger.info(
+        "link_existing_assets: project=%s response_items=%s",
+        project_id,
+        [item.id for item in ordered_items],
+    )
+    return schemas.ProjectAssetsLinkOut(linked=linked, duplicates=duplicates, items=ordered_items)

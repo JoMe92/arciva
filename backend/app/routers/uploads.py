@@ -8,6 +8,9 @@ from fastapi import APIRouter, Depends, HTTPException, Header, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from arq import create_pool
+from arq.connections import RedisSettings
+
 from .. import models, schemas
 from ..db import get_db
 from ..deps import get_settings
@@ -112,11 +115,10 @@ async def upload_complete(body: schemas.UploadCompleteIn, db: AsyncSession = Dep
     await db.commit()
 
     # enqueue ARQ job
-    from arq.connections import RedisSettings, ArqRedis
-    from ..deps import get_settings
     settings = get_settings()
+    redis = None
     try:
-        redis = await ArqRedis.create(RedisSettings.from_dsn(settings.redis_url))
+        redis = await create_pool(RedisSettings.from_dsn(settings.redis_url))
         await redis.enqueue_job("ingest_asset", str(asset.id))
     except Exception as exc:
         asset.status = models.AssetStatus.ERROR
@@ -125,8 +127,8 @@ async def upload_complete(body: schemas.UploadCompleteIn, db: AsyncSession = Dep
         logger.exception("upload_complete: enqueue failed asset=%s", asset.id)
         raise HTTPException(503, "failed to enqueue ingest job")
     finally:
-        if 'redis' in locals():
-            await redis.close(close_connection_pool=True)
+        if redis is not None:
+            await redis.close()
 
     logger.info("upload_complete: enqueue success asset=%s", asset.id)
     return {"status": models.AssetStatus.QUEUED.value}

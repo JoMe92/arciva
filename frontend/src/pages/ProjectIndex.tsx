@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import StoneTrailIcon from '../components/StoneTrailIcon'
 import Splash from '../components/Splash'
-import { Project, type ProjectPreviewImage } from '../features/projects/types'
+import { Project } from '../features/projects/types'
 import { unique } from '../features/projects/utils'
 import { PROJECTS } from '../features/projects/data'
 import { useArchive } from '../features/projects/archive'
@@ -14,6 +14,7 @@ import StateHint from '../components/StateHint'
 import CreateModal from '../components/modals/CreateModal'
 import EditModal from '../components/modals/EditModal'
 import { createProject, listProjects, type ProjectApiResponse } from '../shared/api/projects'
+import { updateAssetPreview } from '../shared/api/assets'
 import { withBase } from '../shared/api/base'
 
 const AppBar: React.FC<{ onCreate: () => void; onToggleArchive: () => void; archiveMode: boolean }> = ({ onCreate, onToggleArchive, archiveMode }) => (
@@ -141,7 +142,7 @@ export default function ProjectIndex() {
       const previewImages = (proj.preview_images || [])
         .slice()
         .sort((a, b) => a.order - b.order)
-        .map((img, idx): ProjectPreviewImage | null => {
+        .map((img, idx) => {
           const url = withBase(img.thumb_url)
           if (!url) return null
           return {
@@ -152,7 +153,7 @@ export default function ProjectIndex() {
             height: img.height ?? null,
           }
         })
-        .filter((img): img is ProjectPreviewImage => Boolean(img))
+        .filter((img): img is NonNullable<typeof img> => Boolean(img))
 
       const primaryPreview = previewImages[0]?.url ?? null
 
@@ -186,6 +187,59 @@ export default function ProjectIndex() {
     const combined = [...dynamicProjects, ...PROJECTS]
     return combined.map((p) => ({ ...p, ...(localEdits[p.id] || {}) }))
   }, [dynamicProjects, localEdits])
+
+  const previewMutation = useMutation({
+    mutationFn: ({ projectId, assetId }: { projectId: string; assetId: string }) =>
+      updateAssetPreview(projectId, assetId, true, { makePrimary: true }),
+  })
+
+  const handleSelectPrimary = useCallback(async (projectId: string, assetId: string) => {
+    const project = baseProjects.find((p) => p.id === projectId)
+    if (!project) return
+    const previews = (project.previewImages ?? []).slice().sort((a, b) => a.order - b.order)
+    const index = previews.findIndex((img) => img.assetId === assetId)
+    if (index <= 0) return
+
+    await previewMutation.mutateAsync({ projectId, assetId })
+
+    const reordered = previews.slice()
+    const [selected] = reordered.splice(index, 1)
+    reordered.unshift({ ...selected })
+    const normalized = reordered.map((img, order) => ({ ...img, order }))
+    const primaryUrl = normalized[0]?.url ?? null
+
+    setLocalEdits((prev) => ({
+      ...prev,
+      [projectId]: {
+        ...(prev[projectId] || {}),
+        previewImages: normalized,
+        image: primaryUrl,
+      },
+    }))
+
+    setEditProject((prev) => (prev && prev.id === projectId ? { ...prev, previewImages: normalized, image: primaryUrl } : prev))
+
+    queryClient.setQueryData<ProjectApiResponse[] | undefined>(['projects'], (old) => {
+      if (!old) return old
+      const idx = old.findIndex((p) => p.id === projectId)
+      if (idx === -1) return old
+      const next = old.slice()
+      const existing = next[idx].preview_images ?? []
+      const srcIdx = existing.findIndex((img) => img.asset_id === assetId)
+      if (srcIdx > 0) {
+        const clone = existing.slice()
+        const [entry] = clone.splice(srcIdx, 1)
+        clone.unshift({ ...entry })
+        next[idx] = {
+          ...next[idx],
+          preview_images: clone.map((img, order) => ({ ...img, order })),
+        }
+      }
+      return next
+    })
+
+    queryClient.invalidateQueries({ queryKey: ['projects'] })
+  }, [baseProjects, previewMutation, queryClient, setLocalEdits])
 
   const allTags = useMemo(() => unique(baseProjects.flatMap((p) => p.tags || [])), [baseProjects])
   const visible = useMemo(() => baseProjects.filter((p) => (archiveMode ? isArchived(p.id) : !isArchived(p.id))), [archiveMode, baseProjects, isArchived])
@@ -335,6 +389,7 @@ export default function ProjectIndex() {
           onCreate={openCreateModal}
           archiveMode={archiveMode}
           onEdit={openEditor}
+          onSelectPrimary={handleSelectPrimary}
         />
 
         <EditModal

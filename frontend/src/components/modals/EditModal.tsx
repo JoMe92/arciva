@@ -101,27 +101,28 @@ const EditModal: React.FC<EditModalProps> = ({
       <div className="mt-6">
         <h3 className="mb-2 text-sm font-medium text-[var(--text,#1F1E1B)]">Preview images</h3>
         {previews.length ? (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <div className="flex items-center gap-2 overflow-x-auto rounded-md border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-2 py-2">
             {previews.map((img, idx) => {
               const key = img.assetId ?? `${img.url}-${idx}`;
               const isPrimary = idx === 0;
               return (
-                <div key={key} className="group relative overflow-hidden rounded-md border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]">
+                <div
+                  key={key}
+                  className={`relative h-20 w-28 shrink-0 overflow-hidden rounded-md border ${isPrimary ? 'border-[var(--basalt-700,#4A463F)]' : 'border-[var(--border,#E1D3B9)] opacity-80'}`}
+                  title={isPrimary ? 'Current cover' : `Preview ${idx + 1}`}
+                >
                   {img.url ? (
-                    <img src={img.url} alt={`${project.title} preview ${idx + 1}`} className="h-32 w-full object-cover" />
+                    <img src={img.url} alt={`${project.title} preview ${idx + 1}`} className="h-full w-full object-cover" />
                   ) : (
-                    <div className="flex h-32 w-full items-center justify-center text-[10px] text-[var(--text-muted,#6B645B)]">
+                    <div className="flex h-full w-full items-center justify-center text-[10px] text-[var(--text-muted,#6B645B)]">
                       No preview
                     </div>
                   )}
-                  <div className="absolute inset-x-0 bottom-0 flex items-center justify-between bg-black/45 px-2 py-1 text-[10px] uppercase tracking-wide text-white">
-                    <span>{isPrimary ? 'Primary' : `Preview ${idx + 1}`}</span>
-                    <span className="text-[10px] font-medium text-white/80">
-                      {img.width && img.height ? `${img.width}×${img.height}` : '—'}
-                    </span>
+                  <div className="absolute inset-x-0 bottom-0 bg-black/45 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-white">
+                    {isPrimary ? 'Cover' : `#${idx + 1}`}
                   </div>
                 </div>
-              );
+              )
             })}
           </div>
         ) : (

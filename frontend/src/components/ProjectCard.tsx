@@ -12,7 +12,8 @@ const ProjectCard: React.FC<{
   onUnarchive: (id: string) => void
   archiveMode: boolean
   onEdit: (p: Project) => void
-}> = ({ p, onOpen, onEdit }) => {
+  onSelectPrimary?: (projectId: string, assetId: string) => Promise<void>
+}> = ({ p, onOpen, onEdit, onSelectPrimary }) => {
   const placeholderRatio = placeholderRatioForAspect(p.aspect)
   const previews = React.useMemo(() => {
     const list = (p.previewImages ?? [])
@@ -34,6 +35,26 @@ const ProjectCard: React.FC<{
   React.useEffect(() => {
     setActivePreview(0)
   }, [previews])
+
+  const [promoting, setPromoting] = React.useState(false)
+  const canPromote = Boolean(
+    onSelectPrimary &&
+    current?.assetId &&
+    (current?.order ?? 0) !== 0,
+  )
+
+  const promote = async (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (!onSelectPrimary || !current?.assetId) return
+    try {
+      setPromoting(true)
+      await onSelectPrimary(p.id, current.assetId)
+      setActivePreview(0)
+    } finally {
+      setPromoting(false)
+    }
+  }
 
   const handlePrev = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -106,6 +127,16 @@ const ProjectCard: React.FC<{
             ) : (
               <RawPlaceholder ratio={placeholderRatio} className="absolute inset-0" />
             )}
+            {canPromote && (
+              <button
+                type="button"
+                className="pointer-events-auto absolute right-2 top-2 rounded-full bg-black/60 px-3 py-1 text-[11px] font-medium text-white shadow transition hover:bg-black/80 disabled:opacity-60"
+                onClick={promote}
+                disabled={promoting}
+              >
+                {promoting ? 'Setting…' : 'Use as cover'}
+              </button>
+            )}
           </div>
           {previews.length > 1 && (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-between px-1 opacity-0 transition-opacity duration-150 ease-out" style={{ opacity: showNav ? 1 : 0 }}>
@@ -127,29 +158,6 @@ const ProjectCard: React.FC<{
               >
                 ›
               </button>
-            </div>
-          )}
-          {previews.length > 1 && (
-            <div className="pointer-events-auto absolute inset-x-0 bottom-0 flex gap-1 overflow-x-auto bg-black/40 px-2 py-1 backdrop-blur-sm">
-              {previews.map((preview, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  aria-label={`Show preview ${idx + 1}`}
-                  className={`relative h-11 w-16 shrink-0 overflow-hidden rounded border ${idx === activePreview ? 'border-white/80' : 'border-white/30 opacity-70 hover:opacity-100'}`}
-                  onClick={(event) => {
-                    event.preventDefault()
-                    event.stopPropagation()
-                    setActivePreview(idx)
-                  }}
-                >
-                  <img
-                    src={preview.url}
-                    alt=""
-                    className="h-full w-full object-cover"
-                  />
-                </button>
-              ))}
             </div>
           )}
         </div>

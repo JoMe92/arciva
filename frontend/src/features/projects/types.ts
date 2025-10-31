@@ -24,4 +24,6 @@ export type ProjectPreviewImage = {
   assetId?: string
   url: string
   order: number
+  width?: number | null
+  height?: number | null
 }

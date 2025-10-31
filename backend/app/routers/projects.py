@@ -47,19 +47,25 @@ async def _load_preview_map(
     ).all()
 
     storage = PosixStorage.from_env()
-    preview_map: dict[UUID, list[tuple[int, UUID, str | None]]] = {pid: [] for pid in project_ids}
+    preview_map: dict[UUID, list[tuple[int, UUID, str | None, int | None, int | None]]] = {pid: [] for pid in project_ids}
     for project_asset, asset in rows:
         order = project_asset.preview_order if project_asset.preview_order is not None else 10_000
         preview_map.setdefault(project_asset.project_id, []).append(
-            (order, asset.id, _thumb_url(asset, storage))
+            (order, asset.id, _thumb_url(asset, storage), asset.width, asset.height)
         )
 
     normalized_map: dict[UUID, list[schemas.ProjectPreviewImage]] = {}
     for project_id, entries in preview_map.items():
         entries.sort(key=lambda item: item[0])
         normalized_map[project_id] = [
-            schemas.ProjectPreviewImage(asset_id=asset_id, thumb_url=thumb_url, order=index)
-            for index, (_, asset_id, thumb_url) in enumerate(entries)
+            schemas.ProjectPreviewImage(
+                asset_id=asset_id,
+                thumb_url=thumb_url,
+                order=index,
+                width=width,
+                height=height,
+            )
+            for index, (_, asset_id, thumb_url, width, height) in enumerate(entries)
         ]
 
     return normalized_map

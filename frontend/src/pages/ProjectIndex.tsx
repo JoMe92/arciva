@@ -145,18 +145,33 @@ export default function ProjectIndex() {
         .map((img, idx): ProjectPreviewImage | null => {
           const url = withBase(img.thumb_url)
           if (!url) return null
-          return { assetId: img.asset_id, url, order: idx }
+          return {
+            assetId: img.asset_id,
+            url,
+            order: idx,
+            width: img.width ?? null,
+            height: img.height ?? null,
+          }
         })
         .filter((img): img is ProjectPreviewImage => Boolean(img))
 
       const primaryPreview = previewImages[0]?.url ?? null
+
+      const derivedAspect = (() => {
+        const candidate = previewImages.find((img) => (img.width ?? 0) > 0 && (img.height ?? 0) > 0)
+        if (!candidate) return 'portrait' as Project['aspect']
+        const w = candidate.width ?? 0
+        const h = candidate.height ?? 0
+        if (w === h) return 'square'
+        return w > h ? 'landscape' : 'portrait'
+      })()
 
       return {
         id: proj.id,
         title: proj.title,
         client: proj.client ?? 'Unassigned',
         note: proj.note,
-        aspect: 'portrait',
+        aspect: derivedAspect,
         image: primaryPreview,
         previewImages,
         tags: [],

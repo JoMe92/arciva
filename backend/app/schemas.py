@@ -23,6 +23,8 @@ class ProjectPreviewImage(BaseModel):
     asset_id: UUID
     thumb_url: Optional[str] = None
     order: int = 0
+    width: Optional[int] = None
+    height: Optional[int] = None
 
 class ProjectOut(BaseModel):
     id: UUID

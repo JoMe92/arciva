@@ -19,6 +19,8 @@ export type ProjectPreviewImageApi = {
   asset_id: string
   thumb_url: string | null
   order: number
+  width: number | null
+  height: number | null
 }
 
 function getBaseUrl() {

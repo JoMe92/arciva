@@ -39,6 +39,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(text || `Request failed with status ${res.status}`)
   }
 
+  if (res.status === 204 || res.status === 205) {
+    return undefined as T
+  }
+
   return res.json() as Promise<T>
 }
 
@@ -50,5 +54,15 @@ export function createProject(payload: ProjectCreatePayload) {
   return request<ProjectApiResponse>('/v1/projects', {
     method: 'POST',
     body: JSON.stringify(payload),
+  })
+}
+
+export function deleteProject(projectId: string, payload: { confirmTitle: string; deleteAssets: boolean }) {
+  return request<void>(`/v1/projects/${projectId}`, {
+    method: 'DELETE',
+    body: JSON.stringify({
+      confirm_title: payload.confirmTitle,
+      delete_assets: payload.deleteAssets,
+    }),
   })
 }

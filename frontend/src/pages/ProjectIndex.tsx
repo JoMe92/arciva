@@ -13,9 +13,10 @@ import ProjectGrid from '../components/ProjectGrid'
 import StateHint from '../components/StateHint'
 import CreateModal from '../components/modals/CreateModal'
 import EditModal from '../components/modals/EditModal'
-import { createProject, listProjects, type ProjectApiResponse } from '../shared/api/projects'
+import { createProject, deleteProject, listProjects, type ProjectApiResponse } from '../shared/api/projects'
 import { updateAssetPreview } from '../shared/api/assets'
 import { withBase } from '../shared/api/base'
+import DeleteModal from '../components/modals/DeleteModal'
 
 const AppBar: React.FC<{ onCreate: () => void; onToggleArchive: () => void; archiveMode: boolean }> = ({ onCreate, onToggleArchive, archiveMode }) => (
   <div className="sticky top-0 z-40 border-b border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]/90 backdrop-blur">
@@ -125,6 +126,8 @@ export default function ProjectIndex() {
   const [createError, setCreateError] = useState<string | null>(null)
   const { archived, isArchived, archive, unarchive } = useArchive()
   const [archiveMode, setArchiveMode] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<Project | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   useEffect(() => { const t = setTimeout(() => setReady(true), 400); return () => clearTimeout(t) }, [])
 
@@ -191,6 +194,27 @@ export default function ProjectIndex() {
   const previewMutation = useMutation({
     mutationFn: ({ projectId, assetId }: { projectId: string; assetId: string }) =>
       updateAssetPreview(projectId, assetId, true, { makePrimary: true }),
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: ({ projectId, confirmTitle, deleteAssets }: { projectId: string; confirmTitle: string; deleteAssets: boolean }) =>
+      deleteProject(projectId, { confirmTitle, deleteAssets }),
+    onSuccess: (_data, vars) => {
+      setDeleteError(null)
+      setDeleteTarget(null)
+      setEditProject((prev) => (prev && prev.id === vars.projectId ? null : prev))
+      setEditOpen(false)
+      setLocalEdits((prev) => {
+        if (!(vars.projectId in prev)) return prev
+        const { [vars.projectId]: _omit, ...rest } = prev
+        return rest
+      })
+      unarchive(vars.projectId)
+      queryClient.invalidateQueries({ queryKey: ['projects'] })
+    },
+    onError: (err: unknown) => {
+      setDeleteError(err instanceof Error ? err.message : 'Failed to delete project')
+    },
   })
 
   const handleSelectPrimary = useCallback(async (projectId: string, assetId: string) => {
@@ -349,6 +373,25 @@ export default function ProjectIndex() {
   const handleToggleArchive = () => setArchiveMode(a => !a)
   const hasAnyFilters = Boolean(q || client || tags.length)
   const clearFilters = () => { setQ(''); setClient(''); setTags([]) }
+  const handleRequestDelete = useCallback((project: Project) => {
+    setDeleteTarget(project)
+    setDeleteError(null)
+  }, [])
+
+  const closeDeleteModal = useCallback(() => {
+    if (deleteMutation.isPending) return
+    setDeleteTarget(null)
+    setDeleteError(null)
+  }, [deleteMutation.isPending])
+
+  const handleDeleteConfirm = useCallback(
+    ({ confirmTitle, deleteAssets }: { confirmTitle: string; deleteAssets: boolean }) => {
+      if (!deleteTarget) return
+      setDeleteError(null)
+      deleteMutation.mutate({ projectId: deleteTarget.id, confirmTitle, deleteAssets })
+    },
+    [deleteMutation, deleteTarget],
+  )
 
   return (
     <div className="min-h-screen bg-[var(--surface-subtle,#FBF7EF)]">
@@ -402,6 +445,7 @@ export default function ProjectIndex() {
           onArchive={onArchive}
           onUnarchive={onUnarchive}
           existingTags={allTags}
+          onRequestDelete={handleRequestDelete}
         />
       </main>
 
@@ -411,6 +455,14 @@ export default function ProjectIndex() {
         onCreate={createProjectHandler}
         existingTags={allTags}
         busy={createMutation.isPending}
+      />
+      <DeleteModal
+        open={Boolean(deleteTarget)}
+        project={deleteTarget}
+        onClose={closeDeleteModal}
+        onConfirm={handleDeleteConfirm}
+        busy={deleteMutation.isPending}
+        error={deleteError}
       />
     </div>
   )

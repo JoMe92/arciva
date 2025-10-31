@@ -43,3 +43,21 @@ class PosixStorage:
         p = self.derivatives / sha256_hex / f"{variant}.{fmt}"
         p.parent.mkdir(parents=True, exist_ok=True)
         return p
+
+    def remove_original(self, storage_key: str | None) -> None:
+        if not storage_key:
+            return
+        path = Path(storage_key)
+        if path.is_file():
+            path.unlink(missing_ok=True)
+        elif path.exists():
+            try:
+                path.unlink(missing_ok=True)
+            except IsADirectoryError:
+                shutil.rmtree(path, ignore_errors=True)
+
+    def remove_derivatives(self, sha256_hex: str | None) -> None:
+        if not sha256_hex:
+            return
+        root = self.derivatives / sha256_hex
+        shutil.rmtree(root, ignore_errors=True)

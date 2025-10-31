@@ -38,6 +38,8 @@ def temp_fs_root(tmp_path_factory):
 def test_settings(temp_fs_root):
     # Point the app to an on-disk sqlite database for tests
     db_path = Path(tempfile.gettempdir()) / "film_cabinet_test.db"
+    if db_path.exists():
+        db_path.unlink()
     db_url = f"sqlite+aiosqlite:///{db_path}"
 
     class _S:

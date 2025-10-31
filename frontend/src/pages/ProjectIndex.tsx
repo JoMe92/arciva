@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import StoneTrailIcon from '../components/StoneTrailIcon'
 import Splash from '../components/Splash'
-import { Project } from '../features/projects/types'
+import { Project, type ProjectPreviewImage } from '../features/projects/types'
 import { unique } from '../features/projects/utils'
 import { PROJECTS } from '../features/projects/data'
 import { useArchive } from '../features/projects/archive'
@@ -14,6 +14,8 @@ import StateHint from '../components/StateHint'
 import CreateModal from '../components/modals/CreateModal'
 import EditModal from '../components/modals/EditModal'
 import { createProject, listProjects, type ProjectApiResponse } from '../shared/api/projects'
+import { updateAssetPreview } from '../shared/api/assets'
+import { withBase } from '../shared/api/base'
 
 const AppBar: React.FC<{ onCreate: () => void; onToggleArchive: () => void; archiveMode: boolean }> = ({ onCreate, onToggleArchive, archiveMode }) => (
   <div className="sticky top-0 z-40 border-b border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]/90 backdrop-blur">
@@ -136,19 +138,34 @@ export default function ProjectIndex() {
 
   const dynamicProjects = useMemo<Project[]>(() => {
     if (!apiProjects) return []
-    return apiProjects.map((proj) => ({
-      id: proj.id,
-      title: proj.title,
-      client: proj.client ?? 'Unassigned',
-      note: proj.note,
-      aspect: 'portrait',
-      image: null,
-      tags: [],
-      assetCount: proj.asset_count,
-      createdAt: proj.created_at,
-      updatedAt: proj.updated_at,
-      source: 'api',
-    }))
+    return apiProjects.map((proj) => {
+      const previewImages = (proj.preview_images || [])
+        .slice()
+        .sort((a, b) => a.order - b.order)
+        .map((img, idx): ProjectPreviewImage | null => {
+          const url = withBase(img.thumb_url)
+          if (!url) return null
+          return { assetId: img.asset_id, url, order: idx }
+        })
+        .filter((img): img is ProjectPreviewImage => Boolean(img))
+
+      const primaryPreview = previewImages[0]?.url ?? null
+
+      return {
+        id: proj.id,
+        title: proj.title,
+        client: proj.client ?? 'Unassigned',
+        note: proj.note,
+        aspect: 'portrait',
+        image: primaryPreview,
+        previewImages,
+        tags: [],
+        assetCount: proj.asset_count,
+        createdAt: proj.created_at,
+        updatedAt: proj.updated_at,
+        source: 'api',
+      }
+    })
   }, [apiProjects])
 
   const baseProjects = useMemo(() => {
@@ -197,6 +214,12 @@ export default function ProjectIndex() {
     },
   })
 
+  const [previewError, setPreviewError] = useState<string | null>(null)
+  const previewMutation = useMutation({
+    mutationFn: ({ projectId, assetId }: { projectId: string; assetId: string }) =>
+      updateAssetPreview(projectId, assetId, true, { makePrimary: true }),
+  })
+
   function createProjectHandler(title: string, desc: string, clientName: string, tgs: string[]) {
     const payload = {
       title: title || 'Untitled project',
@@ -220,6 +243,72 @@ export default function ProjectIndex() {
   const [editOpen, setEditOpen] = useState(false)
   const [editProject, setEditProject] = useState<Project | null>(null)
   const openEditor = (p: Project) => { setEditProject(p); setEditOpen(true) }
+  const closeEditor = () => { setEditOpen(false); setPreviewError(null) }
+
+  const handleSetPrimaryPreview = useCallback(async (project: Project, target: ProjectPreviewImage) => {
+    const previews = (project.previewImages ?? []).slice().sort((a, b) => a.order - b.order)
+    if (previews.length < 2) return
+    const matchIndex = target.assetId
+      ? previews.findIndex((img) => img.assetId === target.assetId)
+      : previews.findIndex((img) => img.url === target.url)
+    if (matchIndex <= 0) return
+
+    setPreviewError(null)
+    try {
+      if (target.assetId) {
+        await previewMutation.mutateAsync({ projectId: project.id, assetId: target.assetId })
+      }
+
+      const nextPreviews = previews.slice()
+      const [picked] = nextPreviews.splice(matchIndex, 1)
+      nextPreviews.unshift({ ...picked })
+      const normalized = nextPreviews.map((img, idx) => ({ ...img, order: idx }))
+      const primaryUrl = normalized[0]?.url ?? null
+
+      setEditProject((prev) => (prev && prev.id === project.id ? { ...prev, previewImages: normalized, image: primaryUrl } : prev))
+      setLocalEdits((prev) => ({
+        ...prev,
+        [project.id]: {
+          ...(prev[project.id] || {}),
+          previewImages: normalized,
+          image: primaryUrl,
+        },
+      }))
+
+      queryClient.setQueryData<ProjectApiResponse[] | undefined>(['projects'], (old) => {
+        if (!old) return old
+        const idx = old.findIndex((p) => p.id === project.id)
+        if (idx === -1) return old
+        if (!target.assetId) {
+          const normalizedPreview = old[idx].preview_images?.map((img, order) => ({ ...img, order })) ?? []
+          const next = old.slice()
+          next[idx] = { ...old[idx], preview_images: normalizedPreview }
+          return next
+        }
+        const previewsData = old[idx].preview_images ?? []
+        const sourceIndex = previewsData.findIndex((img) => img.asset_id === target.assetId)
+        if (sourceIndex <= 0) {
+          const normalizedPreview = previewsData.map((img, order) => ({ ...img, order }))
+          const next = old.slice()
+          next[idx] = { ...old[idx], preview_images: normalizedPreview }
+          return next
+        }
+        const clone = previewsData.slice()
+        const [item] = clone.splice(sourceIndex, 1)
+        clone.unshift({ ...item })
+        const normalizedPreview = clone.map((img, order) => ({ ...img, order }))
+        const next = old.slice()
+        next[idx] = { ...old[idx], preview_images: normalizedPreview }
+        return next
+      })
+
+      queryClient.invalidateQueries({ queryKey: ['projects'] })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to update preview image'
+      setPreviewError(message)
+      throw err
+    }
+  }, [previewMutation, queryClient, setEditProject, setLocalEdits, setPreviewError])
 
   // Apply edits locally so the grid reflects changes immediately.
   // We optimistically update the React Query cache for 'projects'.
@@ -257,7 +346,7 @@ export default function ProjectIndex() {
       },
     }))
 
-    setEditOpen(false)
+    closeEditor()
   }
 
   const handleToggleArchive = () => setArchiveMode(a => !a)
@@ -308,13 +397,16 @@ export default function ProjectIndex() {
         <EditModal
           open={editOpen}
           project={editProject}
-          onClose={() => setEditOpen(false)}
+          onClose={closeEditor}
           onSave={handleSave}
           onOpen={(id) => { update(id); navigate(`/projects/${id}`) }}
           archived={editProject ? isArchived(editProject.id) : false}
           onArchive={onArchive}
           onUnarchive={onUnarchive}
           existingTags={allTags}
+          onSetPrimaryPreview={handleSetPrimaryPreview}
+          previewBusy={previewMutation.isPending}
+          previewError={previewError}
         />
       </main>
 

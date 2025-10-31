@@ -19,6 +19,11 @@ class ProjectCreate(BaseModel):
     client: Optional[str] = None
     note: Optional[str] = None
 
+class ProjectPreviewImage(BaseModel):
+    asset_id: UUID
+    thumb_url: Optional[str] = None
+    order: int = 0
+
 class ProjectOut(BaseModel):
     id: UUID
     title: str
@@ -27,6 +32,7 @@ class ProjectOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     asset_count: int = 0
+    preview_images: List[ProjectPreviewImage] = Field(default_factory=list)
 
 # Uploads/Assets
 class UploadInitIn(BaseModel):
@@ -56,6 +62,8 @@ class AssetListItem(BaseModel):
     completed_at: Optional[datetime] = None
     width: Optional[int] = None
     height: Optional[int] = None
+    is_preview: bool = False
+    preview_order: Optional[int] = None
 
 class AssetDerivativeOut(BaseModel):
     variant: str
@@ -91,3 +99,7 @@ class ProjectAssetsLinkOut(BaseModel):
     linked: int
     duplicates: int
     items: List[AssetListItem]
+
+class ProjectAssetPreviewUpdate(BaseModel):
+    is_preview: bool
+    make_primary: bool = False

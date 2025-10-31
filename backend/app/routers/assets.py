@@ -2,13 +2,14 @@ from datetime import datetime, timezone
 import logging
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, desc
+from sqlalchemy import select, desc, func
 from uuid import UUID
 from fastapi.responses import FileResponse
 from ..db import get_db
 from .. import models, schemas
 from ..storage import PosixStorage
 from ..deps import get_settings
+from ..schema_utils import ensure_preview_columns
 
 
 def _warnings_from_text(data: str | None) -> list[str]:
@@ -81,9 +82,10 @@ logger = logging.getLogger("nivio.assets")
 
 @router.get("/projects/{project_id}/assets", response_model=list[schemas.AssetListItem])
 async def list_assets(project_id: UUID, limit: int = 50, db: AsyncSession = Depends(get_db)):
+    await ensure_preview_columns(db)
     # list latest by added_at
     q = (
-        select(models.Asset, models.ProjectAsset.added_at)
+        select(models.Asset, models.ProjectAsset)
         .join(models.ProjectAsset, models.ProjectAsset.asset_id == models.Asset.id)
         .where(models.ProjectAsset.project_id == project_id)
         .order_by(desc(models.ProjectAsset.added_at))
@@ -92,7 +94,7 @@ async def list_assets(project_id: UUID, limit: int = 50, db: AsyncSession = Depe
     rows = (await db.execute(q)).all()
     storage = PosixStorage.from_env()
     items: list[schemas.AssetListItem] = []
-    for asset, _ in rows:
+    for asset, project_asset in rows:
         thumb = _thumb_url(asset, storage)
         items.append(
             schemas.AssetListItem(
@@ -109,6 +111,8 @@ async def list_assets(project_id: UUID, limit: int = 50, db: AsyncSession = Depe
                 completed_at=asset.completed_at,
                 width=asset.width,
                 height=asset.height,
+                is_preview=bool(project_asset.is_preview),
+                preview_order=project_asset.preview_order,
             )
         )
     return items
@@ -183,6 +187,7 @@ async def link_existing_assets(
     body: schemas.ProjectAssetsLinkIn,
     db: AsyncSession = Depends(get_db),
 ):
+    await ensure_preview_columns(db)
     # validate project
     proj = (
         await db.execute(select(models.Project).where(models.Project.id == project_id))
@@ -278,6 +283,8 @@ async def link_existing_assets(
             completed_at=a.completed_at,
             width=a.width,
             height=a.height,
+            is_preview=False,
+            preview_order=None,
         )
 
     ordered_items = [items_map[aid] for aid in want_ids if aid in items_map]
@@ -287,3 +294,123 @@ async def link_existing_assets(
         [item.id for item in ordered_items],
     )
     return schemas.ProjectAssetsLinkOut(linked=linked, duplicates=duplicates, items=ordered_items)
+
+
+@router.put("/projects/{project_id}/assets/{asset_id}/preview", response_model=schemas.AssetListItem)
+async def update_preview_flag(
+    project_id: UUID,
+    asset_id: UUID,
+    body: schemas.ProjectAssetPreviewUpdate,
+    db: AsyncSession = Depends(get_db),
+):
+    await ensure_preview_columns(db)
+    link = (
+        await db.execute(
+            select(models.ProjectAsset)
+            .where(
+                models.ProjectAsset.project_id == project_id,
+                models.ProjectAsset.asset_id == asset_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if not link:
+        raise HTTPException(404, "asset not linked to project")
+
+    asset = (
+        await db.execute(select(models.Asset).where(models.Asset.id == asset_id))
+    ).scalar_one_or_none()
+    if not asset:
+        raise HTTPException(404, "asset not found")
+
+    preview_rows = (
+        await db.execute(
+            select(models.ProjectAsset)
+            .where(
+                models.ProjectAsset.project_id == project_id,
+                models.ProjectAsset.is_preview.is_(True),
+            )
+            .order_by(
+                models.ProjectAsset.preview_order.asc().nulls_last(),
+                models.ProjectAsset.added_at.desc(),
+            )
+        )
+    ).scalars().all()
+
+    # normalise current ordering
+    preview_ordered: list[models.ProjectAsset] = []
+    for row in preview_rows:
+        if row.asset_id == asset_id:
+            continue
+        preview_ordered.append(row)
+
+    max_previews = 36
+
+    if body.is_preview:
+        if link not in preview_rows:
+            if len(preview_ordered) >= max_previews:
+                raise HTTPException(400, f"preview limit ({max_previews}) reached")
+            preview_ordered.append(link)
+        elif body.make_primary:
+            preview_ordered.insert(0, link)
+        else:
+            # re-insert at original position
+            index = next(
+                (i for i, row in enumerate(preview_rows) if row.asset_id == asset_id),
+                None,
+            )
+            if index is not None:
+                preview_ordered.insert(min(index, len(preview_ordered)), link)
+        if body.make_primary and link in preview_ordered:
+            preview_ordered = [link] + [row for row in preview_ordered if row is not link]
+        link.is_preview = True
+    else:
+        link.is_preview = False
+        link.preview_order = None
+
+    # Deduplicate while preserving order
+    seen_assets: set[UUID] = set()
+    deduped: list[models.ProjectAsset] = []
+    for row in preview_ordered:
+        if row.asset_id in seen_assets:
+            continue
+        if row is link and not body.is_preview:
+            continue
+        seen_assets.add(row.asset_id)
+        deduped.append(row)
+
+    if body.is_preview and link not in deduped:
+        if body.make_primary:
+            deduped = [link] + deduped
+        else:
+            deduped.append(link)
+
+    for index, row in enumerate(deduped):
+        row.is_preview = True
+        row.preview_order = index
+
+    if not body.is_preview:
+        link.is_preview = False
+        link.preview_order = None
+
+    await db.commit()
+
+    storage = PosixStorage.from_env()
+    thumb_url = _thumb_url(asset, storage)
+
+    return schemas.AssetListItem(
+        id=asset.id,
+        status=schemas.AssetStatus(asset.status.value),
+        taken_at=asset.taken_at,
+        thumb_url=thumb_url,
+        original_filename=asset.original_filename,
+        size_bytes=asset.size_bytes,
+        last_error=asset.last_error,
+        metadata_warnings=_warnings_from_text(asset.metadata_warnings),
+        queued_at=asset.queued_at,
+        processing_started_at=asset.processing_started_at,
+        completed_at=asset.completed_at,
+        width=asset.width,
+        height=asset.height,
+        is_preview=link.is_preview,
+        preview_order=link.preview_order,
+    )

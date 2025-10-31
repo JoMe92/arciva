@@ -8,7 +8,7 @@ from typing import Optional
 
 from sqlalchemy import (
     String, Text, Enum as SAEnum, ForeignKey, BigInteger, Integer,
-    DateTime, PrimaryKeyConstraint
+    DateTime, PrimaryKeyConstraint, Boolean, text
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -69,6 +69,8 @@ class ProjectAsset(Base):
     project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"))
     asset_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("assets.id", ondelete="CASCADE"))
     added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    is_preview: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
+    preview_order: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     __table_args__ = (
         PrimaryKeyConstraint("project_id", "asset_id"),

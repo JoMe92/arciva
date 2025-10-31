@@ -38,6 +38,8 @@ export function makeDemo(n = 24) {
       tag: 'None',
       src: null,
       placeholderRatio: ratio,
+      isPreview: false,
+      previewOrder: null,
     })
   }
   return out

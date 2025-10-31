@@ -14,7 +14,54 @@ const ProjectCard: React.FC<{
   onEdit: (p: Project) => void
 }> = ({ p, onOpen, onEdit }) => {
   const placeholderRatio = placeholderRatioForAspect(p.aspect)
-  const hasImage = Boolean(p.image)
+  const previews = React.useMemo(() => {
+    const list = (p.previewImages ?? [])
+      .filter((img) => Boolean(img?.url))
+      .map((img) => ({ ...img }))
+      .sort((a, b) => a.order - b.order)
+    if (!list.length && p.image) {
+      list.push({ url: p.image, order: 0 })
+    }
+    return list
+  }, [p.previewImages, p.image])
+  const [hovered, setHovered] = React.useState(false)
+  const [activePreview, setActivePreview] = React.useState(0)
+  const hasImage = previews.length > 0
+  const current = hasImage ? previews[Math.max(0, Math.min(activePreview, previews.length - 1))] : null
+  const currentUrl = current?.url ?? null
+  const showNav = hovered && previews.length > 1
+
+  React.useEffect(() => {
+    setActivePreview(0)
+  }, [previews])
+
+  const handlePrev = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    e.preventDefault()
+    setActivePreview((idx) => {
+      if (!previews.length) return 0
+      return idx === 0 ? previews.length - 1 : idx - 1
+    })
+  }
+
+  const handleNext = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    e.preventDefault()
+    setActivePreview((idx) => {
+      if (!previews.length) return 0
+      return idx === previews.length - 1 ? 0 : idx + 1
+    })
+  }
+
+  const handleFocus = () => setHovered(true)
+  const handleBlur = (event: React.FocusEvent<HTMLDivElement>) => {
+    const next = event.relatedTarget as Node | null
+    if (next && event.currentTarget.contains(next)) {
+      return
+    }
+    setHovered(false)
+    setActivePreview(0)
+  }
 
   return (
     <div className="relative">
@@ -32,16 +79,27 @@ const ProjectCard: React.FC<{
           if (key === 'enter' || key === ' ' || key === 'spacebar') {
             e.preventDefault()
             onOpen(p.id)
+          } else if ((key === 'arrowleft' || key === 'arrowright') && previews.length > 1) {
+            e.preventDefault()
+            if (key === 'arrowleft') {
+              setActivePreview((idx) => (idx === 0 ? previews.length - 1 : idx - 1))
+            } else {
+              setActivePreview((idx) => (idx === previews.length - 1 ? 0 : idx + 1))
+            }
           }
         }}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => { setHovered(false); setActivePreview(0) }}
+        onFocus={handleFocus}
+        onBlur={handleBlur}
         className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus,#6B7C7A)] rounded-xl"
       >
-        <div className="overflow-hidden rounded-t-xl bg-[var(--surface,#FFFFFF)]">
+        <div className="overflow-hidden rounded-t-xl bg-[var(--surface,#FFFFFF)] relative">
           {/* identischer Medien-Wrapper mit vertikalem Limit */}
           <div className={`relative ${aspectClass(p.aspect)} w-full ${MEDIA_MAX} overflow-hidden`}>
             {hasImage ? (
               <img
-                src={p.image ?? undefined}
+                src={currentUrl ?? undefined}
                 alt={`${p.title} – ${p.client}`}
                 className="absolute inset-0 h-full w-full object-cover"
               />
@@ -49,6 +107,38 @@ const ProjectCard: React.FC<{
               <RawPlaceholder ratio={placeholderRatio} className="absolute inset-0" />
             )}
           </div>
+          {previews.length > 1 && (
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-between px-1 opacity-0 transition-opacity duration-150 ease-out" style={{ opacity: showNav ? 1 : 0 }}>
+              <button
+                type="button"
+                className="pointer-events-auto inline-flex h-8 w-8 items-center justify-center rounded-full bg-black/50 text-white text-lg"
+                aria-label="Show previous preview"
+                onClick={handlePrev}
+                tabIndex={showNav ? 0 : -1}
+              >
+                ‹
+              </button>
+              <button
+                type="button"
+                className="pointer-events-auto inline-flex h-8 w-8 items-center justify-center rounded-full bg-black/50 text-white text-lg"
+                aria-label="Show next preview"
+                onClick={handleNext}
+                tabIndex={showNav ? 0 : -1}
+              >
+                ›
+              </button>
+            </div>
+          )}
+          {previews.length > 1 && (
+            <div className="pointer-events-none absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
+              {previews.map((_, idx) => (
+                <span
+                  key={idx}
+                  className={`h-1.5 w-4 rounded-full ${idx === activePreview ? 'bg-white/90' : 'bg-white/40'}`}
+                />
+              ))}
+            </div>
+          )}
         </div>
       </div>
 

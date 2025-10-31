@@ -12,6 +12,13 @@ export type ProjectApiResponse = {
   asset_count: number
   created_at: string
   updated_at: string
+  preview_images: ProjectPreviewImageApi[]
+}
+
+export type ProjectPreviewImageApi = {
+  asset_id: string
+  thumb_url: string | null
+  order: number
 }
 
 function getBaseUrl() {
@@ -43,4 +50,3 @@ export function createProject(payload: ProjectCreatePayload) {
     body: JSON.stringify(payload),
   })
 }
-

@@ -1,7 +1,8 @@
 import React, { useMemo, useRef, useEffect, useState, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { TOKENS } from './utils'
-import { listProjectAssets, assetThumbUrl, type AssetListItem } from '../../shared/api/assets'
+import { listProjectAssets, assetThumbUrl, updateAssetPreview, type AssetListItem } from '../../shared/api/assets'
 import { initUpload, putUpload, completeUpload } from '../../shared/api/uploads'
 import { placeholderRatioForAspect } from '../../shared/placeholder'
 import type { Photo, ImgType, ColorTag } from './types'
@@ -36,17 +37,21 @@ function mapAssetToPhoto(item: AssetListItem, existing?: Photo): Photo {
     tag: existing?.tag ?? 'None',
     src,
     placeholderRatio,
+    isPreview: typeof item.is_preview === 'boolean' ? item.is_preview : existing?.isPreview ?? false,
+    previewOrder: typeof item.preview_order === 'number' ? item.preview_order : existing?.previewOrder ?? null,
   }
 }
 
 export default function ProjectWorkspace() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const [projectName] = useState(() => `Project ${id || '—'}`)
 
   const [photos, setPhotos] = useState<Photo[]>([])
   const [loadingAssets, setLoadingAssets] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [previewError, setPreviewError] = useState<string | null>(null)
   const prevPhotosRef = useRef<Photo[]>([])
   const currentIndexRef = useRef(0)
   const currentPhotoIdRef = useRef<string | null>(null)
@@ -103,6 +108,44 @@ export default function ProjectWorkspace() {
       setLoadingAssets(false)
     }
   }, [id])
+
+  const previewMutation = useMutation({
+    mutationFn: async ({ assetId, isPreview, makePrimary }: { assetId: string; isPreview: boolean; makePrimary?: boolean }) => {
+      if (!id) {
+        throw new Error('Missing project identifier')
+      }
+      return updateAssetPreview(id, assetId, isPreview, { makePrimary })
+    },
+    onSuccess: () => {
+      setPreviewError(null)
+      refreshAssets()
+      queryClient.invalidateQueries({ queryKey: ['projects'] })
+    },
+    onError: (err: unknown) => {
+      const message = err instanceof Error ? err.message : 'Failed to update preview state'
+      setPreviewError(message)
+    },
+  })
+
+  const handleTogglePreview = useCallback(async (photo: Photo) => {
+    if (previewMutation.isPending) return
+    setPreviewError(null)
+    try {
+      await previewMutation.mutateAsync({ assetId: photo.id, isPreview: !photo.isPreview })
+    } catch (err) {
+      // error is surfaced via previewError state
+    }
+  }, [previewMutation, setPreviewError])
+
+  const handleMakePrimaryPreview = useCallback(async (photo: Photo) => {
+    if (previewMutation.isPending) return
+    setPreviewError(null)
+    try {
+      await previewMutation.mutateAsync({ assetId: photo.id, isPreview: true, makePrimary: true })
+    } catch (err) {
+      // handled via previewError
+    }
+  }, [previewMutation, setPreviewError])
 
   const [showJPEG, setShowJPEG] = useState(true)
   const [showRAW, setShowRAW] = useState(true)
@@ -240,8 +283,12 @@ export default function ProjectWorkspace() {
   }
   const dateTree = useMemo(() => buildDateTree(photos), [photos])
 
-  const currentPhoto = visible[current]
+  const currentPhoto = visible[current] ?? null
   const hasAny = photos.length > 0
+
+  useEffect(() => {
+    setPreviewError(null)
+  }, [currentPhoto?.id])
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[var(--surface-subtle,#FBF7EF)] text-[var(--text,#1F1E1B)]">
@@ -328,15 +375,51 @@ export default function ProjectWorkspace() {
 
         <aside className="h-full overflow-y-auto bg-[var(--surface,#FFFFFF)] p-3 text-xs">
           <h4 className="font-medium mb-2">Inspector</h4>
-          {visible[current] ? (
+          {currentPhoto ? (
             <div className="space-y-2">
-              <Row label="Name" value={visible[current].name} />
-              <Row label="Type" value={visible[current].type} />
-              <Row label="Date" value={new Date(visible[current].date).toLocaleDateString()} />
-              <Row label="Rating" value={`${visible[current].rating}★`} />
-              <Row label="Flag" value={visible[current].picked ? 'Picked' : '—'} />
-              <Row label="Rejected" value={visible[current].rejected ? 'Yes' : 'No'} />
-              <Row label="Color" value={visible[current].tag} />
+              <Row label="Name" value={currentPhoto.name} />
+              <Row label="Type" value={currentPhoto.type} />
+              <Row label="Date" value={new Date(currentPhoto.date).toLocaleDateString()} />
+              <Row label="Rating" value={`${currentPhoto.rating}★`} />
+              <Row label="Flag" value={currentPhoto.picked ? 'Picked' : '—'} />
+              <Row label="Rejected" value={currentPhoto.rejected ? 'Yes' : 'No'} />
+              <Row label="Color" value={currentPhoto.tag} />
+              <div className="mt-3 space-y-2 rounded border border-[var(--border,#E1D3B9)] bg-[var(--sand-50,#FBF7EF)] p-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[var(--text-muted,#6B645B)]">Preview image</span>
+                  <span className="font-medium text-[11px] text-[var(--text,#1F1E1B)]">
+                    {currentPhoto.isPreview ? `Preview #${(currentPhoto.previewOrder ?? 0) + 1}` : 'Not a preview'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-[var(--text-muted,#6B645B)]">
+                  Preview images rotate on the project overview.
+                </p>
+                <div className="flex flex-col gap-2">
+                  <button
+                    type="button"
+                    className={`h-8 rounded-full border px-3 text-[11px] ${
+                      currentPhoto.isPreview
+                        ? 'border-[var(--border,#E1D3B9)] bg-white hover:border-[var(--text,#1F1E1B)]'
+                        : 'border-[var(--basalt-700,#4A463F)] bg-[var(--basalt-700,#4A463F)] text-white hover:bg-[var(--charcoal-800,#1F1E1B)]'
+                    } disabled:opacity-60`}
+                    onClick={() => handleTogglePreview(currentPhoto)}
+                    disabled={previewMutation.isPending}
+                  >
+                    {previewMutation.isPending ? 'Updating…' : currentPhoto.isPreview ? 'Remove from previews' : 'Mark as preview'}
+                  </button>
+                  <button
+                    type="button"
+                    className="h-8 rounded-full border border-[var(--border,#E1D3B9)] bg-white px-3 text-[11px] hover:border-[var(--text,#1F1E1B)] disabled:opacity-60"
+                    onClick={() => handleMakePrimaryPreview(currentPhoto)}
+                    disabled={previewMutation.isPending || currentPhoto.previewOrder === 0}
+                  >
+                    {previewMutation.isPending ? 'Updating…' : currentPhoto.previewOrder === 0 ? 'Already default' : 'Set as default'}
+                  </button>
+                </div>
+                {previewError ? (
+                  <p className="text-[10px] text-[#B42318]">{previewError}</p>
+                ) : null}
+              </div>
             </div>
           ) : (
             <div className="text-[var(--text-muted,#6B645B)]">No selection</div>

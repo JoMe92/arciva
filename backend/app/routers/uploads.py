@@ -15,6 +15,7 @@ from .. import models, schemas
 from ..db import get_db
 from ..deps import get_settings
 from ..storage import PosixStorage
+from ..schema_utils import ensure_preview_columns
 
 logger = logging.getLogger("nivio.uploads")
 
@@ -40,6 +41,7 @@ async def upload_init(project_id: UUID, body: schemas.UploadInitIn, db: AsyncSes
     await db.flush()  # get asset.id
 
     # Link to project now
+    await ensure_preview_columns(db)
     link = models.ProjectAsset(project_id=proj.id, asset_id=asset.id)
     db.add(link)
     await db.flush()

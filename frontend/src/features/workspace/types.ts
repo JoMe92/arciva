@@ -14,4 +14,6 @@ export type Photo = {
   tag: ColorTag
   src?: string | null
   placeholderRatio: PlaceholderRatio
+  isPreview: boolean
+  previewOrder: number | null
 }

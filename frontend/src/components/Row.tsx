@@ -15,7 +15,8 @@ const Row: React.FC<{
   onCreate: () => void
   archiveMode: boolean
   onEdit: (p: Project) => void
-}> = ({ row, index, onOpen, onArchive, onUnarchive, onCreate, archiveMode, onEdit }) => {
+  onSelectPrimary?: (projectId: string, assetId: string) => Promise<void>
+}> = ({ row, index, onOpen, onArchive, onUnarchive, onCreate, archiveMode, onEdit, onSelectPrimary }) => {
   const colsClass = row.cols === 4 ? 'grid-cols-4' : 'grid-cols-3'
   return (
     <div className={`${row.offsetTop || ''}`}>
@@ -38,6 +39,7 @@ const Row: React.FC<{
                 onUnarchive={onUnarchive}
                 archiveMode={archiveMode}
                 onEdit={onEdit}
+                onSelectPrimary={onSelectPrimary}
               />
             </div>
           )

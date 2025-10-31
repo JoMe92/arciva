@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import ModalShell from './ModalShell';
 import ProjectFields from './ProjectFields';
 import type { Project } from '../../features/projects/types';
@@ -36,6 +36,11 @@ const EditModal: React.FC<EditModalProps> = ({
   const [client, setClient] = useState(project?.client || '');
   const [selTags, setSelTags] = useState<string[]>(project?.tags || []);
   const [newTag, setNewTag] = useState('');
+
+  const previews = useMemo(() => {
+    if (!project?.previewImages?.length) return [];
+    return [...project.previewImages].sort((a, b) => a.order - b.order);
+  }, [project]);
 
   // Synchronise state when project changes
   useEffect(() => {
@@ -93,6 +98,39 @@ const EditModal: React.FC<EditModalProps> = ({
         setNewTag={setNewTag}
         existingTags={existingTags}
       />
+      <div className="mt-6">
+        <h3 className="mb-2 text-sm font-medium text-[var(--text,#1F1E1B)]">Preview images</h3>
+        {previews.length ? (
+          <div className="flex items-center gap-2 overflow-x-auto rounded-md border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-2 py-2">
+            {previews.map((img, idx) => {
+              const key = img.assetId ?? `${img.url}-${idx}`;
+              const isPrimary = idx === 0;
+              return (
+                <div
+                  key={key}
+                  className={`relative h-20 w-28 shrink-0 overflow-hidden rounded-md border ${isPrimary ? 'border-[var(--basalt-700,#4A463F)]' : 'border-[var(--border,#E1D3B9)] opacity-80'}`}
+                  title={isPrimary ? 'Current cover' : `Preview ${idx + 1}`}
+                >
+                  {img.url ? (
+                    <img src={img.url} alt={`${project.title} preview ${idx + 1}`} className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center text-[10px] text-[var(--text-muted,#6B645B)]">
+                      No preview
+                    </div>
+                  )}
+                  <div className="absolute inset-x-0 bottom-0 bg-black/45 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-white">
+                    {isPrimary ? 'Cover' : `#${idx + 1}`}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        ) : (
+          <p className="text-[12px] text-[var(--text-muted,#6B645B)]">
+            Pick images in the project workspace to feature them on the project card.
+          </p>
+        )}
+      </div>
     </ModalShell>
   );
 };

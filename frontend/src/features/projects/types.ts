@@ -12,9 +12,18 @@ export type Project = {
   note?: string | null
   aspect: 'portrait' | 'landscape' | 'square'
   image?: string | null
+  previewImages?: ProjectPreviewImage[]
   tags?: string[]
   assetCount?: number
   createdAt?: string
   updatedAt?: string
   source?: 'static' | 'api'
+}
+
+export type ProjectPreviewImage = {
+  assetId?: string
+  url: string
+  order: number
+  width?: number | null
+  height?: number | null
 }

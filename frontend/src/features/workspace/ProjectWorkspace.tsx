@@ -1,7 +1,8 @@
 import React, { useMemo, useRef, useEffect, useState, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { TOKENS } from './utils'
-import { listProjectAssets, assetThumbUrl, type AssetListItem } from '../../shared/api/assets'
+import { listProjectAssets, assetThumbUrl, updateAssetPreview, type AssetListItem } from '../../shared/api/assets'
 import { initUpload, putUpload, completeUpload } from '../../shared/api/uploads'
 import { placeholderRatioForAspect } from '../../shared/placeholder'
 import type { Photo, ImgType, ColorTag } from './types'
@@ -25,28 +26,34 @@ function mapAssetToPhoto(item: AssetListItem, existing?: Photo): Photo {
   const aspect = detectAspect(item.width, item.height)
   const placeholderRatio = existing?.placeholderRatio ?? placeholderRatioForAspect(aspect)
 
+  const isPreview = typeof item.is_preview === 'boolean' ? item.is_preview : existing?.isPreview ?? false
+
   return {
     id: item.id,
     name,
     type,
     date,
     rating: existing?.rating ?? 0,
-    picked: existing?.picked ?? false,
+    picked: existing?.picked ?? isPreview,
     rejected: existing?.rejected ?? false,
     tag: existing?.tag ?? 'None',
     src,
     placeholderRatio,
+    isPreview,
+    previewOrder: typeof item.preview_order === 'number' ? item.preview_order : existing?.previewOrder ?? null,
   }
 }
 
 export default function ProjectWorkspace() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const [projectName] = useState(() => `Project ${id || '—'}`)
 
   const [photos, setPhotos] = useState<Photo[]>([])
   const [loadingAssets, setLoadingAssets] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [pickError, setPickError] = useState<string | null>(null)
   const prevPhotosRef = useRef<Photo[]>([])
   const currentIndexRef = useRef(0)
   const currentPhotoIdRef = useRef<string | null>(null)
@@ -104,6 +111,49 @@ export default function ProjectWorkspace() {
     }
   }, [id])
 
+  const pickMutation = useMutation({
+    mutationFn: async ({ assetId, pick, makePrimary }: { assetId: string; pick: boolean; makePrimary?: boolean }) => {
+      if (!id) {
+        throw new Error('Missing project identifier')
+      }
+      return updateAssetPreview(id, assetId, pick, { makePrimary })
+    },
+    onSuccess: () => {
+      setPickError(null)
+      refreshAssets()
+      queryClient.invalidateQueries({ queryKey: ['projects'] })
+    },
+    onError: (err: unknown) => {
+      const message = err instanceof Error ? err.message : 'Failed to update preview state'
+      setPickError(message)
+    },
+  })
+
+  const togglePick = useCallback(async (photo: Photo) => {
+    if (pickMutation.isPending) return
+    const hadOtherPicked = photos.some((p) => p.picked && p.id !== photo.id)
+    const nextPicked = !photo.picked
+    setPhotos((arr) =>
+      arr.map((p) =>
+        p.id === photo.id
+          ? {
+              ...p,
+              picked: nextPicked,
+              isPreview: nextPicked,
+              previewOrder: nextPicked ? p.previewOrder : null,
+              rejected: nextPicked ? false : p.rejected,
+            }
+          : p,
+      ),
+    )
+    setPickError(null)
+    try {
+      await pickMutation.mutateAsync({ assetId: photo.id, pick: nextPicked, makePrimary: nextPicked && !hadOtherPicked })
+    } catch (err) {
+      refreshAssets()
+    }
+  }, [pickMutation, photos, refreshAssets])
+
   const [showJPEG, setShowJPEG] = useState(true)
   const [showRAW, setShowRAW] = useState(true)
   const [minStars, setMinStars] = useState<0 | 1 | 2 | 3 | 4 | 5>(0)
@@ -157,20 +207,35 @@ export default function ProjectWorkspace() {
       if (e.key === 'd' || e.key === 'D') setView('detail')
       if (!visible.length) return
       const cur = visible[current]; if (!cur) return
-      if (e.key === 'p' || e.key === 'P') setPhotos((arr) => arr.map((x) => (x.id === cur.id ? { ...x, picked: !x.picked, rejected: x.rejected && false } : x)))
-      if (e.key === 'x' || e.key === 'X') setPhotos((arr) => arr.map((x) => (x.id === cur.id ? { ...x, rejected: !x.rejected, picked: x.picked && false } : x)))
+      if (e.key === 'p' || e.key === 'P') {
+        togglePick(cur)
+      }
+      if (e.key === 'x' || e.key === 'X') {
+        if (cur.picked) {
+          togglePick(cur)
+        }
+        setPhotos((arr) => arr.map((x) => (x.id === cur.id ? { ...x, rejected: !x.rejected, picked: cur.picked ? false : x.picked } : x)))
+      }
       if (/^[1-5]$/.test(e.key)) setPhotos((arr) => arr.map((x) => (x.id === cur.id ? { ...x, rating: Number(e.key) as 1 | 2 | 3 | 4 | 5 } : x)))
       if (e.key === 'ArrowRight') setCurrent((i) => Math.min(i + 1, visible.length - 1))
       if (e.key === 'ArrowLeft') setCurrent((i) => Math.max(i - 1, 0))
     }
     window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey)
-  }, [visible, current])
+  }, [visible, current, togglePick])
 
   // Custom events vom Grid
   useEffect(() => {
     const onRate = (e: any) => setPhotos((arr) => arr.map((x) => (x.id === e.detail.id ? { ...x, rating: e.detail.r } : x)))
-    const onPick = (e: any) => setPhotos((arr) => arr.map((x) => (x.id === e.detail.id ? { ...x, picked: !x.picked, rejected: x.rejected && false } : x)))
-    const onReject = (e: any) => setPhotos((arr) => arr.map((x) => (x.id === e.detail.id ? { ...x, rejected: !x.rejected, picked: x.picked && false } : x)))
+    const onPick = (e: any) => {
+      const photo = photos.find((x) => x.id === e.detail.id)
+      if (photo) togglePick(photo)
+    }
+    const onReject = (e: any) => {
+      const photo = photos.find((x) => x.id === e.detail.id)
+      if (!photo) return
+      if (photo.picked) togglePick(photo)
+      setPhotos((arr) => arr.map((x) => (x.id === e.detail.id ? { ...x, rejected: !x.rejected, picked: photo.picked ? false : x.picked } : x)))
+    }
     const onColor = (e: any) => setPhotos((arr) => arr.map((x) => (x.id === e.detail.id ? { ...x, tag: e.detail.t } : x)))
     window.addEventListener('rate', onRate as any)
     window.addEventListener('pick', onPick as any)
@@ -182,7 +247,7 @@ export default function ProjectWorkspace() {
       window.removeEventListener('reject', onReject as any)
       window.removeEventListener('color', onColor as any)
     }
-  }, [])
+  }, [photos, togglePick])
 
   useEffect(() => {
     if (!id) return
@@ -240,8 +305,12 @@ export default function ProjectWorkspace() {
   }
   const dateTree = useMemo(() => buildDateTree(photos), [photos])
 
-  const currentPhoto = visible[current]
+  const currentPhoto = visible[current] ?? null
   const hasAny = photos.length > 0
+
+  useEffect(() => {
+    setPickError(null)
+  }, [currentPhoto?.id])
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[var(--surface-subtle,#FBF7EF)] text-[var(--text,#1F1E1B)]">
@@ -328,15 +397,29 @@ export default function ProjectWorkspace() {
 
         <aside className="h-full overflow-y-auto bg-[var(--surface,#FFFFFF)] p-3 text-xs">
           <h4 className="font-medium mb-2">Inspector</h4>
-          {visible[current] ? (
+          {currentPhoto ? (
             <div className="space-y-2">
-              <Row label="Name" value={visible[current].name} />
-              <Row label="Type" value={visible[current].type} />
-              <Row label="Date" value={new Date(visible[current].date).toLocaleDateString()} />
-              <Row label="Rating" value={`${visible[current].rating}★`} />
-              <Row label="Flag" value={visible[current].picked ? 'Picked' : '—'} />
-              <Row label="Rejected" value={visible[current].rejected ? 'Yes' : 'No'} />
-              <Row label="Color" value={visible[current].tag} />
+              <Row label="Name" value={currentPhoto.name} />
+              <Row label="Type" value={currentPhoto.type} />
+              <Row label="Date" value={new Date(currentPhoto.date).toLocaleDateString()} />
+              <Row label="Rating" value={`${currentPhoto.rating}★`} />
+              <Row label="Flag" value={currentPhoto.picked ? 'Picked' : '—'} />
+              <Row label="Rejected" value={currentPhoto.rejected ? 'Yes' : 'No'} />
+              <Row label="Color" value={currentPhoto.tag} />
+              <div className="mt-3 space-y-2 rounded border border-[var(--border,#E1D3B9)] bg-[var(--sand-50,#FBF7EF)] p-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[var(--text-muted,#6B645B)]">Project card</span>
+                  <span className="font-medium text-[11px] text-[var(--text,#1F1E1B)]">
+                    {currentPhoto.picked ? `Included (#${(currentPhoto.previewOrder ?? 0) + 1})` : 'Hidden'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-[var(--text-muted,#6B645B)]">
+                  Toggle <kbd className="rounded border border-[var(--border,#E1D3B9)] px-1">P</kbd> to pick or unpick this image. All picked images appear on the project card carousel.
+                </p>
+                {pickError ? (
+                  <p className="text-[10px] text-[#B42318]">{pickError}</p>
+                ) : null}
+              </div>
             </div>
           ) : (
             <div className="text-[var(--text-muted,#6B645B)]">No selection</div>

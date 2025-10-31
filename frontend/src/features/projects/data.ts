@@ -24,13 +24,13 @@ export const U = {
  * placeholder rendering.
  */
 export const PROJECTS: Project[] = [
-  { id: 'p1', title: 'Red XPLR', client: 'SRAM', aspect: 'portrait', image: U.bike, tags: ['gravel', 'outdoor'], source: 'static' },
-  { id: 'p2', title: 'Polo Country', client: 'Element × Ralph Lauren', aspect: 'portrait', image: U.knit, tags: ['fashion', 'editorial'], source: 'static' },
-  { id: 'p3', title: 'Lena Mantler', client: 'SZ Magazin', aspect: 'portrait', image: U.portrait, tags: ['portrait'], source: 'static' },
-  { id: 'p4', title: 'Mayer of Munich', client: 'Monocle', aspect: 'portrait', image: U.felt, tags: ['reportage', 'color'], source: 'static' },
-  { id: 'p5', title: 'Glacier Line', client: 'Editorial', aspect: 'landscape', image: null, tags: ['landscape', 'travel'], source: 'static' },
-  { id: 'p6', title: 'Trail Push', client: 'Patagonia', aspect: 'landscape', image: U.trail, tags: ['brand', 'outdoor'], source: 'static' },
-  { id: 'p7', title: 'Stone Trail', client: 'CI', aspect: 'square', image: U.stone, tags: ['identity'], source: 'static' },
-  { id: 'p8', title: 'Atelier', client: 'Studio', aspect: 'portrait', image: U.studio, tags: ['studio'], source: 'static' },
-  { id: 'p9', title: 'Urban Grid', client: 'City Works', aspect: 'landscape', image: U.city, tags: ['architecture'], source: 'static' }
+  { id: 'p1', title: 'Red XPLR', client: 'SRAM', aspect: 'portrait', image: U.bike, previewImages: [{ url: U.bike, order: 0 }], tags: ['gravel', 'outdoor'], source: 'static' },
+  { id: 'p2', title: 'Polo Country', client: 'Element × Ralph Lauren', aspect: 'portrait', image: U.knit, previewImages: [{ url: U.knit, order: 0 }], tags: ['fashion', 'editorial'], source: 'static' },
+  { id: 'p3', title: 'Lena Mantler', client: 'SZ Magazin', aspect: 'portrait', image: U.portrait, previewImages: [{ url: U.portrait, order: 0 }], tags: ['portrait'], source: 'static' },
+  { id: 'p4', title: 'Mayer of Munich', client: 'Monocle', aspect: 'portrait', image: U.felt, previewImages: [{ url: U.felt, order: 0 }], tags: ['reportage', 'color'], source: 'static' },
+  { id: 'p5', title: 'Glacier Line', client: 'Editorial', aspect: 'landscape', image: null, previewImages: [], tags: ['landscape', 'travel'], source: 'static' },
+  { id: 'p6', title: 'Trail Push', client: 'Patagonia', aspect: 'landscape', image: U.trail, previewImages: [{ url: U.trail, order: 0 }], tags: ['brand', 'outdoor'], source: 'static' },
+  { id: 'p7', title: 'Stone Trail', client: 'CI', aspect: 'square', image: U.stone, previewImages: [{ url: U.stone, order: 0 }], tags: ['identity'], source: 'static' },
+  { id: 'p8', title: 'Atelier', client: 'Studio', aspect: 'portrait', image: U.studio, previewImages: [{ url: U.studio, order: 0 }], tags: ['studio'], source: 'static' },
+  { id: 'p9', title: 'Urban Grid', client: 'City Works', aspect: 'landscape', image: U.city, previewImages: [{ url: U.city, order: 0 }], tags: ['architecture'], source: 'static' }
 ];

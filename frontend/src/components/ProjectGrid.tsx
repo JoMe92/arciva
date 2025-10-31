@@ -11,7 +11,8 @@ const ProjectGrid: React.FC<{
   onCreate: () => void
   archiveMode: boolean
   onEdit: (p: Project) => void
-}> = ({ items, onOpen, onArchive, onUnarchive, onCreate, archiveMode, onEdit }) => {
+  onSelectPrimary?: (projectId: string, assetId: string) => Promise<void>
+}> = ({ items, onOpen, onArchive, onUnarchive, onCreate, archiveMode, onEdit, onSelectPrimary }) => {
   // In der Archive-Ansicht keine Create-Card
   const layout = buildLayout(items, !archiveMode)
 
@@ -28,6 +29,7 @@ const ProjectGrid: React.FC<{
           onCreate={onCreate}
           archiveMode={archiveMode}
           onEdit={onEdit}
+          onSelectPrimary={onSelectPrimary}
         />
       ))}
     </div>

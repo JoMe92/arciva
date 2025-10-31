@@ -26,18 +26,20 @@ function mapAssetToPhoto(item: AssetListItem, existing?: Photo): Photo {
   const aspect = detectAspect(item.width, item.height)
   const placeholderRatio = existing?.placeholderRatio ?? placeholderRatioForAspect(aspect)
 
+  const isPreview = typeof item.is_preview === 'boolean' ? item.is_preview : existing?.isPreview ?? false
+
   return {
     id: item.id,
     name,
     type,
     date,
     rating: existing?.rating ?? 0,
-    picked: existing?.picked ?? false,
+    picked: existing?.picked ?? isPreview,
     rejected: existing?.rejected ?? false,
     tag: existing?.tag ?? 'None',
     src,
     placeholderRatio,
-    isPreview: typeof item.is_preview === 'boolean' ? item.is_preview : existing?.isPreview ?? false,
+    isPreview,
     previewOrder: typeof item.preview_order === 'number' ? item.preview_order : existing?.previewOrder ?? null,
   }
 }
@@ -51,7 +53,7 @@ export default function ProjectWorkspace() {
   const [photos, setPhotos] = useState<Photo[]>([])
   const [loadingAssets, setLoadingAssets] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
-  const [previewError, setPreviewError] = useState<string | null>(null)
+  const [pickError, setPickError] = useState<string | null>(null)
   const prevPhotosRef = useRef<Photo[]>([])
   const currentIndexRef = useRef(0)
   const currentPhotoIdRef = useRef<string | null>(null)
@@ -109,43 +111,48 @@ export default function ProjectWorkspace() {
     }
   }, [id])
 
-  const previewMutation = useMutation({
-    mutationFn: async ({ assetId, isPreview, makePrimary }: { assetId: string; isPreview: boolean; makePrimary?: boolean }) => {
+  const pickMutation = useMutation({
+    mutationFn: async ({ assetId, pick, makePrimary }: { assetId: string; pick: boolean; makePrimary?: boolean }) => {
       if (!id) {
         throw new Error('Missing project identifier')
       }
-      return updateAssetPreview(id, assetId, isPreview, { makePrimary })
+      return updateAssetPreview(id, assetId, pick, { makePrimary })
     },
     onSuccess: () => {
-      setPreviewError(null)
+      setPickError(null)
       refreshAssets()
       queryClient.invalidateQueries({ queryKey: ['projects'] })
     },
     onError: (err: unknown) => {
       const message = err instanceof Error ? err.message : 'Failed to update preview state'
-      setPreviewError(message)
+      setPickError(message)
     },
   })
 
-  const handleTogglePreview = useCallback(async (photo: Photo) => {
-    if (previewMutation.isPending) return
-    setPreviewError(null)
+  const togglePick = useCallback(async (photo: Photo) => {
+    if (pickMutation.isPending) return
+    const hadOtherPicked = photos.some((p) => p.picked && p.id !== photo.id)
+    const nextPicked = !photo.picked
+    setPhotos((arr) =>
+      arr.map((p) =>
+        p.id === photo.id
+          ? {
+              ...p,
+              picked: nextPicked,
+              isPreview: nextPicked,
+              previewOrder: nextPicked ? p.previewOrder : null,
+              rejected: nextPicked ? false : p.rejected,
+            }
+          : p,
+      ),
+    )
+    setPickError(null)
     try {
-      await previewMutation.mutateAsync({ assetId: photo.id, isPreview: !photo.isPreview })
+      await pickMutation.mutateAsync({ assetId: photo.id, pick: nextPicked, makePrimary: nextPicked && !hadOtherPicked })
     } catch (err) {
-      // error is surfaced via previewError state
+      refreshAssets()
     }
-  }, [previewMutation, setPreviewError])
-
-  const handleMakePrimaryPreview = useCallback(async (photo: Photo) => {
-    if (previewMutation.isPending) return
-    setPreviewError(null)
-    try {
-      await previewMutation.mutateAsync({ assetId: photo.id, isPreview: true, makePrimary: true })
-    } catch (err) {
-      // handled via previewError
-    }
-  }, [previewMutation, setPreviewError])
+  }, [pickMutation, photos, refreshAssets])
 
   const [showJPEG, setShowJPEG] = useState(true)
   const [showRAW, setShowRAW] = useState(true)
@@ -200,20 +207,35 @@ export default function ProjectWorkspace() {
       if (e.key === 'd' || e.key === 'D') setView('detail')
       if (!visible.length) return
       const cur = visible[current]; if (!cur) return
-      if (e.key === 'p' || e.key === 'P') setPhotos((arr) => arr.map((x) => (x.id === cur.id ? { ...x, picked: !x.picked, rejected: x.rejected && false } : x)))
-      if (e.key === 'x' || e.key === 'X') setPhotos((arr) => arr.map((x) => (x.id === cur.id ? { ...x, rejected: !x.rejected, picked: x.picked && false } : x)))
+      if (e.key === 'p' || e.key === 'P') {
+        togglePick(cur)
+      }
+      if (e.key === 'x' || e.key === 'X') {
+        if (cur.picked) {
+          togglePick(cur)
+        }
+        setPhotos((arr) => arr.map((x) => (x.id === cur.id ? { ...x, rejected: !x.rejected, picked: cur.picked ? false : x.picked } : x)))
+      }
       if (/^[1-5]$/.test(e.key)) setPhotos((arr) => arr.map((x) => (x.id === cur.id ? { ...x, rating: Number(e.key) as 1 | 2 | 3 | 4 | 5 } : x)))
       if (e.key === 'ArrowRight') setCurrent((i) => Math.min(i + 1, visible.length - 1))
       if (e.key === 'ArrowLeft') setCurrent((i) => Math.max(i - 1, 0))
     }
     window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey)
-  }, [visible, current])
+  }, [visible, current, togglePick])
 
   // Custom events vom Grid
   useEffect(() => {
     const onRate = (e: any) => setPhotos((arr) => arr.map((x) => (x.id === e.detail.id ? { ...x, rating: e.detail.r } : x)))
-    const onPick = (e: any) => setPhotos((arr) => arr.map((x) => (x.id === e.detail.id ? { ...x, picked: !x.picked, rejected: x.rejected && false } : x)))
-    const onReject = (e: any) => setPhotos((arr) => arr.map((x) => (x.id === e.detail.id ? { ...x, rejected: !x.rejected, picked: x.picked && false } : x)))
+    const onPick = (e: any) => {
+      const photo = photos.find((x) => x.id === e.detail.id)
+      if (photo) togglePick(photo)
+    }
+    const onReject = (e: any) => {
+      const photo = photos.find((x) => x.id === e.detail.id)
+      if (!photo) return
+      if (photo.picked) togglePick(photo)
+      setPhotos((arr) => arr.map((x) => (x.id === e.detail.id ? { ...x, rejected: !x.rejected, picked: photo.picked ? false : x.picked } : x)))
+    }
     const onColor = (e: any) => setPhotos((arr) => arr.map((x) => (x.id === e.detail.id ? { ...x, tag: e.detail.t } : x)))
     window.addEventListener('rate', onRate as any)
     window.addEventListener('pick', onPick as any)
@@ -225,7 +247,7 @@ export default function ProjectWorkspace() {
       window.removeEventListener('reject', onReject as any)
       window.removeEventListener('color', onColor as any)
     }
-  }, [])
+  }, [photos, togglePick])
 
   useEffect(() => {
     if (!id) return
@@ -287,7 +309,7 @@ export default function ProjectWorkspace() {
   const hasAny = photos.length > 0
 
   useEffect(() => {
-    setPreviewError(null)
+    setPickError(null)
   }, [currentPhoto?.id])
 
   return (
@@ -386,38 +408,16 @@ export default function ProjectWorkspace() {
               <Row label="Color" value={currentPhoto.tag} />
               <div className="mt-3 space-y-2 rounded border border-[var(--border,#E1D3B9)] bg-[var(--sand-50,#FBF7EF)] p-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-[var(--text-muted,#6B645B)]">Preview image</span>
+                  <span className="text-[var(--text-muted,#6B645B)]">Project card</span>
                   <span className="font-medium text-[11px] text-[var(--text,#1F1E1B)]">
-                    {currentPhoto.isPreview ? `Preview #${(currentPhoto.previewOrder ?? 0) + 1}` : 'Not a preview'}
+                    {currentPhoto.picked ? `Included (#${(currentPhoto.previewOrder ?? 0) + 1})` : 'Hidden'}
                   </span>
                 </div>
                 <p className="text-[11px] text-[var(--text-muted,#6B645B)]">
-                  Preview images rotate on the project overview.
+                  Toggle <kbd className="rounded border border-[var(--border,#E1D3B9)] px-1">P</kbd> to pick or unpick this image. All picked images appear on the project card carousel.
                 </p>
-                <div className="flex flex-col gap-2">
-                  <button
-                    type="button"
-                    className={`h-8 rounded-full border px-3 text-[11px] ${
-                      currentPhoto.isPreview
-                        ? 'border-[var(--border,#E1D3B9)] bg-white hover:border-[var(--text,#1F1E1B)]'
-                        : 'border-[var(--basalt-700,#4A463F)] bg-[var(--basalt-700,#4A463F)] text-white hover:bg-[var(--charcoal-800,#1F1E1B)]'
-                    } disabled:opacity-60`}
-                    onClick={() => handleTogglePreview(currentPhoto)}
-                    disabled={previewMutation.isPending}
-                  >
-                    {previewMutation.isPending ? 'Updating…' : currentPhoto.isPreview ? 'Remove from previews' : 'Mark as preview'}
-                  </button>
-                  <button
-                    type="button"
-                    className="h-8 rounded-full border border-[var(--border,#E1D3B9)] bg-white px-3 text-[11px] hover:border-[var(--text,#1F1E1B)] disabled:opacity-60"
-                    onClick={() => handleMakePrimaryPreview(currentPhoto)}
-                    disabled={previewMutation.isPending || currentPhoto.previewOrder === 0}
-                  >
-                    {previewMutation.isPending ? 'Updating…' : currentPhoto.previewOrder === 0 ? 'Already default' : 'Set as default'}
-                  </button>
-                </div>
-                {previewError ? (
-                  <p className="text-[10px] text-[#B42318]">{previewError}</p>
+                {pickError ? (
+                  <p className="text-[10px] text-[#B42318]">{pickError}</p>
                 ) : null}
               </div>
             </div>

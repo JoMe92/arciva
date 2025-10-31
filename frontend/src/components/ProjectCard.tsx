@@ -130,12 +130,25 @@ const ProjectCard: React.FC<{
             </div>
           )}
           {previews.length > 1 && (
-            <div className="pointer-events-none absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
-              {previews.map((_, idx) => (
-                <span
+            <div className="pointer-events-auto absolute inset-x-0 bottom-0 flex gap-1 overflow-x-auto bg-black/40 px-2 py-1 backdrop-blur-sm">
+              {previews.map((preview, idx) => (
+                <button
                   key={idx}
-                  className={`h-1.5 w-4 rounded-full ${idx === activePreview ? 'bg-white/90' : 'bg-white/40'}`}
-                />
+                  type="button"
+                  aria-label={`Show preview ${idx + 1}`}
+                  className={`relative h-11 w-16 shrink-0 overflow-hidden rounded border ${idx === activePreview ? 'border-white/80' : 'border-white/30 opacity-70 hover:opacity-100'}`}
+                  onClick={(event) => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                    setActivePreview(idx)
+                  }}
+                >
+                  <img
+                    src={preview.url}
+                    alt=""
+                    className="h-full w-full object-cover"
+                  />
+                </button>
               ))}
             </div>
           )}

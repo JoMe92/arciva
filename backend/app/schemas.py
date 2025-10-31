@@ -6,8 +6,11 @@ from uuid import UUID
 
 class AssetStatus(str, Enum):
     UPLOADING = "UPLOADING"
+    QUEUED = "QUEUED"
     PROCESSING = "PROCESSING"
     READY = "READY"
+    DUPLICATE = "DUPLICATE"
+    MISSING_SOURCE = "MISSING_SOURCE"
     ERROR = "ERROR"
 
 # Projects
@@ -44,3 +47,47 @@ class AssetListItem(BaseModel):
     status: AssetStatus
     taken_at: Optional[datetime] = None
     thumb_url: Optional[str] = None
+    original_filename: Optional[str] = None
+    size_bytes: Optional[int] = None
+    last_error: Optional[str] = None
+    metadata_warnings: List[str] = Field(default_factory=list)
+    queued_at: Optional[datetime] = None
+    processing_started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
+
+class AssetDerivativeOut(BaseModel):
+    variant: str
+    width: int
+    height: int
+    url: str
+
+class AssetDetail(BaseModel):
+    id: UUID
+    status: AssetStatus
+    original_filename: str
+    mime: str
+    size_bytes: int
+    width: Optional[int]
+    height: Optional[int]
+    taken_at: Optional[datetime]
+    storage_key: Optional[str]
+    sha256: Optional[str]
+    reference_count: int
+    queued_at: Optional[datetime]
+    processing_started_at: Optional[datetime]
+    completed_at: Optional[datetime]
+    last_error: Optional[str]
+    metadata_warnings: List[str] = Field(default_factory=list)
+    thumb_url: Optional[str]
+    derivatives: List[AssetDerivativeOut] = Field(default_factory=list)
+
+# Project-asset linking
+class ProjectAssetsLinkIn(BaseModel):
+    asset_ids: List[UUID]
+
+class ProjectAssetsLinkOut(BaseModel):
+    linked: int
+    duplicates: int
+    items: List[AssetListItem]

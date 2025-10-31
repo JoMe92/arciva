@@ -19,8 +19,11 @@ from .db import Base
 
 class AssetStatus(str, enum.Enum):
     UPLOADING = "UPLOADING"
+    QUEUED = "QUEUED"
     PROCESSING = "PROCESSING"
     READY = "READY"
+    DUPLICATE = "DUPLICATE"
+    MISSING_SOURCE = "MISSING_SOURCE"
     ERROR = "ERROR"
 
 
@@ -51,6 +54,12 @@ class Asset(Base):
 
     storage_key: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # POSIX path
     status: Mapped[AssetStatus] = mapped_column(SAEnum(AssetStatus), nullable=False, default=AssetStatus.UPLOADING)
+    queued_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    processing_started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    metadata_warnings: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    reference_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

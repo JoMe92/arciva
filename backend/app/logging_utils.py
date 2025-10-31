@@ -27,9 +27,13 @@ def setup_logging(log_dir: str, level: int = logging.INFO, module_log_level: Opt
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
-    handler = RotatingFileHandler(log_file, maxBytes=5_000_000, backupCount=5)
-    handler.setFormatter(formatter)
-    handler.setLevel(level)
+    file_handler = RotatingFileHandler(log_file, maxBytes=5_000_000, backupCount=5)
+    file_handler.setFormatter(formatter)
+    file_handler.setLevel(level)
+
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    console_handler.setLevel(level)
 
     root_logger = logging.getLogger()
     root_logger.setLevel(min(level, root_logger.level or level))
@@ -39,7 +43,10 @@ def setup_logging(log_dir: str, level: int = logging.INFO, module_log_level: Opt
         isinstance(h, RotatingFileHandler) and getattr(h, "baseFilename", None) == str(log_file)
         for h in root_logger.handlers
     ):
-        root_logger.addHandler(handler)
+        root_logger.addHandler(file_handler)
+
+    if not any(isinstance(h, logging.StreamHandler) for h in root_logger.handlers):
+        root_logger.addHandler(console_handler)
 
     # Optionally raise level for our application namespace without touching
     # other loggers such as SQLAlchemy which can be noisy.
@@ -48,7 +55,7 @@ def setup_logging(log_dir: str, level: int = logging.INFO, module_log_level: Opt
 
     # Capture uvicorn access logs as well so HTTP status codes appear in the file.
     for name in ("uvicorn", "uvicorn.access", "uvicorn.error"):
-        logging.getLogger(name).addHandler(handler)
+        logging.getLogger(name).addHandler(file_handler)
+        logging.getLogger(name).addHandler(console_handler)
 
     _configured = True
-

@@ -222,14 +222,16 @@ start_frontend() {
 
 start_worker() {
   if [[ -f "${BACKEND_DIR}/worker/worker.py" ]]; then
-    pushd "${BACKEND_DIR}" >/dev/null
+    pushd "${ROOT_DIR}" >/dev/null
     if command -v conda >/dev/null 2>&1 || command -v micromamba >/dev/null 2>&1; then
       conda_activate
     fi
     info "Starting worker"
-    DATABASE_URL="${NEW_DATABASE_URL:-$DATABASE_URL}" \
+    PYTHONPATH="${ROOT_DIR}" \
+      DATABASE_URL="${NEW_DATABASE_URL:-$DATABASE_URL}" \
       REDIS_URL="${NEW_REDIS_URL:-$REDIS_URL}" \
-      python -m worker.worker >>"${LOG_DIR}/worker.out.log" 2>>"${LOG_DIR}/worker.err.log" &
+      python -m arq backend.worker.worker.WorkerSettings \
+      >>"${LOG_DIR}/worker.out.log" 2>>"${LOG_DIR}/worker.err.log" &
     WORKER_PID=$!
     popd >/dev/null
   else

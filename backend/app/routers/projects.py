@@ -185,3 +185,104 @@ async def get_project(
     )
     logger.info("get_project: id=%s asset_count=%s", proj.id, count)
     return result
+
+
+@router.delete("/{project_id}", status_code=204)
+async def delete_project(
+    project_id: UUID,
+    body: schemas.ProjectDelete,
+    db: AsyncSession = Depends(get_db),
+):
+    logger.info("delete_project: id=%s delete_assets=%s", project_id, body.delete_assets)
+    proj = (
+        await db.execute(
+            select(models.Project).where(models.Project.id == project_id)
+        )
+    ).scalar_one_or_none()
+    if not proj:
+        logger.warning("delete_project: id=%s not found", project_id)
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    confirmed = body.confirm_title.strip()
+    if confirmed != proj.title.strip():
+        logger.warning(
+            "delete_project: id=%s confirmation mismatch provided=%r expected=%r",
+            project_id,
+            confirmed,
+            proj.title,
+        )
+        raise HTTPException(status_code=400, detail="Project title confirmation mismatch")
+
+    asset_ids = (
+        await db.execute(
+            select(models.ProjectAsset.asset_id).where(
+                models.ProjectAsset.project_id == project_id
+            )
+        )
+    ).scalars().all()
+
+    assets: list[models.Asset] = []
+    if asset_ids:
+        assets = (
+            await db.execute(
+                select(models.Asset).where(models.Asset.id.in_(asset_ids))
+            )
+        ).scalars().all()
+
+    remaining_counts: dict[UUID, int] = {}
+    if asset_ids:
+        other_rows = (
+            await db.execute(
+                select(
+                    models.ProjectAsset.asset_id,
+                    func.count(models.ProjectAsset.project_id),
+                )
+                .where(
+                    models.ProjectAsset.asset_id.in_(asset_ids),
+                    models.ProjectAsset.project_id != project_id,
+                )
+                .group_by(models.ProjectAsset.asset_id)
+            )
+        ).all()
+        remaining_counts = {asset_id: int(count) for asset_id, count in other_rows}
+
+    await db.delete(proj)
+    await db.flush()
+
+    storage = PosixStorage.from_env()
+    removed_assets = 0
+
+    for asset in assets:
+        remaining = int(remaining_counts.get(asset.id, 0))
+        if body.delete_assets and remaining == 0:
+            duplicates = 0
+            if asset.sha256:
+                duplicates = int(
+                    (
+                        await db.execute(
+                            select(func.count())
+                            .select_from(models.Asset)
+                            .where(
+                                models.Asset.sha256 == asset.sha256,
+                                models.Asset.id != asset.id,
+                            )
+                        )
+                    ).scalar_one()
+                )
+            if duplicates == 0:
+                storage.remove_original(asset.storage_key)
+                storage.remove_derivatives(asset.sha256)
+            await db.delete(asset)
+            removed_assets += 1
+        else:
+            asset.reference_count = max(remaining, 0)
+
+    await db.commit()
+
+    logger.info(
+        "delete_project: id=%s success removed_assets=%s remaining_assets=%s",
+        project_id,
+        removed_assets,
+        len(assets) - removed_assets,
+    )
+    return None

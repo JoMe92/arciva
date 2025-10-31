@@ -36,6 +36,10 @@ class ProjectOut(BaseModel):
     asset_count: int = 0
     preview_images: List[ProjectPreviewImage] = Field(default_factory=list)
 
+class ProjectDelete(BaseModel):
+    confirm_title: str = Field(..., min_length=1)
+    delete_assets: bool = False
+
 # Uploads/Assets
 class UploadInitIn(BaseModel):
     filename: str

@@ -13,6 +13,7 @@ export interface EditModalProps {
   onArchive: (id: string) => void;
   onUnarchive: (id: string) => void;
   existingTags: string[];
+  onRequestDelete: (project: Project) => void;
 }
 
 /**
@@ -30,6 +31,7 @@ const EditModal: React.FC<EditModalProps> = ({
   onArchive,
   onUnarchive,
   existingTags,
+  onRequestDelete,
 }) => {
   const [title, setTitle] = useState(project?.title || '');
   const [desc, setDesc] = useState(project?.blurb || '');
@@ -80,6 +82,14 @@ const EditModal: React.FC<EditModalProps> = ({
           ) : (
             <button onClick={() => onArchive(project.id)} className="h-8 rounded-full border border-[var(--border,#E1D3B9)] px-3 text-[12px]">
               Archive
+            </button>
+          )}
+          {project.source === 'api' && (
+            <button
+              onClick={() => { onClose(); onRequestDelete(project); }}
+              className="h-8 rounded-full border border-red-200 bg-red-50 px-3 text-[12px] text-red-700 hover:border-red-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-200"
+            >
+              Delete…
             </button>
           )}
         </>

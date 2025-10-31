@@ -44,17 +44,23 @@ async def ensure_preview_columns(_: AsyncSession | None = None) -> None:
 
         try:
             async with async_engine.begin() as conn:
-                result = await conn.execute(
-                    text(
-                        """
-                        SELECT column_name
-                        FROM information_schema.columns
-                        WHERE table_name = 'project_assets'
-                          AND column_name IN ('is_preview', 'preview_order')
-                        """
+                if conn.dialect.name == "sqlite":
+                    pragma = await conn.execute(text("PRAGMA table_info('project_assets')"))
+                    existing = (row[1] for row in pragma)
+                else:
+                    result = await conn.execute(
+                        text(
+                            """
+                            SELECT column_name
+                            FROM information_schema.columns
+                            WHERE table_name = 'project_assets'
+                              AND column_name IN ('is_preview', 'preview_order')
+                            """
+                        )
                     )
-                )
-                statements = _build_statements(row[0] for row in result)
+                    existing = (row[0] for row in result)
+
+                statements = _build_statements(existing)
                 for stmt in statements:
                     logger.info("ensure_preview_columns: applying %s", stmt)
                     await conn.execute(text(stmt))

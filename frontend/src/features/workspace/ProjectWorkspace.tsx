@@ -610,6 +610,14 @@ type LocalFileDescriptor = {
   relativePath?: string
 }
 
+type LocalQueueProgress = {
+  active: boolean
+  totalFiles: number
+  processedFiles: number
+  totalBytes: number
+  processedBytes: number
+}
+
 type PendingItem = {
   id: string
   name: string
@@ -1069,6 +1077,17 @@ function ImportSheet({
   const localPreviewUrlsRef = useRef<string[]>([])
   const dragDepthRef = useRef(0)
   const [isDragging, setIsDragging] = useState(false)
+  const localDescriptorQueueRef = useRef<LocalFileDescriptor[]>([])
+  const localDescriptorProcessingRef = useRef(false)
+  const localDescriptorTaskRef = useRef<number | null>(null)
+  const localDescriptorRunTokenRef = useRef(0)
+  const [localQueueProgress, setLocalQueueProgress] = useState<LocalQueueProgress>({
+    active: false,
+    totalFiles: 0,
+    processedFiles: 0,
+    totalBytes: 0,
+    processedBytes: 0,
+  })
 
   const derivedDest = folderMode === 'date' ? 'YYYY/MM/DD' : customFolder.trim() || 'Custom'
   const [uploadDestination, setUploadDestination] = useState(derivedDest)
@@ -1099,6 +1118,13 @@ function ImportSheet({
   }, [])
 
   useEffect(() => () => {
+    if (localDescriptorTaskRef.current !== null) {
+      window.clearTimeout(localDescriptorTaskRef.current)
+      localDescriptorTaskRef.current = null
+    }
+    localDescriptorQueueRef.current = []
+    localDescriptorProcessingRef.current = false
+    localDescriptorRunTokenRef.current += 1
     localPreviewUrlsRef.current.forEach((url) => URL.revokeObjectURL(url))
     localPreviewUrlsRef.current = []
   }, [])
@@ -1195,7 +1221,33 @@ function ImportSheet({
     return ids.map((id) => HUB_DATA.nodeMap.get(id)?.name).filter(Boolean) as string[]
   }, [hubSelected])
 
-  const canSubmit = !isUploadMode && selectedItems.length > 0
+  const localQueuePercent = useMemo(() => {
+    if (localQueueProgress.totalBytes > 0) {
+      return Math.max(0, Math.min(100, Math.round((localQueueProgress.processedBytes / localQueueProgress.totalBytes) * 100)))
+    }
+    if (localQueueProgress.totalFiles > 0) {
+      return Math.max(0, Math.min(100, Math.round((localQueueProgress.processedFiles / localQueueProgress.totalFiles) * 100)))
+    }
+    return 0
+  }, [localQueueProgress])
+
+  const localQueueDetails = useMemo(() => {
+    const pieces: string[] = []
+    if (localQueueProgress.totalFiles > 0) {
+      pieces.push(`${localQueueProgress.processedFiles}/${localQueueProgress.totalFiles} files`)
+    }
+    if (localQueueProgress.totalBytes > 0) {
+      pieces.push(`${formatBytes(localQueueProgress.processedBytes)} of ${formatBytes(localQueueProgress.totalBytes)}`)
+    }
+    if (localQueuePercent > 0) {
+      pieces.push(`${localQueuePercent}%`)
+    }
+    return pieces.join(' • ')
+  }, [localQueuePercent, localQueueProgress])
+
+  const canSubmit = !isUploadMode
+    && selectedItems.length > 0
+    && !(isLocalMode && localQueueProgress.active)
 
   useEffect(() => {
     if (mode !== 'local') {
@@ -1226,12 +1278,95 @@ function ImportSheet({
     })).sort((a, b) => a.folder.localeCompare(b.folder))
   }, [localItems])
 
+  function processLocalDescriptorQueue() {
+    if (localDescriptorProcessingRef.current) return
+    localDescriptorProcessingRef.current = true
+    const runToken = localDescriptorRunTokenRef.current
+    const batchSize = 32
+
+    const runBatch = () => {
+      if (localDescriptorRunTokenRef.current !== runToken) {
+        localDescriptorProcessingRef.current = false
+        localDescriptorTaskRef.current = null
+        return
+      }
+
+      const chunk = localDescriptorQueueRef.current.splice(0, batchSize)
+      if (!chunk.length) {
+        localDescriptorProcessingRef.current = false
+        localDescriptorTaskRef.current = null
+        setLocalQueueProgress((prev) => {
+          if (!prev.active) return prev
+          return {
+            ...prev,
+            active: false,
+            processedFiles: prev.totalFiles,
+            processedBytes: prev.totalBytes,
+          }
+        })
+        return
+      }
+
+      const newItems = makeLocalPendingItems(chunk)
+      const newUrls = newItems.map((item) => item.previewUrl).filter((url): url is string => Boolean(url))
+      if (newUrls.length) {
+        localPreviewUrlsRef.current = [...localPreviewUrlsRef.current, ...newUrls]
+      }
+      setLocalItems((prev) => [...prev, ...newItems])
+
+      const chunkBytes = chunk.reduce((acc, descriptor) => acc + descriptor.file.size, 0)
+      setLocalQueueProgress((prev) => {
+        if (!prev.active) return prev
+        const processedFiles = Math.min(prev.totalFiles, prev.processedFiles + chunk.length)
+        const processedBytes = Math.min(prev.totalBytes, prev.processedBytes + chunkBytes)
+        return {
+          ...prev,
+          processedFiles,
+          processedBytes,
+        }
+      })
+
+      if (localDescriptorQueueRef.current.length) {
+        localDescriptorTaskRef.current = window.setTimeout(runBatch, 16)
+      } else {
+        localDescriptorProcessingRef.current = false
+        localDescriptorTaskRef.current = null
+        setLocalQueueProgress((prev) => {
+          if (!prev.active) return prev
+          return {
+            ...prev,
+            active: false,
+            processedFiles: prev.totalFiles,
+            processedBytes: prev.totalBytes,
+          }
+        })
+      }
+    }
+
+    runBatch()
+  }
+
   function appendLocalDescriptors(descriptors: LocalFileDescriptor[]) {
     if (!descriptors.length) return
-    const newItems = makeLocalPendingItems(descriptors)
-    const newUrls = newItems.map((item) => item.previewUrl).filter((url): url is string => Boolean(url))
-    if (newUrls.length) localPreviewUrlsRef.current = [...localPreviewUrlsRef.current, ...newUrls]
-    setLocalItems((prev) => [...prev, ...newItems])
+    const addedBytes = descriptors.reduce((acc, descriptor) => acc + descriptor.file.size, 0)
+    localDescriptorQueueRef.current.push(...descriptors)
+    setLocalQueueProgress((prev) => {
+      if (prev.active) {
+        return {
+          ...prev,
+          totalFiles: prev.totalFiles + descriptors.length,
+          totalBytes: prev.totalBytes + addedBytes,
+        }
+      }
+      return {
+        active: true,
+        totalFiles: descriptors.length,
+        processedFiles: 0,
+        totalBytes: addedBytes,
+        processedBytes: 0,
+      }
+    })
+    processLocalDescriptorQueue()
   }
 
   function startLocalFlow() {
@@ -1296,6 +1431,20 @@ function ImportSheet({
   }
 
   function clearLocalSelection() {
+    if (localDescriptorTaskRef.current !== null) {
+      window.clearTimeout(localDescriptorTaskRef.current)
+      localDescriptorTaskRef.current = null
+    }
+    localDescriptorQueueRef.current = []
+    localDescriptorProcessingRef.current = false
+    localDescriptorRunTokenRef.current += 1
+    setLocalQueueProgress({
+      active: false,
+      totalFiles: 0,
+      processedFiles: 0,
+      totalBytes: 0,
+      processedBytes: 0,
+    })
     localPreviewUrlsRef.current.forEach((url) => URL.revokeObjectURL(url))
     localPreviewUrlsRef.current = []
     setLocalItems([])
@@ -1673,6 +1822,20 @@ function ImportSheet({
                     <button type="button" onClick={() => folderInputRef.current?.click()} className="rounded-md border border-[var(--border,#E1D3B9)] px-3 py-2">Choose folder…</button>
                   </div>
                   <div className="mt-3 text-xs text-[var(--text-muted,#6B645B)]">Or just drag & drop files and folders here.</div>
+                  {localQueueProgress.active && (
+                    <div role="status" aria-live="polite" className="mt-4 flex w-full max-w-[260px] flex-col items-center gap-2 rounded-md border border-[var(--border,#E1D3B9)] bg-white/90 px-3 py-2 text-center text-[11px] text-[var(--text,#1F1E1B)]">
+                      <div className="flex items-center justify-center gap-2 font-medium">
+                        <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border border-[var(--charcoal-800,#1F1E1B)] border-b-transparent" aria-hidden />
+                        Preparing files…
+                      </div>
+                      {localQueueDetails && (
+                        <div className="text-[10px] text-[var(--text-muted,#6B645B)]">{localQueueDetails}</div>
+                      )}
+                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--sand-100,#F3EBDD)]">
+                        <div className="h-full rounded-full bg-[var(--charcoal-800,#1F1E1B)] transition-[width]" style={{ width: `${localQueuePercent}%` }} />
+                      </div>
+                    </div>
+                  )}
                   {isDragging && (
                     <div className="mt-4 rounded-md border border-dashed border-[var(--charcoal-800,#1F1E1B)] bg-white/80 px-3 py-2 text-xs font-medium text-[var(--charcoal-800,#1F1E1B)]">
                       Drop to add {mode === 'local' ? 'to your selection' : 'and review before importing'}.

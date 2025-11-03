@@ -4,7 +4,7 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable, List, Tuple
+from typing import Any, Iterable, List, Optional, Tuple
 from uuid import UUID
 
 from arq.connections import RedisSettings
@@ -17,6 +17,7 @@ from backend.app.db import SessionLocal
 from backend.app.imaging import make_thumb, read_exif, sha256_file
 from backend.app.logging_utils import setup_logging
 from backend.app.storage import PosixStorage
+from backend.app.schema_utils import ensure_asset_metadata_column
 
 SETTINGS = get_settings()
 setup_logging(SETTINGS.logs_dir)
@@ -34,7 +35,7 @@ async def _sha256_async(path: Path) -> str:
     return await asyncio.to_thread(sha256_file, path)
 
 
-async def _read_exif_async(path: Path):
+async def _read_exif_async(path: Path) -> tuple[Optional[datetime], Tuple[Optional[int], Optional[int]], Optional[dict[str, Any]], list[str]]:
     return await asyncio.to_thread(read_exif, path)
 
 
@@ -75,6 +76,8 @@ async def ingest_asset(ctx, asset_id: str):
             asset.size_bytes,
             asset.original_filename,
         )
+
+        await ensure_asset_metadata_column(db)
 
         temp_path = storage.temp_path_for(asset_id)
         temp_exists = temp_path.exists()
@@ -142,14 +145,25 @@ async def ingest_asset(ctx, asset_id: str):
                 else:
                     dest = original_path
 
-            taken_at = None
+            taken_at = asset.taken_at
             width = asset.width
             height = asset.height
+            metadata_payload = getattr(asset, "metadata_json", None)
             warnings: List[str] = []
 
             try:
-                taken_at, dims = await _read_exif_async(source_path)
-                width, height = dims
+                exif_taken_at, dims, exif_metadata, exif_warnings = await _read_exif_async(source_path)
+                if exif_taken_at:
+                    taken_at = exif_taken_at
+                dw, dh = dims
+                if dw is not None:
+                    width = dw
+                if dh is not None:
+                    height = dh
+                if exif_metadata:
+                    metadata_payload = exif_metadata
+                if exif_warnings:
+                    warnings.extend(exif_warnings)
             except Exception as exc:  # pragma: no cover - best effort
                 logger.exception("ingest_asset: read_exif failed asset=%s", asset_id)
                 warnings.append("EXIF_ERROR")
@@ -216,6 +230,8 @@ async def ingest_asset(ctx, asset_id: str):
             asset.status = models.AssetStatus.READY
             asset.completed_at = datetime.now(timezone.utc)
             asset.metadata_warnings = _warnings_to_text(warnings)
+            if hasattr(asset, "metadata_json"):
+                asset.metadata_json = metadata_payload
             asset.reference_count = max(asset.reference_count or 1, 1)
             await db.commit()
             logger.info(

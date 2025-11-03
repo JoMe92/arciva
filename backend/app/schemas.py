@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 from enum import Enum
 from uuid import UUID
@@ -96,6 +96,7 @@ class AssetDetail(BaseModel):
     metadata_warnings: List[str] = Field(default_factory=list)
     thumb_url: Optional[str]
     derivatives: List[AssetDerivativeOut] = Field(default_factory=list)
+    metadata: Optional[Dict[str, Any]] = None
 
 # Project-asset linking
 class ProjectAssetsLinkIn(BaseModel):

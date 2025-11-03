@@ -59,6 +59,85 @@ ENV
   set -a; source "${ROOT_DIR}/.env"; set +a
 }
 
+ensure_exiftool_path() {
+  if [[ -n "${EXIFTOOL_PATH:-}" && -x "${EXIFTOOL_PATH}" ]]; then
+    info "EXIFTOOL_PATH already set to ${EXIFTOOL_PATH}"
+    local env_root
+    env_root=$(dirname "$(dirname "${EXIFTOOL_PATH}")")
+    case ":${PATH}:" in
+      *":${env_root}/bin:"*) ;;
+      *) export PATH="${env_root}/bin:${PATH}" ;;
+    esac
+    configure_perl_libs "${env_root}"
+    return
+  fi
+
+  if command -v exiftool >/dev/null 2>&1; then
+    local sys_tool
+    sys_tool=$(command -v exiftool)
+    export EXIFTOOL_PATH="${sys_tool}"
+    info "Detected system exiftool at ${EXIFTOOL_PATH}"
+    local env_root
+    env_root=$(dirname "$(dirname "${EXIFTOOL_PATH}")")
+    case ":${PATH}:" in
+      *":${env_root}/bin:"*) ;;
+      *) export PATH="${env_root}/bin:${PATH}" ;;
+    esac
+    configure_perl_libs "${env_root}"
+    return
+  fi
+
+  if command -v pixi >/dev/null 2>&1; then
+    local pixi_path
+    if pixi_path=$(pixi run which exiftool 2>/dev/null); then
+      pixi_path=$(echo "${pixi_path}" | head -n 1)
+      if [[ -n "${pixi_path}" && -x "${pixi_path}" ]]; then
+        export EXIFTOOL_PATH="${pixi_path}"
+        info "Using pixi exiftool at ${EXIFTOOL_PATH}"
+        local env_root
+        env_root=$(dirname "$(dirname "${EXIFTOOL_PATH}")")
+        case ":${PATH}:" in
+          *":${env_root}/bin:"*) ;;
+          *) export PATH="${env_root}/bin:${PATH}" ;;
+        esac
+        configure_perl_libs "${env_root}"
+        return
+      fi
+    fi
+  fi
+
+  warn "exiftool not found; metadata extraction may fail. Install exiftool or set EXIFTOOL_PATH."
+}
+
+configure_perl_libs() {
+  local env_root=$1
+  [[ -d "${env_root}/lib/perl5" ]] || return
+
+  local paths=()
+  local base="${env_root}/lib/perl5"
+
+  for dir in "${base}/site_perl" "${base}/vendor_perl" "${base}/core_perl"; do
+    [[ -d "${dir}" ]] && paths+=("${dir}")
+  done
+
+  for dir in "${base}"/5.*/site_perl "${base}"/5.*/vendor_perl "${base}"/5.*/core_perl; do
+    [[ -d "${dir}" ]] && paths+=("${dir}")
+  done
+
+  if ((${#paths[@]} == 0)); then
+    return
+  fi
+
+  local joined
+  joined=$(IFS=:; echo "${paths[*]}")
+  if [[ -n "${PERL5LIB:-}" ]]; then
+    export PERL5LIB="${joined}:${PERL5LIB}"
+  else
+    export PERL5LIB="${joined}"
+  fi
+  info "Configured PERL5LIB for exiftool"
+}
+
 write_compose() {
   cat > "${COMPOSE_FILE}" <<'YAML'
 services:
@@ -162,10 +241,15 @@ start_backend() {
 
   if command -v conda >/dev/null 2>&1 || command -v micromamba >/dev/null 2>&1; then
     conda_activate
+    local python_cmd="python"
+    if command -v python >/dev/null 2>&1; then
+      python_cmd=$(command -v python)
+    fi
+    ensure_exiftool_path
     info "Conda env: ${CONDA_ENV:-nivio}"
     DATABASE_URL="${NEW_DATABASE_URL:-$DATABASE_URL}" \
       REDIS_URL="${NEW_REDIS_URL:-$REDIS_URL}" \
-      python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload \
+      "${python_cmd}" -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload \
       >>"${LOG_DIR}/backend.out.log" 2>>"${LOG_DIR}/backend.err.log" &
   elif [[ -f "pyproject.toml" && -f "poetry.lock" && $(command -v poetry) ]]; then
     info "Using poetry env"
@@ -223,14 +307,19 @@ start_frontend() {
 start_worker() {
   if [[ -f "${BACKEND_DIR}/worker/worker.py" ]]; then
     pushd "${ROOT_DIR}" >/dev/null
+    local python_cmd="python"
     if command -v conda >/dev/null 2>&1 || command -v micromamba >/dev/null 2>&1; then
       conda_activate
+      if command -v python >/dev/null 2>&1; then
+        python_cmd=$(command -v python)
+      fi
+      ensure_exiftool_path
     fi
     info "Starting worker"
     PYTHONPATH="${ROOT_DIR}" \
       DATABASE_URL="${NEW_DATABASE_URL:-$DATABASE_URL}" \
       REDIS_URL="${NEW_REDIS_URL:-$REDIS_URL}" \
-      python -m arq backend.worker.worker.WorkerSettings \
+      "${python_cmd}" -m arq backend.worker.worker.WorkerSettings \
       >>"${LOG_DIR}/worker.out.log" 2>>"${LOG_DIR}/worker.err.log" &
     WORKER_PID=$!
     popd >/dev/null
@@ -251,6 +340,7 @@ Dev environment is up!"
 
 cmd_up() {
   ensure_env
+  ensure_exiftool_path
   ensure_compose_up
   DB_PORT="${HOST_DB_PORT:-5432}"; REDIS_PORT="${HOST_REDIS_PORT:-6379}"
   wait_tcp localhost "$DB_PORT" 60 || fail "Postgres did not become ready on $DB_PORT"

@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     max_upload_mb: int = 200
     worker_concurrency: int = 2
     logs_dir: str = "logs"
+    exiftool_path: str = "exiftool"
 
     @field_validator("allowed_origins", mode="before")
     @classmethod

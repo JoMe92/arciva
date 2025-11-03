@@ -1,8 +1,8 @@
 import React, { useMemo, useRef, useEffect, useState, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { TOKENS } from './utils'
-import { listProjectAssets, assetThumbUrl, updateAssetPreview, type AssetListItem } from '../../shared/api/assets'
+import { listProjectAssets, assetThumbUrl, updateAssetPreview, getAsset, type AssetListItem, type AssetDetail } from '../../shared/api/assets'
 import { initUpload, putUpload, completeUpload } from '../../shared/api/uploads'
 import { placeholderRatioForAspect } from '../../shared/placeholder'
 import type { Photo, ImgType, ColorTag } from './types'
@@ -41,6 +41,7 @@ function mapAssetToPhoto(item: AssetListItem, existing?: Photo): Photo {
     placeholderRatio,
     isPreview,
     previewOrder: typeof item.preview_order === 'number' ? item.preview_order : existing?.previewOrder ?? null,
+    metadataWarnings: Array.isArray(item.metadata_warnings) ? item.metadata_warnings : existing?.metadataWarnings ?? [],
   }
 }
 
@@ -306,6 +307,25 @@ export default function ProjectWorkspace() {
   const dateTree = useMemo(() => buildDateTree(photos), [photos])
 
   const currentPhoto = visible[current] ?? null
+  const currentAssetId = currentPhoto?.id ?? null
+  const {
+    data: currentAssetDetail,
+    isFetching: assetDetailFetching,
+    error: assetDetailError,
+  } = useQuery<AssetDetail>({
+    queryKey: ['asset-detail', currentAssetId],
+    queryFn: () => getAsset(currentAssetId as string),
+    enabled: Boolean(currentAssetId),
+    staleTime: 1000 * 60 * 5,
+  })
+  const metadataEntries = useMemo(() => {
+    if (!currentAssetDetail?.metadata) return []
+    return Object.entries(currentAssetDetail.metadata)
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([key, value]) => ({ key, value }))
+  }, [currentAssetDetail?.metadata])
+  const metadataWarnings = currentAssetDetail?.metadata_warnings ?? currentPhoto?.metadataWarnings ?? []
+
   const hasAny = photos.length > 0
 
   useEffect(() => {
@@ -402,6 +422,17 @@ export default function ProjectWorkspace() {
               <Row label="Name" value={currentPhoto.name} />
               <Row label="Type" value={currentPhoto.type} />
               <Row label="Date" value={new Date(currentPhoto.date).toLocaleDateString()} />
+              <Row
+                label="Size"
+                value={
+                  assetDetailFetching && !currentAssetDetail
+                    ? 'Loading…'
+                    : currentAssetDetail
+                      ? formatBytes(currentAssetDetail.size_bytes)
+                      : '—'
+                }
+              />
+              <Row label="Dimensions" value={formatDimensions(currentAssetDetail?.width, currentAssetDetail?.height)} />
               <Row label="Rating" value={`${currentPhoto.rating}★`} />
               <Row label="Flag" value={currentPhoto.picked ? 'Picked' : '—'} />
               <Row label="Rejected" value={currentPhoto.rejected ? 'Yes' : 'No'} />
@@ -420,6 +451,12 @@ export default function ProjectWorkspace() {
                   <p className="text-[10px] text-[#B42318]">{pickError}</p>
                 ) : null}
               </div>
+              <MetadataSummary
+                entries={metadataEntries}
+                warnings={metadataWarnings}
+                loading={Boolean(currentAssetId) && assetDetailFetching}
+                error={assetDetailError}
+              />
             </div>
           ) : (
             <div className="text-[var(--text-muted,#6B645B)]">No selection</div>
@@ -446,6 +483,55 @@ function Row({ label, value }: { label: string; value: string }) {
     <div className="flex items-center justify-between border-b border-[var(--border,#E1D3B9)] py-1">
       <span className="text-[var(--text-muted,#6B645B)]">{label}</span>
       <span className="font-mono text-[11px]">{value}</span>
+    </div>
+  )
+}
+
+function MetadataSummary({
+  entries,
+  warnings,
+  loading,
+  error,
+}: {
+  entries: { key: string; value: unknown }[]
+  warnings: string[]
+  loading: boolean
+  error: unknown
+}) {
+  const hasEntries = entries.length > 0
+  const errorMessage = error instanceof Error ? error.message : typeof error === 'string' ? error : null
+
+  return (
+    <div className="mt-4 space-y-2 rounded border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-3">
+      <div className="flex items-center justify-between text-[11px] uppercase tracking-wide text-[var(--text-muted,#6B645B)]">
+        <span>Metadata</span>
+        {loading ? <span className="text-[var(--text-muted,#6B645B)] normal-case">Loading…</span> : null}
+      </div>
+      {errorMessage ? <p className="text-[10px] text-[#B42318]">{errorMessage}</p> : null}
+      {warnings.length ? (
+        <ul className="space-y-1 text-[10px] text-[#B45309]">
+          {warnings.map((warning) => (
+            <li key={warning} className="flex items-center gap-2">
+              <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-[#F59E0B] text-[#B45309]">!</span>
+              <span className="truncate">{warning}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {hasEntries ? (
+        <div className="max-h-64 overflow-auto rounded border border-[var(--border,#E1D3B9)]">
+          <div className="divide-y divide-[var(--border,#E1D3B9)]">
+            {entries.map(({ key, value }) => (
+              <div key={key} className="grid grid-cols-[minmax(0,0.55fr)_minmax(0,1fr)] gap-3 px-3 py-1.5">
+                <div className="font-mono text-[10px] text-[var(--text-muted,#6B645B)] break-words">{key}</div>
+                <div className="text-[11px] text-[var(--text,#1F1E1B)] break-words">{formatMetadataValue(value)}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : !loading && !errorMessage ? (
+        <p className="text-[11px] text-[var(--text-muted,#6B645B)]">No metadata available for this asset.</p>
+      ) : null}
     </div>
   )
 }
@@ -494,10 +580,42 @@ function formatBytes(size: number): string {
   return `${value.toFixed(value >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`
 }
 
+function formatDimensions(width?: number | null, height?: number | null): string {
+  if (!width || !height) return '—'
+  return `${width}×${height}`
+}
+
+function formatMetadataValue(input: unknown): string {
+  if (input === null || input === undefined) return '—'
+  if (Array.isArray(input)) {
+    if (input.length === 0) return '[]'
+    return input.map((item) => formatMetadataValue(item)).join(', ')
+  }
+  if (typeof input === 'object') {
+    try {
+      return JSON.stringify(input)
+    } catch {
+      return '[object]'
+    }
+  }
+  if (typeof input === 'boolean') {
+    return input ? 'true' : 'false'
+  }
+  return String(input)
+}
+
 type LocalFileDescriptor = {
   file: File
   folder: string
   relativePath?: string
+}
+
+type LocalQueueProgress = {
+  active: boolean
+  totalFiles: number
+  processedFiles: number
+  totalBytes: number
+  processedBytes: number
 }
 
 type PendingItem = {
@@ -959,6 +1077,17 @@ function ImportSheet({
   const localPreviewUrlsRef = useRef<string[]>([])
   const dragDepthRef = useRef(0)
   const [isDragging, setIsDragging] = useState(false)
+  const localDescriptorQueueRef = useRef<LocalFileDescriptor[]>([])
+  const localDescriptorProcessingRef = useRef(false)
+  const localDescriptorTaskRef = useRef<number | null>(null)
+  const localDescriptorRunTokenRef = useRef(0)
+  const [localQueueProgress, setLocalQueueProgress] = useState<LocalQueueProgress>({
+    active: false,
+    totalFiles: 0,
+    processedFiles: 0,
+    totalBytes: 0,
+    processedBytes: 0,
+  })
 
   const derivedDest = folderMode === 'date' ? 'YYYY/MM/DD' : customFolder.trim() || 'Custom'
   const [uploadDestination, setUploadDestination] = useState(derivedDest)
@@ -989,6 +1118,13 @@ function ImportSheet({
   }, [])
 
   useEffect(() => () => {
+    if (localDescriptorTaskRef.current !== null) {
+      window.clearTimeout(localDescriptorTaskRef.current)
+      localDescriptorTaskRef.current = null
+    }
+    localDescriptorQueueRef.current = []
+    localDescriptorProcessingRef.current = false
+    localDescriptorRunTokenRef.current += 1
     localPreviewUrlsRef.current.forEach((url) => URL.revokeObjectURL(url))
     localPreviewUrlsRef.current = []
   }, [])
@@ -1085,7 +1221,33 @@ function ImportSheet({
     return ids.map((id) => HUB_DATA.nodeMap.get(id)?.name).filter(Boolean) as string[]
   }, [hubSelected])
 
-  const canSubmit = !isUploadMode && selectedItems.length > 0
+  const localQueuePercent = useMemo(() => {
+    if (localQueueProgress.totalBytes > 0) {
+      return Math.max(0, Math.min(100, Math.round((localQueueProgress.processedBytes / localQueueProgress.totalBytes) * 100)))
+    }
+    if (localQueueProgress.totalFiles > 0) {
+      return Math.max(0, Math.min(100, Math.round((localQueueProgress.processedFiles / localQueueProgress.totalFiles) * 100)))
+    }
+    return 0
+  }, [localQueueProgress])
+
+  const localQueueDetails = useMemo(() => {
+    const pieces: string[] = []
+    if (localQueueProgress.totalFiles > 0) {
+      pieces.push(`${localQueueProgress.processedFiles}/${localQueueProgress.totalFiles} files`)
+    }
+    if (localQueueProgress.totalBytes > 0) {
+      pieces.push(`${formatBytes(localQueueProgress.processedBytes)} of ${formatBytes(localQueueProgress.totalBytes)}`)
+    }
+    if (localQueuePercent > 0) {
+      pieces.push(`${localQueuePercent}%`)
+    }
+    return pieces.join(' • ')
+  }, [localQueuePercent, localQueueProgress])
+
+  const canSubmit = !isUploadMode
+    && selectedItems.length > 0
+    && !(isLocalMode && localQueueProgress.active)
 
   useEffect(() => {
     if (mode !== 'local') {
@@ -1116,12 +1278,95 @@ function ImportSheet({
     })).sort((a, b) => a.folder.localeCompare(b.folder))
   }, [localItems])
 
+  function processLocalDescriptorQueue() {
+    if (localDescriptorProcessingRef.current) return
+    localDescriptorProcessingRef.current = true
+    const runToken = localDescriptorRunTokenRef.current
+    const batchSize = 32
+
+    const runBatch = () => {
+      if (localDescriptorRunTokenRef.current !== runToken) {
+        localDescriptorProcessingRef.current = false
+        localDescriptorTaskRef.current = null
+        return
+      }
+
+      const chunk = localDescriptorQueueRef.current.splice(0, batchSize)
+      if (!chunk.length) {
+        localDescriptorProcessingRef.current = false
+        localDescriptorTaskRef.current = null
+        setLocalQueueProgress((prev) => {
+          if (!prev.active) return prev
+          return {
+            ...prev,
+            active: false,
+            processedFiles: prev.totalFiles,
+            processedBytes: prev.totalBytes,
+          }
+        })
+        return
+      }
+
+      const newItems = makeLocalPendingItems(chunk)
+      const newUrls = newItems.map((item) => item.previewUrl).filter((url): url is string => Boolean(url))
+      if (newUrls.length) {
+        localPreviewUrlsRef.current = [...localPreviewUrlsRef.current, ...newUrls]
+      }
+      setLocalItems((prev) => [...prev, ...newItems])
+
+      const chunkBytes = chunk.reduce((acc, descriptor) => acc + descriptor.file.size, 0)
+      setLocalQueueProgress((prev) => {
+        if (!prev.active) return prev
+        const processedFiles = Math.min(prev.totalFiles, prev.processedFiles + chunk.length)
+        const processedBytes = Math.min(prev.totalBytes, prev.processedBytes + chunkBytes)
+        return {
+          ...prev,
+          processedFiles,
+          processedBytes,
+        }
+      })
+
+      if (localDescriptorQueueRef.current.length) {
+        localDescriptorTaskRef.current = window.setTimeout(runBatch, 16)
+      } else {
+        localDescriptorProcessingRef.current = false
+        localDescriptorTaskRef.current = null
+        setLocalQueueProgress((prev) => {
+          if (!prev.active) return prev
+          return {
+            ...prev,
+            active: false,
+            processedFiles: prev.totalFiles,
+            processedBytes: prev.totalBytes,
+          }
+        })
+      }
+    }
+
+    runBatch()
+  }
+
   function appendLocalDescriptors(descriptors: LocalFileDescriptor[]) {
     if (!descriptors.length) return
-    const newItems = makeLocalPendingItems(descriptors)
-    const newUrls = newItems.map((item) => item.previewUrl).filter((url): url is string => Boolean(url))
-    if (newUrls.length) localPreviewUrlsRef.current = [...localPreviewUrlsRef.current, ...newUrls]
-    setLocalItems((prev) => [...prev, ...newItems])
+    const addedBytes = descriptors.reduce((acc, descriptor) => acc + descriptor.file.size, 0)
+    localDescriptorQueueRef.current.push(...descriptors)
+    setLocalQueueProgress((prev) => {
+      if (prev.active) {
+        return {
+          ...prev,
+          totalFiles: prev.totalFiles + descriptors.length,
+          totalBytes: prev.totalBytes + addedBytes,
+        }
+      }
+      return {
+        active: true,
+        totalFiles: descriptors.length,
+        processedFiles: 0,
+        totalBytes: addedBytes,
+        processedBytes: 0,
+      }
+    })
+    processLocalDescriptorQueue()
   }
 
   function startLocalFlow() {
@@ -1186,6 +1431,20 @@ function ImportSheet({
   }
 
   function clearLocalSelection() {
+    if (localDescriptorTaskRef.current !== null) {
+      window.clearTimeout(localDescriptorTaskRef.current)
+      localDescriptorTaskRef.current = null
+    }
+    localDescriptorQueueRef.current = []
+    localDescriptorProcessingRef.current = false
+    localDescriptorRunTokenRef.current += 1
+    setLocalQueueProgress({
+      active: false,
+      totalFiles: 0,
+      processedFiles: 0,
+      totalBytes: 0,
+      processedBytes: 0,
+    })
     localPreviewUrlsRef.current.forEach((url) => URL.revokeObjectURL(url))
     localPreviewUrlsRef.current = []
     setLocalItems([])
@@ -1563,6 +1822,20 @@ function ImportSheet({
                     <button type="button" onClick={() => folderInputRef.current?.click()} className="rounded-md border border-[var(--border,#E1D3B9)] px-3 py-2">Choose folder…</button>
                   </div>
                   <div className="mt-3 text-xs text-[var(--text-muted,#6B645B)]">Or just drag & drop files and folders here.</div>
+                  {localQueueProgress.active && (
+                    <div role="status" aria-live="polite" className="mt-4 flex w-full max-w-[260px] flex-col items-center gap-2 rounded-md border border-[var(--border,#E1D3B9)] bg-white/90 px-3 py-2 text-center text-[11px] text-[var(--text,#1F1E1B)]">
+                      <div className="flex items-center justify-center gap-2 font-medium">
+                        <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border border-[var(--charcoal-800,#1F1E1B)] border-b-transparent" aria-hidden />
+                        Preparing files…
+                      </div>
+                      {localQueueDetails && (
+                        <div className="text-[10px] text-[var(--text-muted,#6B645B)]">{localQueueDetails}</div>
+                      )}
+                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--sand-100,#F3EBDD)]">
+                        <div className="h-full rounded-full bg-[var(--charcoal-800,#1F1E1B)] transition-[width]" style={{ width: `${localQueuePercent}%` }} />
+                      </div>
+                    </div>
+                  )}
                   {isDragging && (
                     <div className="mt-4 rounded-md border border-dashed border-[var(--charcoal-800,#1F1E1B)] bg-white/80 px-3 py-2 text-xs font-medium text-[var(--charcoal-800,#1F1E1B)]">
                       Drop to add {mode === 'local' ? 'to your selection' : 'and review before importing'}.

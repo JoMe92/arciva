@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime, timezone
+from io import BytesIO
 from pathlib import Path
 from typing import Any, Iterable, List, Optional, Tuple
 from uuid import UUID
@@ -18,6 +19,7 @@ from backend.app.imaging import make_thumb, read_exif, sha256_file
 from backend.app.logging_utils import setup_logging
 from backend.app.storage import PosixStorage
 from backend.app.schema_utils import ensure_asset_metadata_column
+from backend.app.services.raw_reader import RawReadResult, RawReaderService
 
 SETTINGS = get_settings()
 setup_logging(SETTINGS.logs_dir)
@@ -30,6 +32,8 @@ DERIVATIVE_PRESETS: list[Tuple[str, int]] = [
     ("thumb_1024", 1024),
 ]
 
+RAW_READER = RawReaderService()
+
 
 async def _sha256_async(path: Path) -> str:
     return await asyncio.to_thread(sha256_file, path)
@@ -39,8 +43,8 @@ async def _read_exif_async(path: Path) -> tuple[Optional[datetime], Tuple[Option
     return await asyncio.to_thread(read_exif, path)
 
 
-async def _make_derivative_async(path: Path, size: int):
-    return await asyncio.to_thread(make_thumb, path, size)
+async def _make_derivative_async(path: Optional[Path], size: int, *, image_bytes: bytes | None = None):
+    return await asyncio.to_thread(make_thumb, path, size, image_bytes=image_bytes)
 
 
 def _warnings_to_text(warnings: Iterable[str]) -> str | None:
@@ -52,6 +56,45 @@ def _warnings_from_text(data: str | None) -> List[str]:
     if not data:
         return []
     return [entry for entry in data.split("\n") if entry]
+
+
+def _merge_metadata(
+    existing: dict[str, Any] | None, addition: dict[str, Any]
+) -> dict[str, Any]:
+    """
+    Merge ``addition`` into ``existing`` while preserving nested dictionaries.
+
+    Parameters
+    ----------
+    existing : dict[str, Any] | None
+        Previously collected metadata payload.
+    addition : dict[str, Any]
+        Metadata gathered from supplemental sources.
+
+    Returns
+    -------
+    dict[str, Any]
+        Combined metadata dictionary.
+    """
+
+    merged: dict[str, Any] = {}
+    if isinstance(existing, dict):
+        merged.update(existing)
+    elif existing is not None:
+        merged["legacy_metadata"] = existing
+
+    for key, value in addition.items():
+        if (
+            key in merged
+            and isinstance(merged[key], dict)
+            and isinstance(value, dict)
+        ):
+            nested = dict(merged[key])
+            nested.update(value)
+            merged[key] = nested
+        else:
+            merged[key] = value
+    return merged
 
 
 async def ingest_asset(ctx, asset_id: str):
@@ -150,6 +193,33 @@ async def ingest_asset(ctx, asset_id: str):
             height = asset.height
             metadata_payload = getattr(asset, "metadata_json", None)
             warnings: List[str] = []
+            raw_result: RawReadResult | None = None
+            raw_metadata: dict[str, Any] | None = None
+            raw_preview_bytes: bytes | None = None
+
+            is_raw_candidate = RAW_READER.supports(Path(asset.original_filename)) or RAW_READER.supports(source_path)
+            if is_raw_candidate:
+                try:
+                    raw_result = await asyncio.to_thread(RAW_READER.read, source_path)
+                except Exception:  # pragma: no cover - best effort protection
+                    logger.exception("ingest_asset: raw reader failed asset=%s", asset_id)
+                    warnings.append("RAW_PREVIEW_ERROR")
+                else:
+                    if raw_result.warnings:
+                        warnings.extend(raw_result.warnings)
+                    raw_metadata = raw_result.metadata or None
+                    raw_preview_bytes = raw_result.preview_bytes
+                    if width is None and raw_result.preview_width is not None:
+                        width = raw_result.preview_width
+                    if height is None and raw_result.preview_height is not None:
+                        height = raw_result.preview_height
+                    if raw_preview_bytes:
+                        logger.info(
+                            "ingest_asset: raw preview extracted asset=%s thumb_size=%sx%s",
+                            asset_id,
+                            raw_result.preview_width,
+                            raw_result.preview_height,
+                        )
 
             try:
                 exif_taken_at, dims, exif_metadata, exif_warnings = await _read_exif_async(source_path)
@@ -171,6 +241,23 @@ async def ingest_asset(ctx, asset_id: str):
             if taken_at is None:
                 warnings.append("EXIF_UNAVAILABLE")
 
+            if raw_metadata:
+                base_metadata = metadata_payload if isinstance(metadata_payload, dict) else None
+                metadata_payload = _merge_metadata(base_metadata, raw_metadata)
+
+            if (width is None or height is None) and raw_preview_bytes:
+                try:
+                    from PIL import Image, ImageOps
+
+                    def _preview_size() -> tuple[int, int]:
+                        with Image.open(BytesIO(raw_preview_bytes)) as im:
+                            im = ImageOps.exif_transpose(im)
+                            return im.size
+
+                    width, height = await asyncio.to_thread(_preview_size)
+                except Exception:  # pragma: no cover - best effort
+                    logger.exception("ingest_asset: raw preview size failed asset=%s", asset_id)
+
             if (width is None or height is None) and source_path.exists():
                 try:
                     from PIL import Image, ImageOps
@@ -186,8 +273,23 @@ async def ingest_asset(ctx, asset_id: str):
 
             derivative_failures: List[str] = []
             for variant, size in DERIVATIVE_PRESETS:
+                if raw_result is not None and raw_preview_bytes is None:
+                    logger.warning(
+                        "ingest_asset: derivative %s skipped (no RAW preview) asset=%s",
+                        variant,
+                        asset_id,
+                    )
+                    derivative_failures.append(f"DERIVATIVE_{variant.upper()}_FAILED")
+                    continue
                 try:
-                    blob, dims = await _make_derivative_async(source_path, size)
+                    if raw_preview_bytes is not None:
+                        blob, dims = await _make_derivative_async(
+                            None,
+                            size,
+                            image_bytes=raw_preview_bytes,
+                        )
+                    else:
+                        blob, dims = await _make_derivative_async(source_path, size)
                 except Exception as exc:  # pragma: no cover
                     logger.exception("ingest_asset: derivative %s failed asset=%s", variant, asset_id)
                     derivative_failures.append(f"DERIVATIVE_{variant.upper()}_FAILED")

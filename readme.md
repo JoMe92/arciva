@@ -45,9 +45,10 @@ Add your UI screenshots here. Example:
 
 ## Features
 - Create/edit projects (title, client, notes)
-- High‑speed ingest with background processing
-- Global library & cross‑project import (no re‑upload)
+- High-speed ingest with background processing
+- Global library & cross-project import (no re-upload)
 - Thumbnails/previews (sRGB) in multiple sizes
+- RAW ingest support (embedded thumbnails + metadata via rawpy)
 - Stable IDs (UUID) and reliable timestamps
 
 Planned next: ratings/flags, quick filters, shareable previews, multi‑user auth.

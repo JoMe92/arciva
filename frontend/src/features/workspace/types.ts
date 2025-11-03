@@ -16,4 +16,5 @@ export type Photo = {
   placeholderRatio: PlaceholderRatio
   isPreview: boolean
   previewOrder: number | null
+  metadataWarnings: string[]
 }

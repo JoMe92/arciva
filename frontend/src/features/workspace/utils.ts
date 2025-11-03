@@ -40,6 +40,7 @@ export function makeDemo(n = 24) {
       placeholderRatio: ratio,
       isPreview: false,
       previewOrder: null,
+      metadataWarnings: [],
     })
   }
   return out

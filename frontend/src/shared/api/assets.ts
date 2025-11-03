@@ -18,6 +18,35 @@ export type AssetListItem = {
   preview_order?: number | null
 }
 
+export type AssetDerivative = {
+  variant: string
+  width: number
+  height: number
+  url: string
+}
+
+export type AssetDetail = {
+  id: string
+  status: string
+  original_filename: string
+  mime: string
+  size_bytes: number
+  width?: number | null
+  height?: number | null
+  taken_at?: string | null
+  storage_key?: string | null
+  sha256?: string | null
+  reference_count: number
+  queued_at?: string | null
+  processing_started_at?: string | null
+  completed_at?: string | null
+  last_error?: string | null
+  metadata_warnings?: string[]
+  thumb_url?: string | null
+  derivatives: AssetDerivative[]
+  metadata?: Record<string, unknown> | null
+}
+
 type LinkResponse = {
   linked: number
   duplicates: number
@@ -49,6 +78,16 @@ export async function linkAssetsToProject(projectId: string, assetIds: string[])
     throw new Error(await res.text())
   }
   return (await res.json()) as LinkResponse
+}
+
+export async function getAsset(assetId: string): Promise<AssetDetail> {
+  const res = await fetch(withBase(`/v1/assets/${assetId}`)!, {
+    credentials: 'include',
+  })
+  if (!res.ok) {
+    throw new Error(await res.text())
+  }
+  return (await res.json()) as AssetDetail
 }
 
 export async function updateAssetPreview(

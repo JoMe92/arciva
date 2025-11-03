@@ -1,4 +1,6 @@
+import asyncio
 from datetime import datetime, timezone
+from pathlib import Path
 import logging
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,8 +10,9 @@ from fastapi.responses import FileResponse
 from ..db import get_db
 from .. import models, schemas
 from ..storage import PosixStorage
+from ..imaging import read_exif
 from ..deps import get_settings
-from ..schema_utils import ensure_preview_columns
+from ..schema_utils import ensure_preview_columns, ensure_asset_metadata_column
 
 
 def _warnings_from_text(data: str | None) -> list[str]:
@@ -75,13 +78,89 @@ async def _asset_detail(
         metadata_warnings=_warnings_from_text(asset.metadata_warnings),
         thumb_url=thumb_url,
         derivatives=derivatives,
+        metadata=getattr(asset, "metadata_json", None),
     )
+
+
+async def _ensure_asset_metadata_populated(
+    asset: models.Asset,
+    db: AsyncSession,
+    storage: PosixStorage,
+) -> None:
+    source_path: Path | None = None
+    if asset.storage_key:
+        candidate = Path(asset.storage_key)
+        if candidate.exists():
+            source_path = candidate
+
+    if source_path is None and asset.sha256:
+        ext = Path(asset.original_filename or "").suffix
+        if not ext and asset.mime:
+            if asset.mime == "image/jpeg":
+                ext = ".jpg"
+            elif asset.mime == "image/png":
+                ext = ".png"
+            elif asset.mime == "image/heic":
+                ext = ".heic"
+            else:
+                ext = ""
+        if ext and not ext.startswith("."):
+            ext = f".{ext}"
+        if asset.sha256:
+            candidate = storage.originals / f"{asset.sha256}{ext or ''}"
+            if candidate.exists():
+                source_path = candidate
+
+    if source_path is None or not source_path.exists():
+        return
+
+    try:
+        taken_at, (width, height), metadata, warnings = await asyncio.to_thread(read_exif, source_path)
+    except Exception:  # pragma: no cover - best effort
+        logger.exception("ensure_asset_metadata_populated: read_exif failed asset=%s", asset.id)
+        return
+
+    changed = False
+    existing = _warnings_from_text(asset.metadata_warnings)
+
+    if metadata and metadata != getattr(asset, "metadata_json", None):
+        asset.metadata_json = metadata
+        changed = True
+
+    if taken_at and not asset.taken_at:
+        asset.taken_at = taken_at
+        changed = True
+
+    if width and not asset.width:
+        asset.width = width
+        changed = True
+    if height and not asset.height:
+        asset.height = height
+        changed = True
+
+    if metadata:
+        existing = [w for w in existing if w not in {"EXIFTOOL_NOT_INSTALLED", "EXIF_ERROR"}]
+
+    combined = list(existing)
+    for warning in warnings:
+        if warning and warning not in combined:
+            combined.append(warning)
+
+    combined_text = "\n".join(combined) if combined else None
+    if (asset.metadata_warnings or None) != combined_text:
+        asset.metadata_warnings = combined_text
+        changed = True
+
+    if changed:
+        await db.commit()
+        await db.refresh(asset)
 
 router = APIRouter(prefix="/v1", tags=["assets"])
 logger = logging.getLogger("nivio.assets")
 
 @router.get("/projects/{project_id}/assets", response_model=list[schemas.AssetListItem])
 async def list_assets(project_id: UUID, limit: int = 50, db: AsyncSession = Depends(get_db)):
+    await ensure_asset_metadata_column(db)
     await ensure_preview_columns(db)
     # list latest by added_at
     q = (
@@ -119,17 +198,20 @@ async def list_assets(project_id: UUID, limit: int = 50, db: AsyncSession = Depe
 
 @router.get("/assets/{asset_id}", response_model=schemas.AssetDetail)
 async def get_asset(asset_id: UUID, db: AsyncSession = Depends(get_db)):
+    await ensure_asset_metadata_column(db)
     asset = (
         await db.execute(select(models.Asset).where(models.Asset.id == asset_id))
     ).scalar_one_or_none()
     if not asset:
         raise HTTPException(404, "asset not found")
     storage = PosixStorage.from_env()
+    await _ensure_asset_metadata_populated(asset, db, storage)
     return await _asset_detail(asset, db, storage)
 
 
 @router.post("/assets/{asset_id}/reprocess", response_model=schemas.AssetDetail)
 async def reprocess_asset(asset_id: UUID, db: AsyncSession = Depends(get_db)):
+    await ensure_asset_metadata_column(db)
     asset = (
         await db.execute(select(models.Asset).where(models.Asset.id == asset_id))
     ).scalar_one_or_none()
@@ -147,7 +229,13 @@ async def reprocess_asset(asset_id: UUID, db: AsyncSession = Depends(get_db)):
     settings = get_settings()
     try:
         from arq.connections import RedisSettings, ArqRedis  # local import for optional dependency
-        redis = await ArqRedis.create(RedisSettings.from_dsn(settings.redis_url))
+        redis_settings = RedisSettings.from_dsn(settings.redis_url)
+        redis = None
+        try:
+            redis = await ArqRedis.create(redis_settings)  # type: ignore[attr-defined]
+        except AttributeError:
+            from arq.connections import create_pool  # type: ignore
+            redis = await create_pool(redis_settings)
         await redis.enqueue_job("ingest_asset", str(asset.id))
     except Exception as exc:  # pragma: no cover
         asset.status = models.AssetStatus.ERROR
@@ -156,7 +244,10 @@ async def reprocess_asset(asset_id: UUID, db: AsyncSession = Depends(get_db)):
         raise HTTPException(503, "failed to enqueue ingest job")
     finally:
         if "redis" in locals():
-            await redis.close(close_connection_pool=True)
+            try:
+                await redis.close(close_connection_pool=True)
+            except TypeError:
+                await redis.close()
 
     storage = PosixStorage.from_env()
     return await _asset_detail(asset, db, storage)
@@ -169,6 +260,7 @@ async def get_thumb(asset_id: UUID, db: AsyncSession = Depends(get_db)):
 
 @router.get("/assets/{asset_id}/derivatives/{variant}")
 async def get_derivative(asset_id: UUID, variant: str, db: AsyncSession = Depends(get_db)):
+    await ensure_asset_metadata_column(db)
     asset = (
         await db.execute(select(models.Asset).where(models.Asset.id == asset_id))
     ).scalar_one_or_none()
@@ -187,6 +279,7 @@ async def link_existing_assets(
     body: schemas.ProjectAssetsLinkIn,
     db: AsyncSession = Depends(get_db),
 ):
+    await ensure_asset_metadata_column(db)
     await ensure_preview_columns(db)
     # validate project
     proj = (
@@ -303,6 +396,7 @@ async def update_preview_flag(
     body: schemas.ProjectAssetPreviewUpdate,
     db: AsyncSession = Depends(get_db),
 ):
+    await ensure_asset_metadata_column(db)
     await ensure_preview_columns(db)
     link = (
         await db.execute(

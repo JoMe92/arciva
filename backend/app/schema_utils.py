@@ -14,6 +14,8 @@ logger = logging.getLogger("nivio.schema")
 
 _preview_columns_ready = False
 _preview_columns_lock = asyncio.Lock()
+_asset_metadata_ready = False
+_asset_metadata_lock = asyncio.Lock()
 
 
 def _build_statements(existing: Iterable[str]) -> list[str]:
@@ -70,3 +72,50 @@ async def ensure_preview_columns(_: AsyncSession | None = None) -> None:
 
         _preview_columns_ready = True
         logger.info("ensure_preview_columns: preview columns ready")
+
+
+async def ensure_asset_metadata_column(_: AsyncSession | None = None) -> None:
+    """
+    Lazily ensure the optional metadata_json column exists on assets.
+    """
+    global _asset_metadata_ready
+    if _asset_metadata_ready:
+        return
+
+    async with _asset_metadata_lock:
+        if _asset_metadata_ready:
+            return
+
+        try:
+            async with async_engine.begin() as conn:
+                column_present = False
+                if conn.dialect.name == "sqlite":
+                    pragma = await conn.execute(text("PRAGMA table_info('assets')"))
+                    column_present = any(row[1] == "metadata_json" for row in pragma)
+                else:
+                    result = await conn.execute(
+                        text(
+                            """
+                            SELECT column_name
+                            FROM information_schema.columns
+                            WHERE table_name = 'assets'
+                              AND column_name = 'metadata_json'
+                            """
+                        )
+                    )
+                    column_present = result.first() is not None
+
+                if not column_present:
+                    stmt = (
+                        "ALTER TABLE assets ADD COLUMN IF NOT EXISTS metadata_json JSON"
+                        if conn.dialect.name == "sqlite"
+                        else "ALTER TABLE assets ADD COLUMN IF NOT EXISTS metadata_json JSONB"
+                    )
+                    logger.info("ensure_asset_metadata_column: applying %s", stmt)
+                    await conn.execute(text(stmt))
+        except SQLAlchemyError:
+            logger.exception("ensure_asset_metadata_column: failed to apply schema patch")
+            raise
+
+        _asset_metadata_ready = True
+        logger.info("ensure_asset_metadata_column: metadata column ready")

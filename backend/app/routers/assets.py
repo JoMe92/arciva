@@ -30,6 +30,15 @@ def _thumb_url(asset: models.Asset, storage: PosixStorage) -> str | None:
     return None
 
 
+def _preview_url(asset: models.Asset, storage: PosixStorage) -> str | None:
+    if not asset.sha256:
+        return None
+    path = storage.derivative_path(asset.sha256, "preview_raw", "jpg")
+    if path.exists():
+        return f"/v1/assets/{asset.id}/preview"
+    return None
+
+
 async def _collect_derivatives(
     asset: models.Asset,
     db: AsyncSession,
@@ -58,6 +67,7 @@ async def _asset_detail(
     storage: PosixStorage,
 ) -> schemas.AssetDetail:
     thumb_url = _thumb_url(asset, storage)
+    preview_url = _preview_url(asset, storage)
     derivatives = await _collect_derivatives(asset, db)
     return schemas.AssetDetail(
         id=asset.id,
@@ -77,6 +87,7 @@ async def _asset_detail(
         last_error=asset.last_error,
         metadata_warnings=_warnings_from_text(asset.metadata_warnings),
         thumb_url=thumb_url,
+        preview_url=preview_url,
         derivatives=derivatives,
         metadata=getattr(asset, "metadata_json", None),
     )
@@ -175,12 +186,14 @@ async def list_assets(project_id: UUID, limit: int = 50, db: AsyncSession = Depe
     items: list[schemas.AssetListItem] = []
     for asset, project_asset in rows:
         thumb = _thumb_url(asset, storage)
+        preview = _preview_url(asset, storage)
         items.append(
             schemas.AssetListItem(
                 id=asset.id,
                 status=schemas.AssetStatus(asset.status.value),
                 taken_at=asset.taken_at,
                 thumb_url=thumb,
+                preview_url=preview,
                 original_filename=asset.original_filename,
                 size_bytes=asset.size_bytes,
                 last_error=asset.last_error,
@@ -256,6 +269,11 @@ async def reprocess_asset(asset_id: UUID, db: AsyncSession = Depends(get_db)):
 @router.get("/assets/{asset_id}/thumbs/256")
 async def get_thumb(asset_id: UUID, db: AsyncSession = Depends(get_db)):
     return await get_derivative(asset_id, "thumb_256", db)
+
+
+@router.get("/assets/{asset_id}/preview")
+async def get_preview(asset_id: UUID, db: AsyncSession = Depends(get_db)):
+    return await get_derivative(asset_id, "preview_raw", db)
 
 
 @router.get("/assets/{asset_id}/derivatives/{variant}")
@@ -367,6 +385,7 @@ async def link_existing_assets(
             status=schemas.AssetStatus(a.status.value),
             taken_at=a.taken_at,
             thumb_url=_thumb_url(a, storage),
+            preview_url=_preview_url(a, storage),
             original_filename=a.original_filename,
             size_bytes=a.size_bytes,
             last_error=a.last_error,
@@ -490,12 +509,14 @@ async def update_preview_flag(
 
     storage = PosixStorage.from_env()
     thumb_url = _thumb_url(asset, storage)
+    preview_url = _preview_url(asset, storage)
 
     return schemas.AssetListItem(
         id=asset.id,
         status=schemas.AssetStatus(asset.status.value),
         taken_at=asset.taken_at,
         thumb_url=thumb_url,
+        preview_url=preview_url,
         original_filename=asset.original_filename,
         size_bytes=asset.size_bytes,
         last_error=asset.last_error,

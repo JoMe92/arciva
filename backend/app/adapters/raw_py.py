@@ -10,8 +10,11 @@ embedded thumbnails.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from io import BytesIO
 from pathlib import Path
 from typing import Any, Optional
+
+from PIL import Image
 
 try:  # pragma: no cover - import guarded for environments without rawpy
     import rawpy
@@ -72,6 +75,12 @@ class RawPyReadResult:
         Numeric RAW type identifier from LibRaw.
     thumbnail : Optional[RawPyThumbnail]
         Embedded thumbnail details when available.
+    preview_jpeg : Optional[bytes]
+        JPEG bytes rendered from the RAW image when no embedded thumbnail exists.
+    preview_width : Optional[int]
+        Width derived from the rendered preview.
+    preview_height : Optional[int]
+        Height derived from the rendered preview.
     """
 
     width: Optional[int]
@@ -82,6 +91,9 @@ class RawPyReadResult:
     color_description: Optional[str]
     raw_type: Optional[int]
     thumbnail: Optional[RawPyThumbnail]
+    preview_jpeg: Optional[bytes]
+    preview_width: Optional[int]
+    preview_height: Optional[int]
 
 
 class RawPyAdapter:
@@ -127,6 +139,14 @@ class RawPyAdapter:
                 color_desc = self._decode_bytes(getattr(raw, "color_desc", b""))
                 raw_type = self._to_int(getattr(raw, "raw_type", None))
                 thumbnail = self._extract_thumbnail(raw)
+                preview_jpeg: Optional[bytes] = None
+                preview_width: Optional[int] = None
+                preview_height: Optional[int] = None
+                needs_render = thumbnail is None or (
+                    thumbnail is not None and thumbnail.format != "jpeg"
+                )
+                if needs_render:
+                    preview_jpeg, preview_width, preview_height = self._render_preview(raw)
         except rawpy.LibRawError as exc:  # pragma: no cover - passthrough for envs without RAWs
             raise RawPyAdapterError(str(exc)) from exc
 
@@ -139,6 +159,9 @@ class RawPyAdapter:
             color_description=color_desc,
             raw_type=raw_type,
             thumbnail=thumbnail,
+            preview_jpeg=preview_jpeg,
+            preview_width=preview_width,
+            preview_height=preview_height,
         )
 
     @staticmethod
@@ -215,3 +238,45 @@ class RawPyAdapter:
         if not data:
             return None
         return RawPyThumbnail(format=thumb_format, data=data, width=width, height=height)
+
+    def _render_preview(self, raw: Any) -> tuple[Optional[bytes], Optional[int], Optional[int]]:
+        """
+        Render a JPEG preview by post-processing the RAW when no thumbnail exists.
+
+        Parameters
+        ----------
+        raw : Any
+            ``rawpy`` RAW object already opened by :func:`rawpy.imread`.
+
+        Returns
+        -------
+        tuple[Optional[bytes], Optional[int], Optional[int]]
+            JPEG payload and associated dimensions when rendering succeeds.
+        """
+
+        try:
+            # ``raw.postprocess`` yields an RGB numpy array.
+            rgb = raw.postprocess(
+                output_bps=8,
+                use_camera_wb=True,
+                no_auto_bright=True,
+            )
+        except rawpy.LibRawError:
+            return None, None, None
+        except ValueError:
+            return None, None, None
+
+        shape = getattr(rgb, "shape", None)
+        height = int(shape[0]) if shape and len(shape) > 0 else None
+        width = int(shape[1]) if shape and len(shape) > 1 else None
+        try:
+            image = Image.fromarray(rgb)
+        except Exception:  # pragma: no cover - defensive
+            return None, width, height
+
+        try:
+            with BytesIO() as buffer:
+                image.save(buffer, format="JPEG", quality=90)
+                return buffer.getvalue(), width, height
+        finally:
+            image.close()

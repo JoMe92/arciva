@@ -148,16 +148,33 @@ class RawReaderService:
                 warnings=warnings,
             )
 
-        metadata["rawpy"] = self._build_metadata(raw_result)
+        raw_metadata = self._build_metadata(raw_result)
+        metadata["rawpy"] = raw_metadata
+
+        preview_source: Optional[str] = None
 
         if raw_result.thumbnail:
             try:
                 preview_bytes, preview_width, preview_height = self._normalise_thumbnail(raw_result.thumbnail)
+                preview_source = "thumbnail"
             except RawReaderProcessingError as exc:
                 warnings.append("RAW_THUMBNAIL_CONVERSION_FAILED")
                 metadata.setdefault("rawpy", {})["thumbnail_error"] = str(exc)
+                if raw_result.preview_jpeg:
+                    preview_bytes = raw_result.preview_jpeg
+                    preview_width = raw_result.preview_width
+                    preview_height = raw_result.preview_height
+                    preview_source = "rendered"
+        elif raw_result.preview_jpeg:
+            preview_bytes = raw_result.preview_jpeg
+            preview_width = raw_result.preview_width
+            preview_height = raw_result.preview_height
+            preview_source = "rendered"
         else:
             warnings.append("RAW_NO_THUMBNAIL")
+
+        if preview_source:
+            raw_metadata["preview_source"] = preview_source
 
         return RawReadResult(
             preview_bytes=preview_bytes,

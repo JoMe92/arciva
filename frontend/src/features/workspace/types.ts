@@ -12,7 +12,8 @@ export type Photo = {
   picked: boolean
   rejected: boolean
   tag: ColorTag
-  src?: string | null
+  thumbSrc?: string | null
+  previewSrc?: string | null
   placeholderRatio: PlaceholderRatio
   isPreview: boolean
   previewOrder: number | null

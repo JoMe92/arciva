@@ -273,27 +273,38 @@ async def ingest_asset(ctx, asset_id: str):
 
             derivative_failures: List[str] = []
             for variant, size in DERIVATIVE_PRESETS:
-                if raw_result is not None and raw_preview_bytes is None:
-                    logger.warning(
-                        "ingest_asset: derivative %s skipped (no RAW preview) asset=%s",
-                        variant,
-                        asset_id,
-                    )
-                    derivative_failures.append(f"DERIVATIVE_{variant.upper()}_FAILED")
-                    continue
                 try:
-                    if raw_preview_bytes is not None:
-                        blob, dims = await _make_derivative_async(
-                            None,
-                            size,
-                            image_bytes=raw_preview_bytes,
-                        )
-                    else:
-                        blob, dims = await _make_derivative_async(source_path, size)
+                    blob, dims = await _make_derivative_async(
+                        None if raw_preview_bytes is not None else source_path,
+                        size,
+                        image_bytes=raw_preview_bytes,
+                    )
                 except Exception as exc:  # pragma: no cover
-                    logger.exception("ingest_asset: derivative %s failed asset=%s", variant, asset_id)
-                    derivative_failures.append(f"DERIVATIVE_{variant.upper()}_FAILED")
-                    continue
+                    if raw_preview_bytes is not None:
+                        logger.warning(
+                            "ingest_asset: derivative %s preview path failed asset=%s error=%s, falling back to source",
+                            variant,
+                            asset_id,
+                            exc,
+                        )
+                        try:
+                            blob, dims = await _make_derivative_async(source_path, size)
+                        except Exception:
+                            logger.exception(
+                                "ingest_asset: derivative %s failed after fallback asset=%s",
+                                variant,
+                                asset_id,
+                            )
+                            derivative_failures.append(f"DERIVATIVE_{variant.upper()}_FAILED")
+                            continue
+                    else:
+                        logger.exception(
+                            "ingest_asset: derivative %s failed asset=%s",
+                            variant,
+                            asset_id,
+                        )
+                        derivative_failures.append(f"DERIVATIVE_{variant.upper()}_FAILED")
+                        continue
 
                 tpath = storage.derivative_path(sha, variant, "jpg")
                 tpath.write_bytes(blob)
@@ -323,6 +334,61 @@ async def ingest_asset(ctx, asset_id: str):
                     )
 
             warnings.extend(derivative_failures)
+
+            if raw_preview_bytes:
+                preview_variant = "preview_raw"
+                preview_path = storage.derivative_path(sha, preview_variant, "jpg")
+                preview_path.write_bytes(raw_preview_bytes)
+
+                preview_dims: tuple[int, int] | None = None
+                if raw_result and raw_result.preview_width and raw_result.preview_height:
+                    preview_dims = (int(raw_result.preview_width), int(raw_result.preview_height))
+                else:
+                    try:
+                        from PIL import Image, ImageOps
+
+                        def _preview_size() -> tuple[int, int]:
+                            with Image.open(BytesIO(raw_preview_bytes)) as im:
+                                im = ImageOps.exif_transpose(im)
+                                return im.size
+
+                        preview_dims = await asyncio.to_thread(_preview_size)
+                    except Exception:  # pragma: no cover - best effort
+                        logger.exception("ingest_asset: preview dims fallback failed asset=%s", asset_id)
+
+                if preview_dims is None:
+                    fallback_w = int(width or (raw_result.preview_width if raw_result else 0) or 0)
+                    fallback_h = int(height or (raw_result.preview_height if raw_result else 0) or 0)
+                    preview_dims = (fallback_w, fallback_h)
+
+                preview_derivative = (
+                    await db.execute(
+                        select(models.Derivative).where(
+                            models.Derivative.asset_id == asset.id,
+                            models.Derivative.variant == preview_variant,
+                        )
+                    )
+                ).scalar_one_or_none()
+                px, py = preview_dims
+                if px <= 0 or py <= 0:
+                    px = int(width or (raw_result.preview_width if raw_result else 0) or 1)
+                    py = int(height or (raw_result.preview_height if raw_result else 0) or 1)
+                if preview_derivative:
+                    preview_derivative.width = px
+                    preview_derivative.height = py
+                    preview_derivative.format = "jpg"
+                    preview_derivative.storage_key = str(preview_path)
+                else:
+                    db.add(
+                        models.Derivative(
+                            asset_id=asset.id,
+                            variant=preview_variant,
+                            format="jpg",
+                            width=px,
+                            height=py,
+                            storage_key=str(preview_path),
+                        )
+                    )
 
             asset.sha256 = sha
             asset.storage_key = str(source_path.resolve())

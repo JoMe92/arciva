@@ -2,7 +2,7 @@ import React, { useMemo, useRef, useEffect, useState, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { TOKENS } from './utils'
-import { listProjectAssets, assetThumbUrl, updateAssetPreview, getAsset, type AssetListItem, type AssetDetail } from '../../shared/api/assets'
+import { listProjectAssets, assetThumbUrl, assetPreviewUrl, updateAssetPreview, getAsset, type AssetListItem, type AssetDetail } from '../../shared/api/assets'
 import { initUpload, putUpload, completeUpload } from '../../shared/api/uploads'
 import { placeholderRatioForAspect } from '../../shared/placeholder'
 import type { Photo, ImgType, ColorTag } from './types'
@@ -22,7 +22,8 @@ function mapAssetToPhoto(item: AssetListItem, existing?: Photo): Photo {
   const name = item.original_filename ?? existing?.name ?? 'Untitled asset'
   const type = inferTypeFromName(name)
   const date = item.taken_at ?? item.completed_at ?? existing?.date ?? new Date().toISOString()
-  const src = assetThumbUrl(item) ?? existing?.src ?? null
+  const thumbSrc = assetThumbUrl(item) ?? existing?.thumbSrc ?? null
+  const previewSrc = assetPreviewUrl(item) ?? existing?.previewSrc ?? thumbSrc
   const aspect = detectAspect(item.width, item.height)
   const placeholderRatio = existing?.placeholderRatio ?? placeholderRatioForAspect(aspect)
 
@@ -37,7 +38,8 @@ function mapAssetToPhoto(item: AssetListItem, existing?: Photo): Photo {
     picked: existing?.picked ?? isPreview,
     rejected: existing?.rejected ?? false,
     tag: existing?.tag ?? 'None',
-    src,
+    thumbSrc,
+    previewSrc,
     placeholderRatio,
     isPreview,
     previewOrder: typeof item.preview_order === 'number' ? item.preview_order : existing?.previewOrder ?? null,
@@ -257,7 +259,7 @@ export default function ProjectWorkspace() {
 
   useEffect(() => {
     if (!id) return
-    if (!photos.some((p) => !p.src)) return
+    if (!photos.some((p) => !p.thumbSrc)) return
     const timer = window.setInterval(() => {
       refreshAssets()
     }, 4000)

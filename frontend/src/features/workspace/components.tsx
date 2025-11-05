@@ -108,8 +108,8 @@ export function GridView({
               onDoubleClick={() => onOpen(idx)}
               aria-label={`Open ${p.name || 'photo'}`}
             >
-              {p.src ? (
-                <img src={p.src} alt={p.name} className="h-full w-full object-contain" />
+              {p.thumbSrc ? (
+                <img src={p.thumbSrc} alt={p.name} className="h-full w-full object-contain" />
               ) : (
                 <RawPlaceholder ratio={p.placeholderRatio} title={p.name || 'Placeholder image'} fit="contain" />
               )}
@@ -138,8 +138,10 @@ export function DetailView({ items, index, setIndex, className = '' }: { items: 
         {cur ? (
           <>
             <div className="absolute inset-0 flex items-center justify-center bg-[var(--placeholder-bg-beige,#F3EBDD)] p-6">
-              {cur.src ? (
-                <img src={cur.src} alt={cur.name} className="max-h-full max-w-full object-contain" />
+              {cur.previewSrc ? (
+                <img src={cur.previewSrc} alt={cur.name} className="max-h-full max-w-full object-contain" />
+              ) : cur.thumbSrc ? (
+                <img src={cur.thumbSrc} alt={cur.name} className="max-h-full max-w-full object-contain" />
               ) : (
                 <RawPlaceholder ratio={cur.placeholderRatio} title={cur.name || 'Placeholder image'} fit="contain" />
               )}
@@ -176,8 +178,8 @@ export function DetailView({ items, index, setIndex, className = '' }: { items: 
                     {p.type}
                   </span>
                   <div className="absolute inset-0 flex items-center justify-center bg-[var(--placeholder-bg-beige,#F3EBDD)]">
-                    {p.src ? (
-                      <img src={p.src} alt={p.name} className="h-full w-full object-contain" />
+                    {p.thumbSrc ? (
+                      <img src={p.thumbSrc} alt={p.name} className="h-full w-full object-contain" />
                     ) : (
                       <RawPlaceholder ratio={p.placeholderRatio} title={p.name || 'Placeholder image'} fit="contain" />
                     )}

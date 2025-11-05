@@ -15,62 +15,6 @@
 
 set -Eeuo pipefail
 shopt -s nullglob
-[workspace]
-name = "FilmCabinetFrontend"
-version = "0.1.0"
-description = "FastAPI backend + Vite frontend dev environment"
-channels = ["conda-forge"]
-platforms = ["linux-64", "osx-64"]
-
-[dependencies]
-python = "3.11.*"
-pip = "*"
-nodejs = "20.*"
-pnpm = "9.*"
-exiftool = "*"
-
-[pypi-dependencies]
-fastapi = ">=0.103"
-uvicorn = ">=0.23"
-sqlalchemy = ">=2.0"
-aiosqlite = ">=0.19"
-pydantic = ">=2.0"
-pydantic-settings = ">=2.0"
-httpx = ">=0.24"
-pytest = ">=7.0"
-pytest-asyncio = ">=0.21"
-arq = ">=0.25"
-pillow = ">=10.0"
-
-[tasks.frontend-install]
-cmd = "pnpm --dir frontend install"
-
-[tasks.dev-frontend]
-depends-on = ["frontend-install"]
-cmd = "pnpm --dir frontend run dev -- --host 0.0.0.0"
-
-[tasks.build-frontend]
-depends-on = ["frontend-install"]
-cmd = "pnpm --dir frontend run build"
-
-[tasks.lint-frontend]
-depends-on = ["frontend-install"]
-cmd = "pnpm --dir frontend run lint"
-
-[tasks.dev-backend]
-cmd = "uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000"
-env = { PYTHONPATH = "." }
-
-[tasks.test-backend]
-cmd = "pytest backend"
-env = { PYTHONPATH = "." }
-
-[tasks.dev-stack]
-cmd = "./dev.sh up"
-
-[tasks.down]
-cmd = "./dev.sh down"
-
 ROOT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 BACKEND_DIR="${ROOT_DIR}/backend"
 FRONTEND_DIR="${ROOT_DIR}/frontend"

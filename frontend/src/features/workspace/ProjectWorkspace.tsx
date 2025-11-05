@@ -1372,8 +1372,14 @@ function ImportSheet({
   }
 
   function startLocalFlow() {
+    const input = fileInputRef.current
+    if (input) {
+      input.click()
+    } else {
+      // Defer in the unlikely event the ref is not attached yet.
+      window.requestAnimationFrame(() => fileInputRef.current?.click())
+    }
     setMode('local')
-    setTimeout(() => fileInputRef.current?.click(), 0)
   }
 
   async function handleLocalDrop(event: React.DragEvent<HTMLDivElement>) {

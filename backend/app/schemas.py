@@ -59,6 +59,7 @@ class AssetListItem(BaseModel):
     status: AssetStatus
     taken_at: Optional[datetime] = None
     thumb_url: Optional[str] = None
+    preview_url: Optional[str] = None
     original_filename: Optional[str] = None
     size_bytes: Optional[int] = None
     last_error: Optional[str] = None
@@ -95,6 +96,7 @@ class AssetDetail(BaseModel):
     last_error: Optional[str]
     metadata_warnings: List[str] = Field(default_factory=list)
     thumb_url: Optional[str]
+    preview_url: Optional[str]
     derivatives: List[AssetDerivativeOut] = Field(default_factory=list)
     metadata: Optional[Dict[str, Any]] = None
 

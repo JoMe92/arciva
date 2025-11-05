@@ -7,6 +7,7 @@ import shlex
 import shutil
 import subprocess
 from datetime import datetime, timezone
+from io import BytesIO
 from pathlib import Path
 from typing import Any, Iterable, Optional, Sequence, Tuple
 
@@ -164,13 +165,46 @@ def read_exif(path: Path) -> tuple[Optional[datetime], Tuple[Optional[int], Opti
     return taken_at, (width, height), metadata, warnings
 
 
-def make_thumb(path: Path, size: int) -> tuple[bytes, tuple[int, int]]:
-    with Image.open(path) as im:
-        im = ImageOps.exif_transpose(im).convert("RGB")  # normalize orientation & color
-        im.thumbnail((size, size))
-        from io import BytesIO
+def make_thumb(path: Optional[Path], size: int, *, image_bytes: Optional[bytes] = None) -> tuple[bytes, tuple[int, int]]:
+    """
+    Generate a JPEG thumbnail from a file path or in-memory image bytes.
 
-        buf = BytesIO()
-        im.save(buf, format="JPEG", quality=85, optimize=True)
-        data = buf.getvalue()
-        return data, im.size
+    Parameters
+    ----------
+    path : Optional[Path]
+        Path to the source image.  When ``image_bytes`` is provided this can be
+        ``None``.
+    size : int
+        Maximum dimension (either width or height) for the thumbnail.
+    image_bytes : Optional[bytes], optional
+        Encoded image payload used when a path is unavailable.
+
+    Returns
+    -------
+    tuple[bytes, tuple[int, int]]
+        JPEG bytes and the resulting image size after resizing.
+
+    Raises
+    ------
+    ValueError
+        Raised when neither ``path`` nor ``image_bytes`` is provided.
+    """
+
+    if image_bytes is None and path is None:
+        raise ValueError("Either 'path' or 'image_bytes' must be provided")
+
+    buffer: Optional[BytesIO] = BytesIO(image_bytes) if image_bytes is not None else None
+    source = buffer if buffer is not None else path
+
+    try:
+        with Image.open(source) as im:
+            im = ImageOps.exif_transpose(im).convert("RGB")  # normalize orientation & color
+            im.thumbnail((size, size))
+
+            with BytesIO() as buf:
+                im.save(buf, format="JPEG", quality=85, optimize=True)
+                data = buf.getvalue()
+            return data, im.size
+    finally:
+        if buffer is not None:
+            buffer.close()

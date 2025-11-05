@@ -25,6 +25,7 @@ pytest-asyncio = ">=0.21"
 arq = ">=0.25"
 pillow = ">=10.0"
 asyncpg = ">=0.29"
+rawpy = ">=0.25"
 
 [tasks.frontend-install]
 cmd = "pnpm --dir frontend install"

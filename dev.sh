@@ -15,7 +15,6 @@
 
 set -Eeuo pipefail
 shopt -s nullglob
-
 ROOT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 BACKEND_DIR="${ROOT_DIR}/backend"
 FRONTEND_DIR="${ROOT_DIR}/frontend"
@@ -217,6 +216,10 @@ wait_tcp() { # host port timeout_seconds
 }
 
 conda_activate() {
+  if [[ -n "${PIXI_IN_SHELL:-}" ]]; then
+    info "Pixi environment detected; skipping conda activation"
+    return
+  fi
   if command -v conda >/dev/null 2>&1; then
     # shellcheck disable=SC1091
     source "$(conda info --base)/etc/profile.d/conda.sh"
@@ -241,15 +244,10 @@ start_backend() {
 
   if command -v conda >/dev/null 2>&1 || command -v micromamba >/dev/null 2>&1; then
     conda_activate
-    local python_cmd="python"
-    if command -v python >/dev/null 2>&1; then
-      python_cmd=$(command -v python)
-    fi
-    ensure_exiftool_path
     info "Conda env: ${CONDA_ENV:-nivio}"
     DATABASE_URL="${NEW_DATABASE_URL:-$DATABASE_URL}" \
       REDIS_URL="${NEW_REDIS_URL:-$REDIS_URL}" \
-      "${python_cmd}" -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload \
+      python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload \
       >>"${LOG_DIR}/backend.out.log" 2>>"${LOG_DIR}/backend.err.log" &
   elif [[ -f "pyproject.toml" && -f "poetry.lock" && $(command -v poetry) ]]; then
     info "Using poetry env"
@@ -307,20 +305,23 @@ start_frontend() {
 start_worker() {
   if [[ -f "${BACKEND_DIR}/worker/worker.py" ]]; then
     pushd "${ROOT_DIR}" >/dev/null
-    local python_cmd="python"
     if command -v conda >/dev/null 2>&1 || command -v micromamba >/dev/null 2>&1; then
       conda_activate
-      if command -v python >/dev/null 2>&1; then
-        python_cmd=$(command -v python)
-      fi
-      ensure_exiftool_path
     fi
     info "Starting worker"
     PYTHONPATH="${ROOT_DIR}" \
       DATABASE_URL="${NEW_DATABASE_URL:-$DATABASE_URL}" \
       REDIS_URL="${NEW_REDIS_URL:-$REDIS_URL}" \
-      "${python_cmd}" -m arq backend.worker.worker.WorkerSettings \
+      python -m arq backend.worker.worker.WorkerSettings \
       >>"${LOG_DIR}/worker.out.log" 2>>"${LOG_DIR}/worker.err.log" &
+    if ! python - <<'PY' >/dev/null 2>&1
+from importlib.util import find_spec
+import sys
+sys.exit(0 if find_spec("rawpy") else 1)
+PY
+    then
+      warn "rawpy not found in the active Python environment; RAW previews will stay as placeholders. Install rawpy via 'pixi install' or add it to your env."
+    fi
     WORKER_PID=$!
     popd >/dev/null
   else

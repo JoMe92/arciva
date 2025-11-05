@@ -4,6 +4,7 @@ export type AssetListItem = {
   id: string
   status: string
   thumb_url?: string | null
+  preview_url?: string | null
   original_filename?: string | null
   size_bytes?: number | null
   taken_at?: string | null
@@ -43,6 +44,7 @@ export type AssetDetail = {
   last_error?: string | null
   metadata_warnings?: string[]
   thumb_url?: string | null
+  preview_url?: string | null
   derivatives: AssetDerivative[]
   metadata?: Record<string, unknown> | null
 }
@@ -55,6 +57,11 @@ type LinkResponse = {
 
 export function assetThumbUrl(item: AssetListItem): string | null {
   return withBase(item.thumb_url ?? null)
+}
+
+export function assetPreviewUrl(item: AssetListItem): string | null {
+  const candidate = item.preview_url ?? item.thumb_url ?? null
+  return withBase(candidate)
 }
 
 export async function listProjectAssets(projectId: string): Promise<AssetListItem[]> {

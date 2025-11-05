@@ -79,3 +79,6 @@ backend/worker/__pycache__/*
 img/*
 backend/tests/__pycache__/conftest*
 backend/tests/__pycache__/*
+backend/app/adapters/__pycache__/*
+
+backend/app/services/__pycache__/*

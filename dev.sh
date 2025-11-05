@@ -216,6 +216,10 @@ wait_tcp() { # host port timeout_seconds
 }
 
 conda_activate() {
+  if [[ -n "${PIXI_IN_SHELL:-}" ]]; then
+    info "Pixi environment detected; skipping conda activation"
+    return
+  fi
   if command -v conda >/dev/null 2>&1; then
     # shellcheck disable=SC1091
     source "$(conda info --base)/etc/profile.d/conda.sh"
@@ -310,6 +314,14 @@ start_worker() {
       REDIS_URL="${NEW_REDIS_URL:-$REDIS_URL}" \
       python -m arq backend.worker.worker.WorkerSettings \
       >>"${LOG_DIR}/worker.out.log" 2>>"${LOG_DIR}/worker.err.log" &
+    if ! python - <<'PY' >/dev/null 2>&1
+from importlib.util import find_spec
+import sys
+sys.exit(0 if find_spec("rawpy") else 1)
+PY
+    then
+      warn "rawpy not found in the active Python environment; RAW previews will stay as placeholders. Install rawpy via 'pixi install' or add it to your env."
+    fi
     WORKER_PID=$!
     popd >/dev/null
   else

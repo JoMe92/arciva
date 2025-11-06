@@ -101,6 +101,9 @@ describe('ImportSheet local selection queue feedback', () => {
     await waitFor(() => {
       expect(onProgressSnapshot).toHaveBeenCalled()
     })
+    await waitFor(() => {
+      expect(screen.getByText('Selected files & folders')).toBeInTheDocument()
+    })
   })
 
   it('shows progress feedback when selecting a folder', async () => {
@@ -116,6 +119,9 @@ describe('ImportSheet local selection queue feedback', () => {
 
     await waitFor(() => {
       expect(onProgressSnapshot).toHaveBeenCalled()
+    })
+    await waitFor(() => {
+      expect(screen.getByText('Selected files & folders')).toBeInTheDocument()
     })
   })
 })

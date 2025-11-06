@@ -1430,17 +1430,15 @@ export function ImportSheet({
     && selectedItems.length > 0
     && !(isLocalMode && localQueueProgress.active)
 
-  const isPreparingLocalSelection = mode !== 'upload' && (
-    localPriming
-    || localQueueProgress.active
-    || (!hasLocalItems && localQueueProgress.totalFiles > 0)
-  )
+  const isPreparingLocalSelection = mode !== 'upload'
+    && !hasLocalItems
+    && (localPriming || localQueueProgress.active || localQueueProgress.totalFiles > 0)
 
   useEffect(() => {
-    if ((localQueueProgress.totalFiles > 0 || hasLocalItems) && mode === 'choose' && !(localPriming && !hasLocalItems)) {
+    if (mode === 'choose' && (localQueueProgress.totalFiles > 0 || hasLocalItems)) {
       setMode('local')
     }
-  }, [hasLocalItems, localPriming, localQueueProgress.totalFiles, mode])
+  }, [hasLocalItems, localQueueProgress.totalFiles, mode])
 
   useEffect(() => {
     if (hasLocalItems && !localQueueProgress.active) {
@@ -1481,7 +1479,7 @@ export function ImportSheet({
     if (localDescriptorProcessingRef.current) return
     localDescriptorProcessingRef.current = true
     const runToken = localDescriptorRunTokenRef.current
-    const batchSize = 32
+    const batchSize = 8
 
     const runBatch = () => {
       if (localDescriptorRunTokenRef.current !== runToken) {
@@ -1545,7 +1543,7 @@ export function ImportSheet({
       })
 
       if (localDescriptorQueueRef.current.length) {
-        localDescriptorTaskRef.current = window.setTimeout(runBatch, 16)
+        localDescriptorTaskRef.current = window.setTimeout(runBatch, 0)
       } else {
         localDescriptorProcessingRef.current = false
         localDescriptorTaskRef.current = null
@@ -2223,33 +2221,38 @@ function openLocalPicker(kind: 'files' | 'folder' = 'files') {
                           ? 'Collecting files…'
                           : 'No items selected yet. Check thumbnails to include them.'}
                 </div>
-                <div className="mt-3 flex-1 min-h-0 relative">
+                <div className="mt-3 flex-1 min-h-0">
                   {localQueueProgress.active && (
                     <div
-                      className="pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 rounded border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]/85 text-xs text-[var(--text,#1F1E1B)]"
+                      className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 py-2 text-[11px] text-[var(--text,#1F1E1B)]"
                       role="status"
                       aria-live="polite"
                     >
-                      <span className="inline-block h-4 w-4 animate-spin rounded-full border border-[var(--charcoal-800,#1F1E1B)] border-b-transparent" aria-hidden />
-                      <span>{localQueueDetails || `Preparing ${totalLocalItems} file${totalLocalItems === 1 ? '' : 's'}…`}</span>
+                      <span className="inline-flex items-center gap-2 font-medium">
+                        <span className="inline-block h-4 w-4 animate-spin rounded-full border border-[var(--charcoal-800,#1F1E1B)] border-b-transparent" aria-hidden />
+                        Preparing files…
+                      </span>
+                      <span className="text-[var(--text-muted,#6B645B)]">{localQueueDetails || `Preparing ${totalLocalItems} file${totalLocalItems === 1 ? '' : 's'}…`}</span>
                     </div>
                   )}
-                  {localItems.length ? (
-                    <PendingMiniGrid items={localItems} onToggle={toggleLocalItem} className="h-full" />
-                  ) : (
-                    <div className="flex h-full items-center justify-center rounded border border-[var(--border,#E1D3B9)] bg-[var(--sand-50,#FBF7EF)] text-xs text-[var(--text-muted,#6B645B)]">
-                      <div className="flex flex-col items-center gap-2 py-6">
-                        {(localPriming || localQueueProgress.active) ? (
-                          <>
-                            <span className="inline-block h-4 w-4 animate-spin rounded-full border border-[var(--charcoal-800,#1F1E1B)] border-b-transparent" aria-hidden />
-                            <span>{localQueueDetails || 'Preparing file list…'}</span>
-                          </>
-                        ) : (
-                          <span>No items selected yet. Check thumbnails to include them.</span>
-                        )}
+                  <div className="flex-1 min-h-0">
+                    {localItems.length ? (
+                      <PendingMiniGrid items={localItems} onToggle={toggleLocalItem} className="h-full" />
+                    ) : (
+                      <div className="flex h-full items-center justify-center rounded border border-[var(--border,#E1D3B9)] bg-[var(--sand-50,#FBF7EF)] text-xs text-[var(--text-muted,#6B645B)]">
+                        <div className="flex flex-col items-center gap-2 py-6">
+                          {(localPriming || localQueueProgress.active) ? (
+                            <>
+                              <span className="inline-block h-4 w-4 animate-spin rounded-full border border-[var(--charcoal-800,#1F1E1B)] border-b-transparent" aria-hidden />
+                              <span>{localQueueDetails || 'Preparing file list…'}</span>
+                            </>
+                          ) : (
+                            <span>No items selected yet. Check thumbnails to include them.</span>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
                 <div className="mt-3 flex-shrink-0 text-xs">
                   <button type="button" onClick={clearLocalSelection} className="text-[var(--river-500,#6B7C7A)] underline">Clear selection</button>

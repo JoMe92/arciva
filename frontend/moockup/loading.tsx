@@ -71,5 +71,5 @@ export default function LoadingPlaceholderSpinner() {
         </div>
       </div>
     </div>
-  );ö
+  )
 }

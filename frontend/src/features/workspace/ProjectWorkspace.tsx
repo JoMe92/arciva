@@ -268,6 +268,55 @@ export default function ProjectWorkspace() {
 
   // Import Sheet
   const [importOpen, setImportOpen] = useState(false)
+  const [uploadBanner, setUploadBanner] = useState<UploadBannerState | null>(null)
+  const uploadBannerTimeoutRef = useRef<number | null>(null)
+
+  const handleUploadProgress = useCallback((snapshot: UploadProgressSnapshot) => {
+    if (uploadBannerTimeoutRef.current !== null) {
+      window.clearTimeout(uploadBannerTimeoutRef.current)
+      uploadBannerTimeoutRef.current = null
+    }
+
+    if (!snapshot.active && snapshot.total === 0) {
+      setUploadBanner(null)
+      return
+    }
+
+    if (snapshot.active) {
+      setUploadBanner({
+        ...snapshot,
+        status: 'running',
+      })
+      return
+    }
+
+    if (snapshot.error) {
+      setUploadBanner({
+        ...snapshot,
+        status: 'error',
+      })
+      uploadBannerTimeoutRef.current = window.setTimeout(() => {
+        setUploadBanner(null)
+        uploadBannerTimeoutRef.current = null
+      }, 6000)
+      return
+    }
+
+    setUploadBanner({
+      ...snapshot,
+      status: 'success',
+    })
+    uploadBannerTimeoutRef.current = window.setTimeout(() => {
+      setUploadBanner(null)
+      uploadBannerTimeoutRef.current = null
+    }, 4000)
+  }, [])
+
+  useEffect(() => () => {
+    if (uploadBannerTimeoutRef.current !== null) {
+      window.clearTimeout(uploadBannerTimeoutRef.current)
+    }
+  }, [])
   const handleImport = useCallback(async (_args: { count: number; types: ImgType[]; dest: string }) => {
     if (importInFlightRef.current) return
     importInFlightRef.current = true
@@ -337,6 +386,48 @@ export default function ProjectWorkspace() {
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[var(--surface-subtle,#FBF7EF)] text-[var(--text,#1F1E1B)]">
       <TopBar projectName={projectName} onBack={goBack} />
+      {uploadBanner && (
+        <div className="pointer-events-none fixed bottom-6 right-6 z-50">
+          <div
+            className={`pointer-events-auto w-72 rounded-lg border px-4 py-3 shadow-lg ${
+              uploadBanner.status === 'error'
+                ? 'border-[#F7C9C9] bg-[#FDF2F2]'
+                : 'border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]'
+            }`}
+          >
+            {uploadBanner.status === 'running' && (
+              <>
+                <div className="flex items-center justify-between text-sm font-semibold text-[var(--text,#1F1E1B)]">
+                  Uploading assets
+                  <span className="text-xs text-[var(--text-muted,#6B645B)]">{uploadBanner.percent}%</span>
+                </div>
+                <div className="mt-1 text-[11px] text-[var(--text-muted,#6B645B)]">
+                  {uploadBanner.completed}/{uploadBanner.total} assets • {formatBytes(uploadBanner.bytesUploaded)} of {formatBytes(uploadBanner.bytesTotal)}
+                </div>
+                <div className="mt-3 h-1.5 rounded-full bg-[var(--sand-100,#F3EBDD)]">
+                  <div className="h-full rounded-full bg-[var(--charcoal-800,#1F1E1B)]" style={{ width: `${uploadBanner.percent}%` }} />
+                </div>
+              </>
+            )}
+            {uploadBanner.status === 'success' && (
+              <div>
+                <div className="text-sm font-semibold text-[var(--text,#1F1E1B)]">Upload complete</div>
+                <div className="mt-1 text-[11px] text-[var(--text-muted,#6B645B)]">
+                  {uploadBanner.total} asset{uploadBanner.total === 1 ? '' : 's'} imported • {formatBytes(uploadBanner.bytesTotal)}
+                </div>
+              </div>
+            )}
+            {uploadBanner.status === 'error' && (
+              <div>
+                <div className="text-sm font-semibold text-[#B42318]">Upload interrupted</div>
+                <div className="mt-1 text-[11px] text-[#B42318]">
+                  {uploadBanner.error ?? 'Something went wrong. Please reopen the import sheet to retry.'}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <div
         className="flex-1 min-h-0 grid overflow-hidden"
@@ -471,6 +562,7 @@ export default function ProjectWorkspace() {
           projectId={id}
           onClose={() => setImportOpen(false)}
           onImport={handleImport}
+          onProgressSnapshot={handleUploadProgress}
           folderMode={folderMode}
           customFolder={customFolder}
         />
@@ -607,6 +699,7 @@ function formatMetadataValue(input: unknown): string {
 }
 
 type LocalFileDescriptor = {
+  id: string
   file: File
   folder: string
   relativePath?: string
@@ -633,15 +726,26 @@ type PendingItem = {
     folder?: string
     relativePath?: string
   }
+  ready?: boolean
+}
+
+function generateLocalDescriptorId(): string {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    try {
+      return crypto.randomUUID()
+    } catch {
+      // Fall through to fallback when randomUUID is not permitted.
+    }
+  }
+  return `local-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 }
 
 function makeLocalPendingItems(files: LocalFileDescriptor[]): PendingItem[] {
   if (!files.length) return []
-  const baseId = Date.now().toString(36)
-  return files.map(({ file, folder, relativePath }, index) => {
+  return files.map(({ id, file, folder, relativePath }) => {
     const previewUrl = typeof URL === 'undefined' ? null : URL.createObjectURL(file)
     return {
-      id: `local-${baseId}-${index}-${Math.random().toString(36).slice(2, 6)}`,
+      id,
       name: file.name,
       type: inferTypeFromName(file.name),
       previewUrl,
@@ -650,6 +754,7 @@ function makeLocalPendingItems(files: LocalFileDescriptor[]): PendingItem[] {
       size: file.size,
       file,
       meta: { folder, relativePath },
+      ready: true,
     }
   })
 }
@@ -666,7 +771,7 @@ function buildLocalDescriptorsFromFileList(fileList: FileList | File[]): LocalFi
   return files.map((file) => {
     const relativePath = (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name
     const folder = deriveFolderFromRelativePath(relativePath)
-    return { file, folder, relativePath }
+    return { id: generateLocalDescriptorId(), file, folder, relativePath }
   })
 }
 
@@ -689,6 +794,7 @@ async function collectFilesFromDataTransfer(dataTransfer: DataTransfer): Promise
       })
       const relativePath = parentPath ? `${parentPath}/${file.name}` : file.name
       descriptors.push({
+        id: generateLocalDescriptorId(),
         file,
         folder: deriveFolderFromRelativePath(relativePath),
         relativePath,
@@ -725,6 +831,7 @@ async function collectFilesFromDataTransfer(dataTransfer: DataTransfer): Promise
       if (file) {
         const relativePath = file.name
         descriptors.push({
+          id: generateLocalDescriptorId(),
           file,
           folder: deriveFolderFromRelativePath(relativePath),
           relativePath,
@@ -768,6 +875,19 @@ type UploadTaskState = {
 }
 
 const BLOCKED_UPLOAD_MESSAGE = 'Blocked by earlier upload failure.'
+const MAX_CONCURRENT_UPLOADS = 3
+
+type UploadProgressSnapshot = {
+  active: boolean
+  percent: number
+  completed: number
+  total: number
+  bytesUploaded: number
+  bytesTotal: number
+  error: string | null
+}
+
+type UploadBannerState = UploadProgressSnapshot & { status: 'running' | 'success' | 'error' }
 
 type HubNode = {
   id: string
@@ -1007,6 +1127,7 @@ function PendingMiniGrid({ items, onToggle, className }: { items: PendingItem[];
             <label
               key={item.id}
               className={`relative block overflow-hidden rounded-md border text-left ${item.selected ? 'border-[var(--charcoal-800,#1F1E1B)] bg-[var(--surface,#FFFFFF)]' : 'border-[var(--border,#E1D3B9)] bg-[var(--sand-100,#F3EBDD)] opacity-70'}`}
+              aria-busy={item.ready === false}
             >
               <input
                 type="checkbox"
@@ -1019,13 +1140,24 @@ function PendingMiniGrid({ items, onToggle, className }: { items: PendingItem[];
                 {item.previewUrl ? (
                   <img src={item.previewUrl} alt={item.name} className="h-16 w-full object-cover" />
                 ) : (
-                  <div className="flex h-16 w-full items-center justify-center text-[10px] font-medium text-[var(--text-muted,#6B645B)]">
-                    {item.type}
+                  <div
+                    className={`flex h-16 w-full items-center justify-center text-[10px] font-medium text-[var(--text-muted,#6B645B)] ${
+                      item.ready === false ? 'animate-pulse' : ''
+                    }`}
+                  >
+                    {item.ready === false ? (
+                      <span className="inline-flex items-center gap-1 text-[var(--text-muted,#6B645B)]">
+                        <span className="inline-block h-3 w-3 animate-spin rounded-full border border-[var(--charcoal-800,#1F1E1B)] border-b-transparent" aria-hidden />
+                        Preparing…
+                      </span>
+                    ) : (
+                      item.type
+                    )}
                   </div>
                 )}
               </div>
               <div className="flex items-center justify-between px-2 py-1 text-[9px] font-medium uppercase tracking-wide">
-                <span className="text-[var(--charcoal-800,#1F1E1B)]">Pending</span>
+                <span className="text-[var(--charcoal-800,#1F1E1B)]">{item.ready === false ? 'Preparing' : 'Pending'}</span>
                 <span className="text-[var(--text-muted,#6B645B)]">{formatBytes(item.size)}</span>
               </div>
               <div className="truncate px-2 pb-2 text-[10px] text-[var(--text-muted,#6B645B)]">{item.name}</div>
@@ -1055,16 +1187,18 @@ function hasAncestorSelected(id: string, selection: Set<string>, parentMap: Map<
   return false
 }
 
-function ImportSheet({
+export function ImportSheet({
   projectId,
   onClose,
   onImport,
+  onProgressSnapshot,
   folderMode,
   customFolder,
 }: {
   projectId?: string
   onClose: () => void
   onImport: (args: { count: number; types: ImgType[]; dest: string }) => void
+  onProgressSnapshot?: (snapshot: UploadProgressSnapshot) => void
   folderMode: 'date' | 'custom'
   customFolder: string
 }) {
@@ -1083,6 +1217,7 @@ function ImportSheet({
   const localDescriptorProcessingRef = useRef(false)
   const localDescriptorTaskRef = useRef<number | null>(null)
   const localDescriptorRunTokenRef = useRef(0)
+  const [localPriming, setLocalPriming] = useState(false)
   const [localQueueProgress, setLocalQueueProgress] = useState<LocalQueueProgress>({
     active: false,
     totalFiles: 0,
@@ -1200,6 +1335,41 @@ function ImportSheet({
   const uploadOverallPercent = Math.max(0, Math.min(100, Math.round(uploadOverallProgress * 100)))
   const uploadIncludesHub = uploadTasks.some((item) => item.source === 'hub')
 
+  useEffect(() => {
+    if (!onProgressSnapshot) return
+    if (!isUploadMode) {
+      onProgressSnapshot({
+        active: false,
+        percent: 0,
+        completed: 0,
+        total: 0,
+        bytesUploaded: 0,
+        bytesTotal: 0,
+        error: null,
+      })
+      return
+    }
+    onProgressSnapshot({
+      active: uploadRunning,
+      percent: uploadOverallPercent,
+      completed: uploadCompletedCount,
+      total: uploadTasks.length,
+      bytesUploaded: uploadUploadedBytes,
+      bytesTotal: uploadTotalBytes,
+      error: uploadError,
+    })
+  }, [
+    isUploadMode,
+    onProgressSnapshot,
+    uploadRunning,
+    uploadOverallPercent,
+    uploadCompletedCount,
+    uploadTasks.length,
+    uploadUploadedBytes,
+    uploadTotalBytes,
+    uploadError,
+  ])
+
   const selectionSummaryText = useMemo(() => {
     if (!selectedItems.length) return 'Nothing selected yet'
     const folderCount = Math.max(1, selectedFolders.size || 0)
@@ -1216,7 +1386,6 @@ function ImportSheet({
   const hubSelectedFolderCount = useMemo(() => (
     hubSelectedItems.length ? new Set(hubSelectedItems.map((item) => item.meta?.folder ?? 'Selection')).size : 0
   ), [hubSelectedItems])
-
   const hubSelectionList = useMemo(() => {
     if (!hubSelected.size) return []
     const ids = Array.from(hubSelected).filter((id) => !hasAncestorSelected(id, hubSelected, HUB_DATA.parentMap))
@@ -1247,9 +1416,37 @@ function ImportSheet({
     return pieces.join(' • ')
   }, [localQueuePercent, localQueueProgress])
 
+  const hasLocalItems = localItems.length > 0
+  const totalLocalItems = useMemo(() => (hasLocalItems ? localItems.length : localQueueProgress.totalFiles), [hasLocalItems, localItems.length, localQueueProgress.totalFiles])
+  const selectedLocalCount = useMemo(() => {
+    if (localSelectedItems.length) return localSelectedItems.length
+    if (localQueueProgress.active) {
+      return Math.min(localQueueProgress.processedFiles, localQueueProgress.totalFiles)
+    }
+    return 0
+  }, [localQueueProgress.active, localQueueProgress.processedFiles, localQueueProgress.totalFiles, localSelectedItems.length])
+
   const canSubmit = !isUploadMode
     && selectedItems.length > 0
     && !(isLocalMode && localQueueProgress.active)
+
+  const isPreparingLocalSelection = mode !== 'upload' && (
+    localPriming
+    || localQueueProgress.active
+    || (!hasLocalItems && localQueueProgress.totalFiles > 0)
+  )
+
+  useEffect(() => {
+    if ((localQueueProgress.totalFiles > 0 || hasLocalItems) && mode === 'choose' && !(localPriming && !hasLocalItems)) {
+      setMode('local')
+    }
+  }, [hasLocalItems, localPriming, localQueueProgress.totalFiles, mode])
+
+  useEffect(() => {
+    if (hasLocalItems && !localQueueProgress.active) {
+      setLocalPriming(false)
+    }
+  }, [hasLocalItems, localQueueProgress.active])
 
   useEffect(() => {
     if (mode !== 'local') {
@@ -1306,15 +1503,34 @@ function ImportSheet({
             processedBytes: prev.totalBytes,
           }
         })
+        setLocalPriming(false)
         return
       }
 
-      const newItems = makeLocalPendingItems(chunk)
-      const newUrls = newItems.map((item) => item.previewUrl).filter((url): url is string => Boolean(url))
+      const preparedItems = makeLocalPendingItems(chunk)
+      const preparedMap = new Map(preparedItems.map((item) => [item.id, item]))
+      const newUrls = preparedItems.map((item) => item.previewUrl).filter((url): url is string => Boolean(url))
       if (newUrls.length) {
         localPreviewUrlsRef.current = [...localPreviewUrlsRef.current, ...newUrls]
       }
-      setLocalItems((prev) => [...prev, ...newItems])
+      setLocalItems((prev) => {
+        let matched = false
+        const mapped = prev.map((item) => {
+          const hydrated = preparedMap.get(item.id)
+          if (!hydrated) return item
+          matched = true
+          return {
+            ...item,
+            previewUrl: hydrated.previewUrl,
+            file: hydrated.file,
+            ready: true,
+          }
+        })
+        if (!matched) {
+          return [...prev, ...preparedItems]
+        }
+        return mapped
+      })
 
       const chunkBytes = chunk.reduce((acc, descriptor) => acc + descriptor.file.size, 0)
       setLocalQueueProgress((prev) => {
@@ -1342,6 +1558,7 @@ function ImportSheet({
             processedBytes: prev.totalBytes,
           }
         })
+        setLocalPriming(false)
       }
     }
 
@@ -1368,19 +1585,40 @@ function ImportSheet({
         processedBytes: 0,
       }
     })
+    setLocalItems((prev) => {
+      if (!descriptors.length) return prev
+      const existingIds = new Set(prev.map((item) => item.id))
+      const placeholders = descriptors
+        .filter((descriptor) => !existingIds.has(descriptor.id))
+        .map((descriptor) => ({
+          id: descriptor.id,
+          name: descriptor.file.name,
+          type: inferTypeFromName(descriptor.file.name),
+          previewUrl: null,
+          source: 'local' as const,
+          selected: true,
+          size: descriptor.file.size,
+          file: descriptor.file,
+          meta: { folder: descriptor.folder, relativePath: descriptor.relativePath },
+          ready: false,
+        }))
+      if (!placeholders.length) return prev
+      return [...prev, ...placeholders]
+    })
     processLocalDescriptorQueue()
   }
 
-  function startLocalFlow() {
-    const input = fileInputRef.current
-    if (input) {
-      input.click()
-    } else {
-      // Defer in the unlikely event the ref is not attached yet.
-      window.requestAnimationFrame(() => fileInputRef.current?.click())
-    }
-    setMode('local')
+function openLocalPicker(kind: 'files' | 'folder' = 'files') {
+  const inputRef = kind === 'folder' ? folderInputRef : fileInputRef
+  const input = inputRef.current
+  setMode('local')
+  if (input) {
+    input.click()
+  } else {
+    // Defer in the unlikely event the ref is not attached yet.
+    window.requestAnimationFrame(() => inputRef.current?.click())
   }
+}
 
   async function handleLocalDrop(event: React.DragEvent<HTMLDivElement>) {
     event.preventDefault()
@@ -1388,9 +1626,13 @@ function ImportSheet({
     if (mode === 'upload') return
     dragDepthRef.current = 0
     setIsDragging(false)
-    const descriptors = await collectFilesFromDataTransfer(event.dataTransfer)
-    if (!descriptors.length) return
+    setLocalPriming(true)
     setMode((prev) => (prev === 'local' ? prev : 'local'))
+    const descriptors = await collectFilesFromDataTransfer(event.dataTransfer)
+    if (!descriptors.length) {
+      setLocalPriming(false)
+      return
+    }
     appendLocalDescriptors(descriptors)
     event.dataTransfer.clearData()
   }
@@ -1425,15 +1667,18 @@ function ImportSheet({
   function handleLocalFilesChange(event: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? [])
     if (!files.length) {
+      setLocalPriming(false)
       event.target.value = ''
       return
     }
     if (mode === 'upload') {
+      setLocalPriming(false)
       event.target.value = ''
       return
     }
-    const descriptors = buildLocalDescriptorsFromFileList(files)
     setMode((prev) => (prev === 'local' ? prev : 'local'))
+    setLocalPriming(true)
+    const descriptors = buildLocalDescriptorsFromFileList(files)
     appendLocalDescriptors(descriptors)
     event.target.value = ''
   }
@@ -1543,8 +1788,7 @@ function ImportSheet({
           return task
         }
         if (!seenFailed) return task
-        if (task.status === 'success' || task.status === 'error') return task
-        if (task.status === 'blocked' && task.error) return task
+        if (task.status !== 'pending') return task
         return {
           ...task,
           status: 'blocked',
@@ -1601,7 +1845,7 @@ function ImportSheet({
 
   function submit() {
     if (!canSubmit) {
-      if (mode === 'local') startLocalFlow()
+      if (mode === 'local') openLocalPicker('files')
       return
     }
     if (!selectedItems.length) return
@@ -1730,38 +1974,100 @@ function ImportSheet({
       }
     }
 
-    const processQueue = async () => {
+    const processQueue = async (): Promise<boolean> => {
+      const pendingIds = uploadTasksRef.current
+        .filter((task) => !['success', 'error', 'blocked'].includes(task.status))
+        .map((task) => task.id)
+
+      if (!pendingIds.length) {
+        return false
+      }
+
       let encounteredError = false
-      for (const task of uploadTasksRef.current) {
-        if (canceled) return
-        if (task.status === 'success') continue
-        try {
-          await processTask(task)
-        } catch {
-          encounteredError = true
-          break
-        }
-      }
+      let pointer = 0
+      let active = 0
 
-      if (canceled) return
-      setUploadRunning(false)
-      if (encounteredError) return
-
-      setUploadError(null)
-      if (!uploadCompletionNotifiedRef.current) {
-        uploadCompletionNotifiedRef.current = true
-        const successTypes = Array.from(new Set(uploadTasksRef.current.map((task) => task.type))) as ImgType[]
-        const fallbackTypes = successTypes.length
-          ? successTypes
-          : (uploadTypesRef.current.length ? uploadTypesRef.current : (['JPEG'] as ImgType[]))
-        const count = uploadTasksRef.current.length
-        if (count > 0) {
-          onImport({ count, types: fallbackTypes, dest: uploadDestination })
+      await new Promise<void>((resolve) => {
+        let finished = false
+        const finish = () => {
+          if (finished) return
+          finished = true
+          resolve()
         }
-      }
+
+        const startNext = () => {
+          if (finished) return
+          if (canceled) {
+            if (active === 0) finish()
+            return
+          }
+          if (encounteredError) {
+            if (active === 0) finish()
+            return
+          }
+
+          while (active < MAX_CONCURRENT_UPLOADS && pointer < pendingIds.length) {
+            const taskId = pendingIds[pointer++]
+            const currentTask = uploadTasksRef.current.find((candidate) => candidate.id === taskId)
+            if (!currentTask) continue
+            if (currentTask.status === 'success' || currentTask.status === 'error' || currentTask.status === 'blocked') {
+              continue
+            }
+
+            active += 1
+            processTask(currentTask)
+              .catch(() => {
+                encounteredError = true
+              })
+              .finally(() => {
+                active -= 1
+                if (finished) return
+                if (canceled) {
+                  if (active === 0) finish()
+                  return
+                }
+                if (encounteredError) {
+                  if (active === 0) finish()
+                  return
+                }
+                if (pointer >= pendingIds.length && active === 0) {
+                  finish()
+                  return
+                }
+                startNext()
+              })
+          }
+
+          if (pointer >= pendingIds.length && active === 0) {
+            finish()
+          }
+        }
+
+        startNext()
+      })
+
+      return encounteredError
     }
 
     processQueue()
+      .then((encounteredError) => {
+        if (canceled) return
+        setUploadRunning(false)
+        if (encounteredError) return
+
+        setUploadError(null)
+        if (!uploadCompletionNotifiedRef.current) {
+          uploadCompletionNotifiedRef.current = true
+          const successTypes = Array.from(new Set(uploadTasksRef.current.map((task) => task.type))) as ImgType[]
+          const fallbackTypes = successTypes.length
+            ? successTypes
+            : (uploadTypesRef.current.length ? uploadTypesRef.current : (['JPEG'] as ImgType[]))
+          const count = uploadTasksRef.current.length
+          if (count > 0) {
+            onImport({ count, types: fallbackTypes, dest: uploadDestination })
+          }
+        }
+      })
       .catch((err) => {
         if (!canceled) {
           console.error('Upload queue aborted', err)
@@ -1794,11 +2100,19 @@ function ImportSheet({
           </div>
           <button onClick={onClose} className="px-2 py-1 text-sm rounded border border-[var(--border,#E1D3B9)]" aria-label="Close">Close</button>
         </div>
-        <div className="flex-1 min-h-0 px-5 pb-5 pt-2 text-sm text-[var(--text,#1F1E1B)]">
+        <div className="relative flex-1 min-h-0 px-5 pb-5 pt-2 text-sm text-[var(--text,#1F1E1B)]">
+          {isPreparingLocalSelection && (
+            <div className="absolute inset-0 z-30 flex items-center justify-center bg-[var(--surface,#FFFFFF)]/70 backdrop-blur-[1px]">
+              <div className="flex items-center gap-2 rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-4 py-2 text-sm font-semibold text-[var(--text,#1F1E1B)] shadow-lg" role="status" aria-live="polite">
+                <span className="inline-block h-5 w-5 animate-spin rounded-full border border-[var(--charcoal-800,#1F1E1B)] border-b-transparent" aria-hidden />
+                Preparing files…
+              </div>
+            </div>
+          )}
           {mode === 'choose' && (
             <div className="flex h-full flex-col justify-center gap-6">
               <div className="grid gap-4 md:grid-cols-2">
-                <button type="button" onClick={startLocalFlow} className="flex flex-col items-start gap-3 rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-6 text-left transition hover:border-[var(--charcoal-800,#1F1E1B)]">
+                <button type="button" onClick={() => setMode('local')} className="flex flex-col items-start gap-3 rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-6 text-left transition hover:border-[var(--charcoal-800,#1F1E1B)]">
                   <div className="text-base font-semibold">Upload Photo</div>
                   <p className="text-xs text-[var(--text-muted,#6B645B)]">Open the native picker to choose individual images or entire folders from your computer.</p>
                   <span className="mt-auto inline-flex items-center gap-1 text-xs font-medium text-[var(--charcoal-800,#1F1E1B)]">Choose files…</span>
@@ -1814,7 +2128,7 @@ function ImportSheet({
           )}
 
           {isLocalMode && (
-            <div className="flex h-full min-h-0 gap-5 overflow-hidden">
+            <div className="relative flex h-full min-h-0 gap-5 overflow-hidden">
               <div className="flex w-72 flex-shrink-0 flex-col gap-4 overflow-hidden">
                 <div
                   className={`rounded-lg border border-dashed p-6 text-center transition ${isDragging ? 'border-[var(--charcoal-800,#1F1E1B)] bg-[var(--sand-100,#F3EBDD)]' : 'border-[var(--border,#E1D3B9)] bg-[var(--sand-50,#FBF7EF)]'}`}
@@ -1826,8 +2140,8 @@ function ImportSheet({
                   <div className="text-sm font-medium">Select photos or folders from your computer</div>
                   <div className="mt-1 text-xs text-[var(--text-muted,#6B645B)]">We support JPEG and RAW formats. Picking a folder pulls in everything inside.</div>
                   <div className="mt-4 flex justify-center gap-3 text-sm">
-                    <button type="button" onClick={() => fileInputRef.current?.click()} className="rounded-md bg-[var(--charcoal-800,#1F1E1B)] px-3 py-2 font-medium text-white">Choose files…</button>
-                    <button type="button" onClick={() => folderInputRef.current?.click()} className="rounded-md border border-[var(--border,#E1D3B9)] px-3 py-2">Choose folder…</button>
+                    <button type="button" onClick={() => openLocalPicker('files')} className="rounded-md bg-[var(--charcoal-800,#1F1E1B)] px-3 py-2 font-medium text-white">Choose files…</button>
+                    <button type="button" onClick={() => openLocalPicker('folder')} className="rounded-md border border-[var(--border,#E1D3B9)] px-3 py-2">Choose folder…</button>
                   </div>
                   <div className="mt-3 text-xs text-[var(--text-muted,#6B645B)]">Or just drag & drop files and folders here.</div>
                   {localQueueProgress.active && (
@@ -1854,7 +2168,7 @@ function ImportSheet({
                   <div className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]">
                     <div className="flex items-center justify-between px-4 pt-3">
                       <div className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">Selected files & folders</div>
-                      <div className="text-[11px] text-[var(--text-muted,#6B645B)]">{localSelectedItems.length}/{localItems.length}</div>
+                      <div className="text-[11px] text-[var(--text-muted,#6B645B)]">{selectedLocalCount}/{totalLocalItems}</div>
                     </div>
                     <div className="mt-2 flex-1 overflow-y-auto px-4 pb-3">
                       <ul className="space-y-3 text-[11px] text-[var(--text-muted,#6B645B)]">
@@ -1896,15 +2210,46 @@ function ImportSheet({
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-4">
                 <div className="flex items-center justify-between">
                   <div className="text-sm font-semibold">Ready to import</div>
-                  <div className="text-xs text-[var(--text-muted,#6B645B)]">{localSelectedItems.length} selected / {localItems.length} total</div>
+                  <div className="text-xs text-[var(--text-muted,#6B645B)]">{selectedLocalCount} selected / {totalLocalItems} total</div>
                 </div>
                 <div className="mt-1 text-xs text-[var(--text-muted,#6B645B)]">
-                  {localSelectedItems.length
-                    ? `${localSelectedItems.length} item${localSelectedItems.length === 1 ? '' : 's'} across ${Math.max(1, localSelectedFolderCount)} folder${Math.max(1, localSelectedFolderCount) === 1 ? '' : 's'} • ${formatBytes(totalSelectedBytes)} pending`
-                    : 'No items selected yet. Check thumbnails to include them.'}
+                  {localQueueProgress.active
+                    ? (localQueueDetails ? `Preparing ${localQueueDetails}` : `Preparing ${totalLocalItems} file${totalLocalItems === 1 ? '' : 's'}…`)
+                    : localSelectedItems.length
+                      ? `${localSelectedItems.length} item${localSelectedItems.length === 1 ? '' : 's'} across ${Math.max(1, localSelectedFolderCount)} folder${Math.max(1, localSelectedFolderCount) === 1 ? '' : 's'} • ${formatBytes(totalSelectedBytes)} pending`
+                      : totalLocalItems
+                        ? `Ready to import ${totalLocalItems} file${totalLocalItems === 1 ? '' : 's'}`
+                        : localPriming
+                          ? 'Collecting files…'
+                          : 'No items selected yet. Check thumbnails to include them.'}
                 </div>
-                <div className="mt-3 flex-1 min-h-0">
-                  <PendingMiniGrid items={localItems} onToggle={toggleLocalItem} className="h-full" />
+                <div className="mt-3 flex-1 min-h-0 relative">
+                  {localQueueProgress.active && (
+                    <div
+                      className="pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 rounded border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]/85 text-xs text-[var(--text,#1F1E1B)]"
+                      role="status"
+                      aria-live="polite"
+                    >
+                      <span className="inline-block h-4 w-4 animate-spin rounded-full border border-[var(--charcoal-800,#1F1E1B)] border-b-transparent" aria-hidden />
+                      <span>{localQueueDetails || `Preparing ${totalLocalItems} file${totalLocalItems === 1 ? '' : 's'}…`}</span>
+                    </div>
+                  )}
+                  {localItems.length ? (
+                    <PendingMiniGrid items={localItems} onToggle={toggleLocalItem} className="h-full" />
+                  ) : (
+                    <div className="flex h-full items-center justify-center rounded border border-[var(--border,#E1D3B9)] bg-[var(--sand-50,#FBF7EF)] text-xs text-[var(--text-muted,#6B645B)]">
+                      <div className="flex flex-col items-center gap-2 py-6">
+                        {(localPriming || localQueueProgress.active) ? (
+                          <>
+                            <span className="inline-block h-4 w-4 animate-spin rounded-full border border-[var(--charcoal-800,#1F1E1B)] border-b-transparent" aria-hidden />
+                            <span>{localQueueDetails || 'Preparing file list…'}</span>
+                          </>
+                        ) : (
+                          <span>No items selected yet. Check thumbnails to include them.</span>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div className="mt-3 flex-shrink-0 text-xs">
                   <button type="button" onClick={clearLocalSelection} className="text-[var(--river-500,#6B7C7A)] underline">Clear selection</button>

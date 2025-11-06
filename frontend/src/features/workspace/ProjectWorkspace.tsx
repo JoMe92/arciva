@@ -1,15 +1,260 @@
 import React, { useMemo, useRef, useEffect, useState, useCallback } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { TOKENS } from './utils'
 import { listProjectAssets, assetThumbUrl, assetPreviewUrl, updateAssetPreview, getAsset, type AssetListItem, type AssetDetail } from '../../shared/api/assets'
 import { initUpload, putUpload, completeUpload } from '../../shared/api/uploads'
 import { placeholderRatioForAspect } from '../../shared/placeholder'
 import type { Photo, ImgType, ColorTag } from './types'
-import { TopBar, Sidebar, GridView, DetailView, EmptyState, NoResults, computeCols } from './components'
+import { TopBar, Sidebar, GridView, DetailView, EmptyState, NoResults, computeCols, type DateTreeYearNode, type DateTreeMonthNode, type DateTreeDayNode } from './components'
 
 const SIDEBAR_WIDTH = 288
 const INSPECTOR_WIDTH = 260
+const DATE_KEY_DELIM = '__'
+const UNKNOWN_VALUE = 'unknown'
+const MONTH_NAMES = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+]
+
+type DateParts = {
+  yearValue: string
+  yearLabel: string
+  yearSort: number
+  monthValue: string
+  monthLabel: string
+  monthSort: number
+  dayValue: string
+  dayLabel: string
+  daySort: number
+}
+
+type YearBuilder = {
+  id: string
+  year: string
+  label: string
+  sortValue: number
+  count: number
+  months: Map<string, MonthBuilder>
+}
+
+type MonthBuilder = {
+  id: string
+  year: string
+  month: string
+  label: string
+  sortValue: number
+  count: number
+  parentYearId: string
+  days: Map<string, DayBuilder>
+}
+
+type DayBuilder = {
+  id: string
+  year: string
+  month: string
+  day: string
+  label: string
+  sortValue: number
+  count: number
+  parentYearId: string
+  parentMonthId: string
+}
+
+type DateTreeBuildResult = {
+  years: DateTreeYearNode[]
+  dayNodeMap: Map<string, DateTreeDayNode>
+  photoKeyMap: Map<string, string>
+}
+
+function makeMonthKey(year: string, month: string) {
+  return `${year}${DATE_KEY_DELIM}${month}`
+}
+
+function makeDayKey(year: string, month: string, day: string) {
+  return `${year}${DATE_KEY_DELIM}${month}${DATE_KEY_DELIM}${day}`
+}
+
+function computeDateParts(photo: Photo): DateParts {
+  const candidate = photo.capturedAt ?? photo.uploadedAt ?? photo.date ?? null
+  const parsed = candidate ? new Date(candidate) : null
+  const valid = parsed instanceof Date && !Number.isNaN(parsed.getTime())
+
+  const yearValue = valid ? String(parsed!.getFullYear()) : UNKNOWN_VALUE
+  const monthValue = valid ? String(parsed!.getMonth() + 1).padStart(2, '0') : UNKNOWN_VALUE
+  const dayValue = valid ? String(parsed!.getDate()).padStart(2, '0') : UNKNOWN_VALUE
+
+  const yearSort = yearValue === UNKNOWN_VALUE ? Number.NEGATIVE_INFINITY : Number(yearValue)
+  const monthSort = monthValue === UNKNOWN_VALUE ? Number.NEGATIVE_INFINITY : Number(monthValue)
+  const daySort = dayValue === UNKNOWN_VALUE ? Number.NEGATIVE_INFINITY : (parsed ?? new Date(0)).getTime()
+
+  const yearLabel = yearValue === UNKNOWN_VALUE ? 'Unknown date' : yearValue
+  const monthLabel =
+    monthValue === UNKNOWN_VALUE ? 'Unknown month' : MONTH_NAMES[Math.min(Math.max(Number(monthValue) - 1, 0), MONTH_NAMES.length - 1)]
+  const dayLabel =
+    yearValue === UNKNOWN_VALUE || monthValue === UNKNOWN_VALUE || dayValue === UNKNOWN_VALUE
+      ? 'Unknown day'
+      : `${yearValue}-${monthValue}-${dayValue}`
+
+  return {
+    yearValue,
+    yearLabel,
+    yearSort,
+    monthValue,
+    monthLabel,
+    monthSort,
+    dayValue,
+    dayLabel,
+    daySort,
+  }
+}
+
+function buildDateTree(items: Photo[]): DateTreeBuildResult {
+  const yearMap = new Map<string, YearBuilder>()
+  const photoKeyMap = new Map<string, string>()
+
+  items.forEach((photo) => {
+    const parts = computeDateParts(photo)
+    const yearId = parts.yearValue
+    const monthId = makeMonthKey(parts.yearValue, parts.monthValue)
+    const dayId = makeDayKey(parts.yearValue, parts.monthValue, parts.dayValue)
+
+    photoKeyMap.set(photo.id, dayId)
+
+    let yearBuilder = yearMap.get(yearId)
+    if (!yearBuilder) {
+      yearBuilder = {
+        id: yearId,
+        year: parts.yearValue,
+        label: parts.yearLabel,
+        sortValue: parts.yearSort,
+        count: 0,
+        months: new Map(),
+      }
+      yearMap.set(yearId, yearBuilder)
+    }
+    yearBuilder.count += 1
+
+    let monthBuilder = yearBuilder.months.get(monthId)
+    if (!monthBuilder) {
+      monthBuilder = {
+        id: monthId,
+        year: parts.yearValue,
+        month: parts.monthValue,
+        label: parts.monthLabel,
+        sortValue: parts.monthSort,
+        count: 0,
+        parentYearId: yearBuilder.id,
+        days: new Map(),
+      }
+      yearBuilder.months.set(monthId, monthBuilder)
+    }
+    monthBuilder.count += 1
+
+    let dayBuilder = monthBuilder.days.get(dayId)
+    if (!dayBuilder) {
+      dayBuilder = {
+        id: dayId,
+        year: parts.yearValue,
+        month: parts.monthValue,
+        day: parts.dayValue,
+        label: parts.dayLabel,
+        sortValue: parts.daySort,
+        count: 0,
+        parentYearId: yearBuilder.id,
+        parentMonthId: monthBuilder.id,
+      }
+      monthBuilder.days.set(dayId, dayBuilder)
+    }
+    dayBuilder.count += 1
+  })
+
+  const dayNodeMap = new Map<string, DateTreeDayNode>()
+
+  const years: DateTreeYearNode[] = Array.from(yearMap.values())
+    .sort((a, b) => b.sortValue - a.sortValue || a.label.localeCompare(b.label))
+    .map((yearBuilder) => {
+      const months: DateTreeMonthNode[] = Array.from(yearBuilder.months.values())
+        .sort((a, b) => b.sortValue - a.sortValue || a.label.localeCompare(b.label))
+        .map((monthBuilder) => {
+          const days: DateTreeDayNode[] = Array.from(monthBuilder.days.values())
+            .sort((a, b) => b.sortValue - a.sortValue || a.label.localeCompare(b.label))
+            .map((dayBuilder) => {
+              const node: DateTreeDayNode = {
+                id: dayBuilder.id,
+                label: dayBuilder.label,
+                count: dayBuilder.count,
+                year: dayBuilder.year,
+                month: dayBuilder.month,
+                day: dayBuilder.day,
+                parentYearId: dayBuilder.parentYearId,
+                parentMonthId: dayBuilder.parentMonthId,
+              }
+              dayNodeMap.set(node.id, node)
+              return node
+            })
+
+          const monthNode: DateTreeMonthNode = {
+            id: monthBuilder.id,
+            label: monthBuilder.label,
+            count: monthBuilder.count,
+            year: monthBuilder.year,
+            month: monthBuilder.month,
+            parentYearId: monthBuilder.parentYearId,
+            days,
+          }
+
+          return monthNode
+        })
+
+      const yearNode: DateTreeYearNode = {
+        id: yearBuilder.id,
+        label: yearBuilder.label,
+        count: yearBuilder.count,
+        year: yearBuilder.year,
+        months,
+      }
+
+      return yearNode
+    })
+
+  return { years, dayNodeMap, photoKeyMap }
+}
+
+function normalizeYearParam(value: string | null): string | null {
+  if (!value) return null
+  if (value.toLowerCase() === UNKNOWN_VALUE) return UNKNOWN_VALUE
+  const year = Number(value)
+  return Number.isFinite(year) ? String(Math.trunc(year)) : null
+}
+
+function normalizeMonthParam(value: string | null): string | null {
+  if (!value) return null
+  if (value.toLowerCase() === UNKNOWN_VALUE) return UNKNOWN_VALUE
+  const month = Number(value)
+  if (!Number.isFinite(month)) return null
+  if (month < 1 || month > 12) return null
+  return String(Math.trunc(month)).padStart(2, '0')
+}
+
+function normalizeDayParam(value: string | null): string | null {
+  if (!value) return null
+  if (value.toLowerCase() === UNKNOWN_VALUE) return UNKNOWN_VALUE
+  const day = Number(value)
+  if (!Number.isFinite(day)) return null
+  if (day < 1 || day > 31) return null
+  return String(Math.trunc(day)).padStart(2, '0')
+}
 
 function detectAspect(width?: number | null, height?: number | null): 'portrait' | 'landscape' | 'square' {
   if (!width || !height) return 'square'
@@ -21,7 +266,9 @@ function detectAspect(width?: number | null, height?: number | null): 'portrait'
 function mapAssetToPhoto(item: AssetListItem, existing?: Photo): Photo {
   const name = item.original_filename ?? existing?.name ?? 'Untitled asset'
   const type = inferTypeFromName(name)
-  const date = item.taken_at ?? item.completed_at ?? existing?.date ?? new Date().toISOString()
+  const capturedAt = item.taken_at ?? existing?.capturedAt ?? null
+  const uploadedAt = item.completed_at ?? existing?.uploadedAt ?? null
+  const date = capturedAt ?? uploadedAt ?? existing?.date ?? null
   const thumbSrc = assetThumbUrl(item) ?? existing?.thumbSrc ?? null
   const previewSrc = assetPreviewUrl(item) ?? existing?.previewSrc ?? thumbSrc
   const aspect = detectAspect(item.width, item.height)
@@ -34,6 +281,8 @@ function mapAssetToPhoto(item: AssetListItem, existing?: Photo): Photo {
     name,
     type,
     date,
+    capturedAt,
+    uploadedAt,
     rating: existing?.rating ?? 0,
     picked: existing?.picked ?? isPreview,
     rejected: existing?.rejected ?? false,
@@ -52,6 +301,7 @@ export default function ProjectWorkspace() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [projectName] = useState(() => `Project ${id || '—'}`)
+  const [searchParams, setSearchParams] = useSearchParams()
 
   const [photos, setPhotos] = useState<Photo[]>([])
   const [loadingAssets, setLoadingAssets] = useState(false)
@@ -191,14 +441,66 @@ export default function ProjectWorkspace() {
   const [folderMode, setFolderMode] = useState<'date' | 'custom'>('date')
   const [customFolder, setCustomFolder] = useState('My Folder')
 
+  const { years: dateTree, dayNodeMap, photoKeyMap } = useMemo(() => buildDateTree(photos), [photos])
+
+  const rawYear = searchParams.get('year')
+  const rawMonth = searchParams.get('month')
+  const rawDay = searchParams.get('day')
+
+  const normalizedYear = useMemo(() => normalizeYearParam(rawYear), [rawYear])
+  const normalizedMonth = useMemo(() => normalizeMonthParam(rawMonth), [rawMonth])
+  const normalizedDay = useMemo(() => normalizeDayParam(rawDay), [rawDay])
+
+  const maybeSelectedKey = useMemo(() => {
+    if (!normalizedYear || !normalizedMonth || !normalizedDay) return null
+    return makeDayKey(normalizedYear, normalizedMonth, normalizedDay)
+  }, [normalizedYear, normalizedMonth, normalizedDay])
+
+  useEffect(() => {
+    if (!maybeSelectedKey) return
+    if (dayNodeMap.has(maybeSelectedKey)) return
+    const next = new URLSearchParams(searchParams)
+    next.delete('year')
+    next.delete('month')
+    next.delete('day')
+    setSearchParams(next, { replace: true })
+  }, [maybeSelectedKey, dayNodeMap, searchParams, setSearchParams])
+
+  const selectedDayKey = maybeSelectedKey && dayNodeMap.has(maybeSelectedKey) ? maybeSelectedKey : null
+  const selectedDayNode = selectedDayKey ? dayNodeMap.get(selectedDayKey)! : null
+
+  const handleDaySelect = useCallback((day: DateTreeDayNode) => {
+    const next = new URLSearchParams(searchParams)
+    if (selectedDayKey === day.id) {
+      next.delete('year')
+      next.delete('month')
+      next.delete('day')
+    } else {
+      next.set('year', day.year)
+      next.set('month', day.month)
+      next.set('day', day.day)
+    }
+    setSearchParams(next, { replace: true })
+  }, [searchParams, selectedDayKey, setSearchParams])
+
+  const clearDateFilter = useCallback(() => {
+    if (!searchParams.get('year') && !searchParams.get('month') && !searchParams.get('day')) return
+    const next = new URLSearchParams(searchParams)
+    next.delete('year')
+    next.delete('month')
+    next.delete('day')
+    setSearchParams(next, { replace: true })
+  }, [searchParams, setSearchParams])
+
   const visible: Photo[] = useMemo(() => photos.filter((p) => {
+    const dateMatch = !selectedDayKey || photoKeyMap.get(p.id) === selectedDayKey
     const typeOk = (p.type === 'JPEG' && showJPEG) || (p.type === 'RAW' && showRAW)
     const ratingOk = p.rating >= minStars
     const pickOk = !onlyPicked || p.picked
     const rejectOk = !hideRejected || !p.rejected
     const colorOk = filterColor === 'Any' || p.tag === filterColor
-    return typeOk && ratingOk && pickOk && rejectOk && colorOk
-  }), [photos, showJPEG, showRAW, minStars, onlyPicked, hideRejected, filterColor])
+    return dateMatch && typeOk && ratingOk && pickOk && rejectOk && colorOk
+  }), [photos, selectedDayKey, photoKeyMap, showJPEG, showRAW, minStars, onlyPicked, hideRejected, filterColor])
 
   useEffect(() => { if (current >= visible.length) setCurrent(Math.max(0, visible.length - 1)) }, [visible, current])
 
@@ -331,32 +633,6 @@ export default function ProjectWorkspace() {
   // Back to projects
   function goBack() { navigate('/') }
 
-  // Date tree
-  type Node = { name: string; children?: Node[] }
-  function buildDateTree(items: Photo[]): Node[] {
-    const map = new Map<string, Map<string, Set<string>>>()
-    items.forEach((p) => {
-      const d = new Date(p.date)
-      const y = String(d.getFullYear())
-      const m = String(d.getMonth() + 1).padStart(2, '0')
-      const day = String(d.getDate()).padStart(2, '0')
-      if (!map.has(y)) map.set(y, new Map())
-      const mm = map.get(y)!
-      if (!mm.has(m)) mm.set(m, new Set())
-      mm.get(m)!.add(day)
-    })
-    const nodes: Node[] = []
-    for (const [y, ms] of map) {
-      const mChildren: Node[] = []
-      for (const [m, days] of ms) {
-        mChildren.push({ name: `${y}-${m}`, children: Array.from(days).sort().map((d) => ({ name: `${y}-${m}-${d}` })) })
-      }
-      nodes.push({ name: y, children: mChildren })
-    }
-    return nodes.sort((a, b) => b.name.localeCompare(a.name))
-  }
-  const dateTree = useMemo(() => buildDateTree(photos), [photos])
-
   const currentPhoto = visible[current] ?? null
   const currentAssetId = currentPhoto?.id ?? null
   const {
@@ -376,6 +652,14 @@ export default function ProjectWorkspace() {
       .map(([key, value]) => ({ key, value }))
   }, [currentAssetDetail?.metadata])
   const metadataWarnings = currentAssetDetail?.metadata_warnings ?? currentPhoto?.metadataWarnings ?? []
+  const detailDateLabel = useMemo(() => {
+    if (!currentPhoto) return '—'
+    const source = currentPhoto.capturedAt ?? currentPhoto.uploadedAt ?? currentPhoto.date
+    if (!source) return '—'
+    const parsed = new Date(source)
+    if (Number.isNaN(parsed.getTime())) return '—'
+    return parsed.toLocaleDateString()
+  }, [currentPhoto])
 
   const hasAny = photos.length > 0
 
@@ -434,12 +718,12 @@ export default function ProjectWorkspace() {
         style={{ gridTemplateColumns: `${SIDEBAR_WIDTH}px minmax(0,1fr) ${INSPECTOR_WIDTH}px` }}
       >
         <Sidebar
-          dateTree={dateTree as any}
+          dateTree={dateTree}
           onOpenImport={() => setImportOpen(true)}
-          folderMode={folderMode}
-          setFolderMode={setFolderMode}
-          customFolder={customFolder}
-          setCustomFolder={setCustomFolder}
+          onSelectDay={handleDaySelect}
+          selectedDayKey={selectedDayKey}
+          selectedDay={selectedDayNode}
+          onClearDateFilter={clearDateFilter}
         />
 
         <main ref={contentRef} className="relative flex min-h-0 flex-col bg-[var(--surface,#FFFFFF)] border-r border-[var(--border,#E1D3B9)]">
@@ -461,7 +745,9 @@ export default function ProjectWorkspace() {
             </button>
             {loadingAssets && <span className="text-[11px] text-[var(--text-muted,#6B645B)]">Syncing…</span>}
             {loadError && <span className="text-[11px] text-[#B42318]">{loadError}</span>}
-            <span className="ml-auto text-[var(--text-muted,#6B645B)]">{visible.length} photos</span>
+            <span className="ml-auto text-[var(--text-muted,#6B645B)]">
+              {visible.length} photos{selectedDayNode ? ` • ${selectedDayNode.label}` : ''}
+            </span>
           </div>
 
           <div className="border-b border-[var(--border,#E1D3B9)] px-3 py-2 text-xs grid grid-cols-[1fr_1fr_1fr] gap-3">
@@ -496,7 +782,7 @@ export default function ProjectWorkspace() {
               </div>
             ) : visible.length === 0 ? (
               <div className="flex h-full items-center justify-center overflow-auto p-6">
-                <NoResults onReset={() => { setMinStars(0); setFilterColor('Any'); setShowJPEG(true); setShowRAW(true); setOnlyPicked(false); setHideRejected(true) }} />
+                <NoResults onReset={() => { setMinStars(0); setFilterColor('Any'); setShowJPEG(true); setShowRAW(true); setOnlyPicked(false); setHideRejected(true); clearDateFilter() }} />
               </div>
             ) : view === 'grid' ? (
               <div className="h-full overflow-auto">
@@ -514,7 +800,7 @@ export default function ProjectWorkspace() {
             <div className="space-y-2">
               <Row label="Name" value={currentPhoto.name} />
               <Row label="Type" value={currentPhoto.type} />
-              <Row label="Date" value={new Date(currentPhoto.date).toLocaleDateString()} />
+              <Row label="Date" value={detailDateLabel} />
               <Row
                 label="Size"
                 value={

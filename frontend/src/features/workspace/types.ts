@@ -7,7 +7,9 @@ export type Photo = {
   id: string
   name: string
   type: ImgType
-  date: string // ISO
+  date: string | null // Effective date used for grouping
+  capturedAt?: string | null
+  uploadedAt?: string | null
   rating: 0 | 1 | 2 | 3 | 4 | 5
   picked: boolean
   rejected: boolean

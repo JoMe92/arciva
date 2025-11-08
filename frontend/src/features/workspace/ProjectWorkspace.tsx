@@ -7,9 +7,26 @@ import { getProject, updateProject, type ProjectApiResponse } from '../../shared
 import { initUpload, putUpload, completeUpload } from '../../shared/api/uploads'
 import { placeholderRatioForAspect } from '../../shared/placeholder'
 import type { Photo, ImgType, ColorTag } from './types'
-import { TopBar, Sidebar, GridView, DetailView, EmptyState, NoResults, computeCols, type DateTreeYearNode, type DateTreeMonthNode, type DateTreeDayNode } from './components'
+import {
+  TopBar,
+  Sidebar,
+  GridView,
+  DetailView,
+  EmptyState,
+  NoResults,
+  computeCols,
+  type DateTreeYearNode,
+  type DateTreeMonthNode,
+  type DateTreeDayNode,
+  type SidebarMode,
+  type GridSelectOptions,
+} from './components'
 
-const SIDEBAR_WIDTH = 288
+const SIDEBAR_WIDTHS: Record<SidebarMode, number> = {
+  expanded: 304,
+  slim: 60,
+  hidden: 0,
+}
 const INSPECTOR_WIDTH = 260
 const IGNORED_METADATA_WARNINGS = new Set(['EXIFTOOL_ERROR', 'EXIFTOOL_NOT_INSTALLED', 'EXIFTOOL_JSON_ERROR'])
 const DATE_KEY_DELIM = '__'
@@ -336,6 +353,16 @@ export default function ProjectWorkspace() {
   const currentPhotoIdRef = useRef<string | null>(null)
   const [view, setView] = useState<'grid' | 'detail'>('detail')
   const [current, setCurrent] = useState(0)
+  const [selectedPhotoIds, setSelectedPhotoIds] = useState<Set<string>>(() => new Set<string>())
+  const lastSelectedPhotoIdRef = useRef<string | null>(null)
+  const selectionAnchorRef = useRef<string | null>(null)
+  const suppressSelectionSyncRef = useRef(false)
+  const resolveActionTargetIds = useCallback((primaryId: string | null) => {
+    if (primaryId && selectedPhotoIds.has(primaryId)) {
+      return new Set(selectedPhotoIds)
+    }
+    return primaryId ? new Set([primaryId]) : new Set<string>()
+  }, [selectedPhotoIds])
   const importInFlightRef = useRef(false)
   const handleRename = useCallback(async (nextTitle: string) => {
     if (!id) return
@@ -443,6 +470,49 @@ export default function ProjectWorkspace() {
   const [onlyPicked, setOnlyPicked] = useState(false)
   const [hideRejected, setHideRejected] = useState(true)
   const [filterColor, setFilterColor] = useState<'Any' | ColorTag>('Any')
+  const [sidebarMode, setSidebarMode] = useState<SidebarMode>('expanded')
+  const [lastVisibleSidebarMode, setLastVisibleSidebarMode] = useState<SidebarMode>('expanded')
+
+  useEffect(() => {
+    if (sidebarMode !== 'hidden') {
+      setLastVisibleSidebarMode(sidebarMode)
+    }
+  }, [sidebarMode])
+
+  const collapseSidebar = useCallback(() => {
+    setSidebarMode((prev) => {
+      if (prev === 'expanded') return 'slim'
+      if (prev === 'slim') return 'hidden'
+      return prev
+    })
+  }, [])
+
+  const expandSidebar = useCallback(() => {
+    setSidebarMode((prev) => {
+      if (prev === 'hidden') return lastVisibleSidebarMode
+      if (prev === 'slim') return 'expanded'
+      return prev
+    })
+  }, [lastVisibleSidebarMode])
+
+  const handleSidebarModeChange = useCallback((next: SidebarMode) => {
+    setSidebarMode(next)
+  }, [])
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!event.altKey) return
+      if (event.key === '[') {
+        event.preventDefault()
+        collapseSidebar()
+      } else if (event.key === ']') {
+        event.preventDefault()
+        expandSidebar()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [collapseSidebar, expandSidebar])
 
   useEffect(() => {
     prevPhotosRef.current = photos
@@ -467,6 +537,7 @@ export default function ProjectWorkspace() {
   const [gridSize, setGridSizeState] = useState(Math.max(140, minThumbForSix))
   useEffect(() => setGridSizeState((s) => Math.max(s, minThumbForSix)), [minThumbForSix])
   const setGridSize = (n: number) => setGridSizeState(Math.max(n, minThumbForSix))
+  const sidebarWidth = SIDEBAR_WIDTHS[sidebarMode]
 
   const [folderMode, setFolderMode] = useState<'date' | 'custom'>('date')
   const [customFolder, setCustomFolder] = useState('My Folder')
@@ -542,6 +613,70 @@ export default function ProjectWorkspace() {
     return dateMatch && typeOk && ratingOk && pickOk && rejectOk && colorOk
   }), [photos, selectedDayKey, photoKeyMap, showJPEG, showRAW, minStars, onlyPicked, hideRejected, filterColor])
 
+  useEffect(() => {
+    setSelectedPhotoIds((prev) => {
+      if (!visible.length) {
+        if (!prev.size) return prev
+        lastSelectedPhotoIdRef.current = null
+        selectionAnchorRef.current = null
+        return new Set<string>()
+      }
+      const allowed = new Set(visible.map((p) => p.id))
+      let changed = false
+      const next = new Set<string>()
+      prev.forEach((id) => {
+        if (allowed.has(id)) {
+          next.add(id)
+        } else {
+          changed = true
+        }
+      })
+      if (!next.size) {
+        const fallback = visible[Math.min(current, visible.length - 1)]
+        if (fallback) {
+          next.add(fallback.id)
+          lastSelectedPhotoIdRef.current = fallback.id
+          selectionAnchorRef.current = fallback.id
+          changed = true
+        }
+      } else {
+        const anchorId = selectionAnchorRef.current
+        if (!anchorId || !next.has(anchorId)) {
+          selectionAnchorRef.current = next.values().next().value ?? null
+        }
+        if (!lastSelectedPhotoIdRef.current || !next.has(lastSelectedPhotoIdRef.current)) {
+          lastSelectedPhotoIdRef.current = next.values().next().value ?? null
+        }
+      }
+      return changed ? next : prev
+    })
+  }, [visible, current])
+
+  useEffect(() => {
+    if (!visible.length) {
+      suppressSelectionSyncRef.current = false
+      return
+    }
+    if (suppressSelectionSyncRef.current) {
+      suppressSelectionSyncRef.current = false
+      return
+    }
+    if (selectedPhotoIds.size > 1) {
+      return
+    }
+    const photo = visible[current]
+    if (!photo) return
+    if (selectedPhotoIds.size === 1 && selectedPhotoIds.has(photo.id)) {
+      return
+    }
+    setSelectedPhotoIds((prev) => {
+      if (prev.size === 1 && prev.has(photo.id)) return prev
+      return new Set([photo.id])
+    })
+    lastSelectedPhotoIdRef.current = photo.id
+    selectionAnchorRef.current = photo.id
+  }, [current, visible, view, selectedPhotoIds])
+
   const activeFilterCount = useMemo(() => {
     let count = 0
     if (minStars > 0) count += 1
@@ -568,32 +703,77 @@ export default function ProjectWorkspace() {
         togglePick(cur)
       }
       if (e.key === 'x' || e.key === 'X') {
-        if (cur.picked) {
-          togglePick(cur)
+        const targets = resolveActionTargetIds(cur.id)
+        if (targets.size) {
+          photos.forEach((photo) => {
+            if (targets.has(photo.id) && photo.picked) {
+              void togglePick(photo)
+            }
+          })
+          setPhotos((arr) =>
+            arr.map((x) =>
+              targets.has(x.id)
+                ? {
+                    ...x,
+                    rejected: !x.rejected,
+                    picked: x.picked ? false : x.picked,
+                  }
+                : x,
+            ),
+          )
         }
-        setPhotos((arr) => arr.map((x) => (x.id === cur.id ? { ...x, rejected: !x.rejected, picked: cur.picked ? false : x.picked } : x)))
       }
-      if (/^[1-5]$/.test(e.key)) setPhotos((arr) => arr.map((x) => (x.id === cur.id ? { ...x, rating: Number(e.key) as 1 | 2 | 3 | 4 | 5 } : x)))
+      if (/^[1-5]$/.test(e.key)) {
+        const targets = resolveActionTargetIds(cur.id)
+        if (targets.size) {
+          const rating = Number(e.key) as 1 | 2 | 3 | 4 | 5
+          setPhotos((arr) => arr.map((x) => (targets.has(x.id) ? { ...x, rating } : x)))
+        }
+      }
       if (e.key === 'ArrowRight') setCurrent((i) => Math.min(i + 1, visible.length - 1))
       if (e.key === 'ArrowLeft') setCurrent((i) => Math.max(i - 1, 0))
     }
     window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey)
-  }, [visible, current, togglePick])
+  }, [visible, current, togglePick, resolveActionTargetIds, photos])
 
   // Custom events vom Grid
   useEffect(() => {
-    const onRate = (e: any) => setPhotos((arr) => arr.map((x) => (x.id === e.detail.id ? { ...x, rating: e.detail.r } : x)))
+    const onRate = (e: any) => {
+      const targets = resolveActionTargetIds(e.detail.id as string | null)
+      if (!targets.size) return
+      const rating = e.detail.r as 1 | 2 | 3 | 4 | 5
+      setPhotos((arr) => arr.map((x) => (targets.has(x.id) ? { ...x, rating } : x)))
+    }
     const onPick = (e: any) => {
       const photo = photos.find((x) => x.id === e.detail.id)
       if (photo) togglePick(photo)
     }
     const onReject = (e: any) => {
-      const photo = photos.find((x) => x.id === e.detail.id)
-      if (!photo) return
-      if (photo.picked) togglePick(photo)
-      setPhotos((arr) => arr.map((x) => (x.id === e.detail.id ? { ...x, rejected: !x.rejected, picked: photo.picked ? false : x.picked } : x)))
+      const targets = resolveActionTargetIds(e.detail.id as string | null)
+      if (!targets.size) return
+      photos.forEach((photo) => {
+        if (targets.has(photo.id) && photo.picked) {
+          void togglePick(photo)
+        }
+      })
+      setPhotos((arr) =>
+        arr.map((x) =>
+          targets.has(x.id)
+            ? {
+                ...x,
+                rejected: !x.rejected,
+                picked: x.picked ? false : x.picked,
+              }
+            : x,
+        ),
+      )
     }
-    const onColor = (e: any) => setPhotos((arr) => arr.map((x) => (x.id === e.detail.id ? { ...x, tag: e.detail.t } : x)))
+    const onColor = (e: any) => {
+      const targets = resolveActionTargetIds(e.detail.id as string | null)
+      if (!targets.size) return
+      const color = e.detail.t as ColorTag
+      setPhotos((arr) => arr.map((x) => (targets.has(x.id) ? { ...x, tag: color } : x)))
+    }
     window.addEventListener('rate', onRate as any)
     window.addEventListener('pick', onPick as any)
     window.addEventListener('reject', onReject as any)
@@ -604,7 +784,7 @@ export default function ProjectWorkspace() {
       window.removeEventListener('reject', onReject as any)
       window.removeEventListener('color', onColor as any)
     }
-  }, [photos, togglePick])
+  }, [photos, togglePick, resolveActionTargetIds])
 
   useEffect(() => {
     if (!id) return
@@ -686,6 +866,61 @@ export default function ProjectWorkspace() {
   function goBack() { navigate('/') }
 
   const currentPhoto = visible[current] ?? null
+  const handlePhotoSelect = useCallback(
+    (idx: number, options?: GridSelectOptions) => {
+      const photo = visible[idx]
+      if (!photo) return
+      const shouldSuppress = idx !== current
+      suppressSelectionSyncRef.current = shouldSuppress
+      setCurrent(idx)
+      setSelectedPhotoIds((prev) => {
+        if (options?.shiftKey) {
+          const anchorId =
+            selectionAnchorRef.current ??
+            lastSelectedPhotoIdRef.current ??
+            (prev.size ? prev.values().next().value ?? null : null)
+          if (anchorId) {
+            const anchorIndex = visible.findIndex((item) => item.id === anchorId)
+            if (anchorIndex !== -1) {
+              const start = Math.min(anchorIndex, idx)
+              const end = Math.max(anchorIndex, idx)
+              const next = new Set<string>()
+              for (let i = start; i <= end; i += 1) {
+                next.add(visible[i].id)
+              }
+              lastSelectedPhotoIdRef.current = photo.id
+              if (!selectionAnchorRef.current) {
+                selectionAnchorRef.current = anchorId
+              }
+              return next
+            }
+          }
+        }
+        if (options?.metaKey || options?.ctrlKey) {
+          const next = new Set(prev)
+          if (next.has(photo.id)) {
+            next.delete(photo.id)
+            if (!next.size) {
+              next.add(photo.id)
+            }
+          } else {
+            next.add(photo.id)
+          }
+          lastSelectedPhotoIdRef.current = photo.id
+          selectionAnchorRef.current = photo.id
+          return next
+        }
+        lastSelectedPhotoIdRef.current = photo.id
+        selectionAnchorRef.current = photo.id
+        if (prev.size === 1 && prev.has(photo.id)) return prev
+        return new Set([photo.id])
+      })
+      if (!shouldSuppress) {
+        suppressSelectionSyncRef.current = false
+      }
+    },
+    [visible, current],
+  )
   const currentAssetId = currentPhoto?.id ?? null
   const {
     data: currentAssetDetail,
@@ -805,7 +1040,7 @@ export default function ProjectWorkspace() {
 
       <div
         className="flex-1 min-h-0 grid overflow-hidden"
-        style={{ gridTemplateColumns: `${SIDEBAR_WIDTH}px minmax(0,1fr) ${INSPECTOR_WIDTH}px` }}
+        style={{ gridTemplateColumns: `${sidebarWidth}px minmax(0,1fr) ${INSPECTOR_WIDTH}px` }}
       >
         <Sidebar
           dateTree={dateTree}
@@ -814,6 +1049,10 @@ export default function ProjectWorkspace() {
           selectedDayKey={selectedDayKey}
           selectedDay={selectedDayNode}
           onClearDateFilter={clearDateFilter}
+          mode={sidebarMode}
+          onModeChange={handleSidebarModeChange}
+          onCollapse={collapseSidebar}
+          onExpand={expandSidebar}
         />
 
         <main ref={contentRef} className="relative flex min-h-0 flex-col bg-[var(--surface,#FFFFFF)] border-r border-[var(--border,#E1D3B9)]">
@@ -834,12 +1073,19 @@ export default function ProjectWorkspace() {
                   gap={GAP}
                   containerWidth={contentW}
                   onOpen={(idx) => { setCurrent(idx); setView('detail') }}
-                  onSelect={(idx) => setCurrent(idx)}
-                  selectedId={visible[current]?.id}
+                  onSelect={handlePhotoSelect}
+                  selectedIds={selectedPhotoIds}
                 />
               </div>
             ) : (
-              <DetailView items={visible} index={current} setIndex={setCurrent} className="h-full" />
+              <DetailView
+                items={visible}
+                index={current}
+                setIndex={setCurrent}
+                className="h-full"
+                selectedIds={selectedPhotoIds}
+                onSelect={handlePhotoSelect}
+              />
             )}
           </div>
         </main>
@@ -1027,6 +1273,10 @@ type PendingItem = {
     relativePath?: string
   }
   ready?: boolean
+}
+
+type ToggleOptions = {
+  shiftKey?: boolean
 }
 
 function generateLocalDescriptorId(): string {
@@ -1350,7 +1600,7 @@ function getAssetsForNode(node: HubNode): HubAsset[] {
   return assets
 }
 
-function PendingMiniGrid({ items, onToggle, className }: { items: PendingItem[]; onToggle: (id: string) => void; className?: string }) {
+function PendingMiniGrid({ items, onToggle, className }: { items: PendingItem[]; onToggle: (id: string, opts?: ToggleOptions) => void; className?: string }) {
   const extra = className ? ` ${className}` : ''
   if (!items.length) {
     return (
@@ -1432,7 +1682,10 @@ function PendingMiniGrid({ items, onToggle, className }: { items: PendingItem[];
               <input
                 type="checkbox"
                 checked={item.selected}
-                onChange={() => onToggle(item.id)}
+                onChange={(event) => {
+                  const native = event.nativeEvent as MouseEvent | KeyboardEvent | PointerEvent
+                  onToggle(item.id, { shiftKey: Boolean(native.shiftKey) })
+                }}
                 className="absolute left-1 top-1 h-4 w-4 accent-[var(--charcoal-800,#1F1E1B)]"
                 aria-label={`Toggle ${item.name}`}
               />
@@ -1510,6 +1763,8 @@ export function ImportSheet({
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const folderInputRef = useRef<HTMLInputElement | null>(null)
   const [hubItems, setHubItems] = useState<PendingItem[]>([])
+  const lastLocalToggleIdRef = useRef<string | null>(null)
+  const lastHubToggleIdRef = useRef<string | null>(null)
   const localPreviewUrlsRef = useRef<string[]>([])
   const dragDepthRef = useRef(0)
   const [isDragging, setIsDragging] = useState(false)
@@ -1998,15 +2253,66 @@ function openLocalPicker(kind: 'files' | 'folder' = 'files') {
     })
     localPreviewUrlsRef.current.forEach((url) => URL.revokeObjectURL(url))
     localPreviewUrlsRef.current = []
+    lastLocalToggleIdRef.current = null
     setLocalItems([])
   }
 
-  function toggleLocalItem(id: string) {
-    setLocalItems((prev) => prev.map((item) => (item.id === id ? { ...item, selected: !item.selected } : item)))
+  function toggleLocalItem(id: string, opts: ToggleOptions = {}) {
+    const anchorId = opts.shiftKey ? lastLocalToggleIdRef.current : null
+    setLocalItems((prev) => {
+      const targetIndex = prev.findIndex((item) => item.id === id)
+      if (targetIndex === -1) return prev
+      const nextSelected = !prev[targetIndex].selected
+      if (opts.shiftKey && anchorId) {
+        const anchorIndex = prev.findIndex((item) => item.id === anchorId)
+        if (anchorIndex !== -1 && anchorIndex !== targetIndex) {
+          const start = Math.min(anchorIndex, targetIndex)
+          const end = Math.max(anchorIndex, targetIndex)
+          let changed = false
+          const next = prev.map((item, index) => {
+            if (index >= start && index <= end) {
+              if (item.selected === nextSelected) return item
+              changed = true
+              return { ...item, selected: nextSelected }
+            }
+            return item
+          })
+          lastLocalToggleIdRef.current = id
+          return changed ? next : prev
+        }
+      }
+      lastLocalToggleIdRef.current = id
+      return prev.map((item, index) => (index === targetIndex ? { ...item, selected: nextSelected } : item))
+    })
   }
 
-  function toggleHubItem(id: string) {
-    setHubItems((prev) => prev.map((item) => (item.id === id ? { ...item, selected: !item.selected } : item)))
+  function toggleHubItem(id: string, opts: ToggleOptions = {}) {
+    const anchorId = opts.shiftKey ? lastHubToggleIdRef.current : null
+    setHubItems((prev) => {
+      const targetIndex = prev.findIndex((item) => item.id === id)
+      if (targetIndex === -1) return prev
+      const nextSelected = !prev[targetIndex].selected
+      if (opts.shiftKey && anchorId) {
+        const anchorIndex = prev.findIndex((item) => item.id === anchorId)
+        if (anchorIndex !== -1 && anchorIndex !== targetIndex) {
+          const start = Math.min(anchorIndex, targetIndex)
+          const end = Math.max(anchorIndex, targetIndex)
+          let changed = false
+          const next = prev.map((item, index) => {
+            if (index >= start && index <= end) {
+              if (item.selected === nextSelected) return item
+              changed = true
+              return { ...item, selected: nextSelected }
+            }
+            return item
+          })
+          lastHubToggleIdRef.current = id
+          return changed ? next : prev
+        }
+      }
+      lastHubToggleIdRef.current = id
+      return prev.map((item, index) => (index === targetIndex ? { ...item, selected: nextSelected } : item))
+    })
   }
 
   function toggleExpand(id: string) {
@@ -2484,7 +2790,7 @@ function openLocalPicker(kind: 'files' | 'folder' = 'files') {
                                 <li key={item.id}>
                                   <button
                                     type="button"
-                                    onClick={() => toggleLocalItem(item.id)}
+                                    onClick={(event) => toggleLocalItem(item.id, { shiftKey: event.shiftKey })}
                                     className={`flex w-full items-center gap-2 rounded px-2 py-1 text-left transition ${item.selected ? 'bg-[var(--sand-50,#FBF7EF)] text-[var(--text,#1F1E1B)]' : 'text-[var(--text-muted,#6B645B)] hover:bg-[var(--sand-50,#FBF7EF)]/60'}`}
                                   >
                                     <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border border-[var(--border,#E1D3B9)] text-[10px]">

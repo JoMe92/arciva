@@ -3,6 +3,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { TOKENS } from './utils'
 import { listProjectAssets, assetThumbUrl, assetPreviewUrl, updateAssetPreview, getAsset, type AssetListItem, type AssetDetail } from '../../shared/api/assets'
+import { getProject, type ProjectApiResponse } from '../../shared/api/projects'
 import { initUpload, putUpload, completeUpload } from '../../shared/api/uploads'
 import { placeholderRatioForAspect } from '../../shared/placeholder'
 import type { Photo, ImgType, ColorTag } from './types'
@@ -301,7 +302,15 @@ export default function ProjectWorkspace() {
   const { id } = useParams()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const [projectName] = useState(() => `Project ${id || '—'}`)
+  const cachedProjects = queryClient.getQueryData<ProjectApiResponse[]>(['projects'])
+  const cachedProject = cachedProjects?.find((proj) => proj.id === id)
+  const { data: projectDetail } = useQuery<ProjectApiResponse | undefined>({
+    queryKey: ['project', id],
+    queryFn: () => getProject(id as string),
+    enabled: Boolean(id),
+    initialData: cachedProject,
+  })
+  const projectName = projectDetail?.title?.trim() || `Project ${id || '—'}`
   const [searchParams, setSearchParams] = useSearchParams()
 
   const [photos, setPhotos] = useState<Photo[]>([])
@@ -740,13 +749,6 @@ export default function ProjectWorkspace() {
                 <input type="range" min={minThumbForSix} max={240} value={gridSize} onChange={(e) => setGridSize(Number(e.target.value))} />
               </div>
             )}
-            <button
-              className="ml-2 inline-flex items-center gap-1 rounded border border-[var(--border,#E1D3B9)] px-2 py-1 text-[11px] hover:border-[var(--text,#1F1E1B)]"
-              onClick={() => refreshAssets()}
-              type="button"
-            >
-              Refresh
-            </button>
             {loadingAssets && <span className="text-[11px] text-[var(--text-muted,#6B645B)]">Syncing…</span>}
             {loadError && <span className="text-[11px] text-[#B42318]">{loadError}</span>}
             <span className="ml-auto text-[var(--text-muted,#6B645B)]">

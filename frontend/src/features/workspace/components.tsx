@@ -64,10 +64,8 @@ export function TopBar({ projectName, onBack }: { projectName: string; onBack: (
   return (
     <div className="flex items-center gap-2 px-3 py-2 bg-[var(--surface,#FFFFFF)] border-b border-[var(--border,#E1D3B9)] sticky top-0 z-40">
       <StoneTrailIcon size={28} />
+      <button onClick={onBack} className="px-2 py-1 rounded border border-[var(--border,#E1D3B9)] text-xs" aria-label="Back to Projects">← Projects</button>
       <div className="text-sm opacity-80">{projectName}</div>
-      <div className="ml-auto flex items-center gap-2 text-xs">
-        <button onClick={onBack} className="px-2 py-1 rounded border border-[var(--border,#E1D3B9)]" aria-label="Back to Projects">← Projects</button>
-      </div>
     </div>
   )
 }

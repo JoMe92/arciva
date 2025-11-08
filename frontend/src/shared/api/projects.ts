@@ -66,3 +66,7 @@ export function deleteProject(projectId: string, payload: { confirmTitle: string
     }),
   })
 }
+
+export function getProject(projectId: string) {
+  return request<ProjectApiResponse>(`/v1/projects/${projectId}`)
+}

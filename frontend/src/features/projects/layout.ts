@@ -29,7 +29,7 @@ export function buildLayout(projects: Project[], withCreate = true): LayoutRow[]
           cols: 3,
           gapX: 'gap-x-10',
           items: [
-            { kind: 'create', aspect: 'portrait', span: 1, scale: 0.9 },
+            { kind: 'create', aspect: 'landscape', span: 1 },
             { kind: 'project', project: first, span: 2 },
           ],
           offsetTop: 'mt-0',
@@ -43,7 +43,7 @@ export function buildLayout(projects: Project[], withCreate = true): LayoutRow[]
           cols: 3,
           gapX: 'gap-x-10',
           items: [
-            { kind: 'create', aspect: 'portrait', span: 1, scale: 0.9 },
+            { kind: 'create', aspect: first?.aspect || 'portrait', span: 1 },
             { kind: 'project', project: a, span: 1 },
             ...(b ? [{ kind: 'project', project: b, span: 1 } as LayoutItem] : []),
           ],
@@ -55,7 +55,7 @@ export function buildLayout(projects: Project[], withCreate = true): LayoutRow[]
       rows.push({
         cols: 3,
         gapX: 'gap-x-10',
-        items: [{ kind: 'create', aspect: 'portrait', span: 1, scale: 0.9 }],
+        items: [{ kind: 'create', aspect: 'portrait', span: 1 }],
         offsetTop: 'mt-0',
       })
     }

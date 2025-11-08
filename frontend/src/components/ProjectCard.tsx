@@ -3,7 +3,14 @@ import type { Project } from '../features/projects/types'
 import { aspectClass, placeholderRatioForAspect } from '../features/projects/utils'
 import { RawPlaceholder } from './RawPlaceholder'
 
-const MEDIA_MAX = 'max-h-[420px] md:max-h-[520px]'
+const MEDIA_MAX_DEFAULT = 'max-h-[420px] md:max-h-[520px]'
+const MEDIA_MAX_COMPACT = 'max-h-[320px] md:max-h-[420px]'
+
+function aspectRatioValue(width?: number | null, height?: number | null): string | null {
+  if (!width || !height) return null
+  if (width <= 0 || height <= 0) return null
+  return `${width} / ${height}`
+}
 
 const ProjectCard: React.FC<{
   p: Project
@@ -13,7 +20,8 @@ const ProjectCard: React.FC<{
   archiveMode: boolean
   onEdit: (p: Project) => void
   onSelectPrimary?: (projectId: string, assetId: string) => Promise<void>
-}> = ({ p, onOpen, onEdit, onSelectPrimary }) => {
+  compact?: boolean
+}> = ({ p, onOpen, onEdit, onSelectPrimary, compact = false }) => {
   const placeholderRatio = placeholderRatioForAspect(p.aspect)
   const previews = React.useMemo(() => {
     const list = (p.previewImages ?? [])
@@ -29,8 +37,15 @@ const ProjectCard: React.FC<{
   const [activePreview, setActivePreview] = React.useState(0)
   const hasImage = previews.length > 0
   const current = hasImage ? previews[Math.max(0, Math.min(activePreview, previews.length - 1))] : null
+  const primaryPreview = previews[0] ?? null
   const currentUrl = current?.url ?? null
   const showNav = hovered && previews.length > 1
+  const fallbackAspectRatio = React.useMemo(() => {
+    if (p.aspect === 'landscape') return '16 / 9'
+    if (p.aspect === 'portrait') return '3 / 4'
+    return '1 / 1'
+  }, [p.aspect])
+  const primaryAspectRatio = aspectRatioValue(primaryPreview?.width, primaryPreview?.height) ?? fallbackAspectRatio
 
   React.useEffect(() => {
     setActivePreview(0)
@@ -115,14 +130,17 @@ const ProjectCard: React.FC<{
         onBlur={handleBlur}
         className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus,#6B7C7A)] rounded-xl"
       >
-        <div className="overflow-hidden rounded-t-xl bg-[var(--surface,#FFFFFF)] relative">
+        <div className="overflow-hidden rounded-t-xl bg-[var(--placeholder-bg-beige,#F3EBDD)] relative">
           {/* identischer Medien-Wrapper mit vertikalem Limit */}
-          <div className={`relative ${aspectClass(p.aspect)} w-full ${MEDIA_MAX} overflow-hidden`}>
+          <div
+            className={`relative ${aspectClass(p.aspect)} w-full ${compact ? MEDIA_MAX_COMPACT : MEDIA_MAX_DEFAULT} overflow-hidden`}
+            style={{ aspectRatio: primaryAspectRatio }}
+          >
             {hasImage ? (
               <img
                 src={currentUrl ?? undefined}
                 alt={`${p.title} – ${p.client}`}
-                className="absolute inset-0 h-full w-full object-cover"
+                className="absolute inset-0 h-full w-full object-cover transition-[transform] duration-150 ease-out"
               />
             ) : (
               <RawPlaceholder ratio={placeholderRatio} className="absolute inset-0" />

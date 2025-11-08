@@ -18,6 +18,8 @@ const Row: React.FC<{
   onSelectPrimary?: (projectId: string, assetId: string) => Promise<void>
 }> = ({ row, index, onOpen, onArchive, onUnarchive, onCreate, archiveMode, onEdit, onSelectPrimary }) => {
   const colsClass = row.cols === 4 ? 'grid-cols-4' : 'grid-cols-3'
+  const rowHasProjects = row.items.some((it) => it.kind === 'project')
+  const isCompactRow = index === 0 && rowHasProjects
   return (
     <div className={`${row.offsetTop || ''}`}>
       <div className={`grid ${colsClass} ${row.gapX} gap-y-10 items-start`}>
@@ -25,8 +27,8 @@ const Row: React.FC<{
           if (it.kind === 'create') {
             // CreateCard: kleiner & 1 Spalte
             return (
-              <div key={`c-${i}`} className={`${spanClass(1)} ${it.scale ? `scale-[${it.scale}] origin-top-left` : ''}`}>
-                {archiveMode ? null : <CreateCard onClick={onCreate} aspect={it.aspect || 'portrait'} />}
+                  <div key={`c-${i}`} className={`${spanClass(1)} ${it.scale ? `scale-[${it.scale}] origin-top-left` : ''}`}>
+                    {archiveMode ? null : <CreateCard onClick={onCreate} aspect={it.aspect || 'portrait'} compact={isCompactRow} />}
               </div>
             )
           }
@@ -40,6 +42,7 @@ const Row: React.FC<{
                 archiveMode={archiveMode}
                 onEdit={onEdit}
                 onSelectPrimary={onSelectPrimary}
+                compact={isCompactRow}
               />
             </div>
           )

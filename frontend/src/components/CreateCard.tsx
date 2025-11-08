@@ -3,12 +3,14 @@ import type { Project } from '../features/projects/types'
 import { aspectClass, placeholderRatioForAspect } from '../features/projects/utils'
 import { RawPlaceholder } from './RawPlaceholder'
 
-const MEDIA_MAX = 'max-h-[420px] md:max-h-[520px]'
+const MEDIA_MAX_DEFAULT = 'max-h-[420px] md:max-h-[520px]'
+const MEDIA_MAX_COMPACT = 'max-h-[320px] md:max-h-[420px]'
 // tailwind v4 scan hint
 const __scan = 'aspect-[3/4] aspect-[16/9] aspect-square'
 
-const CreateCard: React.FC<{ onClick: () => void; aspect?: Project['aspect'] }> = ({ onClick, aspect = 'portrait' }) => {
+const CreateCard: React.FC<{ onClick: () => void; aspect?: Project['aspect']; compact?: boolean }> = ({ onClick, aspect = 'portrait', compact = false }) => {
   const ratio = placeholderRatioForAspect(aspect)
+  const maxHeightClass = compact ? MEDIA_MAX_COMPACT : MEDIA_MAX_DEFAULT
 
   return (
     <div className="relative">
@@ -18,8 +20,8 @@ const CreateCard: React.FC<{ onClick: () => void; aspect?: Project['aspect'] }> 
         aria-label="Create new project"
         className="block w-full focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus,#6B7C7A)] rounded-xl"
       >
-        <div className="overflow-hidden rounded-t-xl bg-[var(--surface,#FFFFFF)]">
-          <div className={`relative ${aspectClass(aspect)} w-full ${MEDIA_MAX} overflow-hidden`}>
+        <div className="overflow-hidden rounded-t-xl bg-[var(--placeholder-bg-beige,#F3EBDD)]">
+          <div className={`relative ${aspectClass(aspect)} w-full ${maxHeightClass} overflow-hidden`}>
             <RawPlaceholder ratio={ratio} className="absolute inset-0" />
           </div>
         </div>

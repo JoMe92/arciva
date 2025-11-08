@@ -15,7 +15,7 @@ This guide explains how to **develop**, **run**, and **test** the Nivio backend 
 - PostgreSQL running with database/user
 - Redis running (for ARQ)
 - POSIX storage folders exist
-- Repo root contains a **`.env`** (see `infra/local/INSTALL.md`)
+- Repo root contains a **`.env`** (see [local infrastructure guide](../operations/local-infra.md))
 
 ---
 
@@ -188,4 +188,3 @@ Keep production data safe: no destructive autogenerates without review.
 - Implement multiple derivative sizes and lazy generation.
 - Switch to MinIO presigned uploads for parity with cloud.
 - Introduce Alembic and first real migration.
-

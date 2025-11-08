@@ -1,8 +1,8 @@
 # Nivio
 
 [![Status](https://img.shields.io/badge/status-MVP%20%7C%20local%20setup-blue)](#)
-[![Architecture Docs](https://img.shields.io/badge/docs-arc42%20%2B%20ADRs-informational)](docs/arc42-and-adrs.md)
-[![Install Guide](https://img.shields.io/badge/infra-local%20install%20guide-brightgreen)](infra/local/INSTALL.md)
+[![Architecture Docs](https://img.shields.io/badge/docs-arc42%20%2B%20ADRs-informational)](docs/architecture/arc42.md)
+[![Install Guide](https://img.shields.io/badge/infra-local%20install%20guide-brightgreen)](docs/operations/local-infra.md)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey)](#)
 [![Stars](https://img.shields.io/github/stars/OWNER/REPO?style=social)](#)
 
@@ -51,7 +51,16 @@ Add your UI screenshots here. Example:
 - RAW ingest support (embedded thumbnails + metadata via rawpy)
 - Stable IDs (UUID) and reliable timestamps
 
-Planned next: ratings/flags, quick filters, shareable previews, multi‑user auth.
+Planned next: ratings/flags, quick filters, shareable previews, multi-user auth.
+
+---
+
+## Documentation Map
+- [Docs index](docs/README.md) for quick navigation
+- [Architecture overview](docs/architecture/arc42.md) and [ADRs](docs/architecture/adrs/README.md)
+- [Backend dev guide](docs/backend/dev-guide.md) and [frontend setup](docs/frontend/setup.md)
+- [Local infrastructure install](docs/operations/local-infra.md)
+- [Conventions & workflow](docs/contributing/conventions.md) plus [Agents](Agents.md) for automation guardrails
 
 ---
 
@@ -100,7 +109,7 @@ Planned next: ratings/flags, quick filters, shareable previews, multi‑user aut
    ```
    - `dev.sh` (wrapped by `pixi run dev-stack`) brings up Postgres/Redis in Docker automatically; the backend performs migrations on startup.
 
-Details with Linux commands: [infra/local/INSTALL.md](infra/local/INSTALL.md)
+Details with Linux commands: [docs/operations/local-infra.md](docs/operations/local-infra.md)
 
 ---
 
@@ -182,7 +191,7 @@ WORKER_CONCURRENCY=2
 - PostgreSQL: projects, assets, `project_assets`, derivatives
 - Storage: `uploads/`, `originals/`, `derivatives/` (MinIO/S3 or POSIX via adapter)
 
-Full write‑up: [docs/arc42-and-adrs.md](docs/arc42-and-adrs.md)
+Full write-up: [docs/architecture/arc42.md](docs/architecture/arc42.md)
 
 ---
 

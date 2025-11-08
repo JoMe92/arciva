@@ -1,5 +1,7 @@
 # Frontend-Setup – Schritt für Schritt (für Einsteiger)
 
+> Quick English summary: the guide below (in German) walks through installing Volta, Node LTS, and pnpm; explains the Vite/React/TypeScript/Tailwind stack; and shows how to run `pnpm install` + `pnpm dev` plus common component patterns. Use it as the canonical onboarding doc for frontend contributors.
+
 Dieses README fasst **alle bisherigen Schritte** zusammen, damit du dein Frontend unter Ubuntu (Firefox + VS Code) problemlos starten und weiterentwickeln kannst. Es ist bewusst einfach gehalten und enthält alle wichtigen Befehle.
 
 ---
@@ -274,4 +276,3 @@ pnpm add -D vitest jsdom @testing-library/react @testing-library/user-event @tes
 ---
 
 Viel Spaß beim Bauen! Wenn du möchtest, kann dieses README als Startseite im Repo bleiben. Ergänze es einfach mit team‑spezifischen Konventionen, Branch‑Strategie, CI‑Anweisungen und API-Infos.
-

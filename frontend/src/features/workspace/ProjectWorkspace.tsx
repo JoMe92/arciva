@@ -15,6 +15,7 @@ import {
   EmptyState,
   NoResults,
   computeCols,
+  StarRow,
   type DateTreeYearNode,
   type DateTreeMonthNode,
   type DateTreeDayNode,

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { RawPlaceholder, RawPlaceholderFrame } from '../../components/RawPlaceholder'
 import StoneTrailLogo from '../../components/StoneTrailLogo'
 import { TOKENS } from './utils'
@@ -50,26 +50,418 @@ function setsAreEqual<T>(a: Set<T>, b: Set<T>): boolean {
   return true
 }
 
-export function TopBar({ projectName, onBack }: { projectName: string; onBack: () => void }) {
+export type WorkspaceFilterControls = {
+  minStars: 0 | 1 | 2 | 3 | 4 | 5
+  setMinStars: (value: 0 | 1 | 2 | 3 | 4 | 5) => void
+  filterColor: 'Any' | ColorTag
+  setFilterColor: (value: 'Any' | ColorTag) => void
+  showJPEG: boolean
+  setShowJPEG: (value: boolean) => void
+  showRAW: boolean
+  setShowRAW: (value: boolean) => void
+  onlyPicked: boolean
+  setOnlyPicked: (value: boolean) => void
+  hideRejected: boolean
+  setHideRejected: (value: boolean) => void
+  dateFilterActive: boolean
+  selectedDayLabel: string | null
+  clearDateFilter: () => void
+}
+
+export function TopBar({
+  projectName,
+  onBack,
+  onRename,
+  renamePending,
+  renameError,
+  onImport,
+  view,
+  onChangeView,
+  gridSize,
+  minGridSize,
+  onGridSizeChange,
+  filters,
+  filterCount,
+  onResetFilters,
+  visibleCount,
+  selectedDayLabel,
+  loadingAssets,
+  loadError,
+}: {
+  projectName: string
+  onBack: () => void
+  onRename: (next: string) => Promise<void> | void
+  renamePending?: boolean
+  renameError?: string | null
+  onImport: () => void
+  view: 'grid' | 'detail'
+  onChangeView: (next: 'grid' | 'detail') => void
+  gridSize: number
+  minGridSize: number
+  onGridSizeChange: (value: number) => void
+  filters: WorkspaceFilterControls
+  filterCount: number
+  onResetFilters: () => void
+  visibleCount: number
+  selectedDayLabel: string | null
+  loadingAssets: boolean
+  loadError: string | null
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(projectName)
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const inputRef = useRef<HTMLInputElement | null>(null)
+  const filtersRef = useRef<HTMLDivElement | null>(null)
+  const filtersButtonRef = useRef<HTMLButtonElement | null>(null)
+
+  useEffect(() => {
+    if (!editing) {
+      setDraft(projectName)
+    }
+  }, [projectName, editing])
+
+  useEffect(() => {
+    if (!editing) return
+    if (inputRef.current) {
+      inputRef.current.focus()
+      inputRef.current.select()
+    }
+  }, [editing])
+
+  useEffect(() => {
+    if (!filtersOpen) return
+    const handleClick = (event: MouseEvent) => {
+      const target = event.target as Node
+      if (filtersRef.current?.contains(target)) return
+      if (filtersButtonRef.current?.contains(target)) return
+      setFiltersOpen(false)
+    }
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setFiltersOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    document.addEventListener('keydown', handleKey)
+    return () => {
+      document.removeEventListener('mousedown', handleClick)
+      document.removeEventListener('keydown', handleKey)
+    }
+  }, [filtersOpen])
+
+  const startEditing = useCallback(() => {
+    setDraft(projectName)
+    setEditing(true)
+  }, [projectName])
+
+  const cancelEditing = useCallback(() => {
+    setDraft(projectName)
+    setEditing(false)
+  }, [projectName])
+
+  const commitRename = useCallback(async () => {
+    const trimmed = draft.trim()
+    if (!trimmed) {
+      setDraft(projectName)
+      setEditing(false)
+      return
+    }
+    if (trimmed === projectName.trim()) {
+      setEditing(false)
+      return
+    }
+    try {
+      await onRename(trimmed)
+      setEditing(false)
+    } catch {
+      // keep editing so the user can resolve the error surfaced below
+    }
+  }, [draft, onRename, projectName])
+
+  const handleTitleKey = useCallback((event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter') {
+      event.preventDefault()
+      commitRename()
+    } else if (event.key === 'Escape') {
+      event.preventDefault()
+      cancelEditing()
+    }
+  }, [cancelEditing, commitRename])
+
+  const handleBlur = useCallback(() => {
+    if (renamePending) return
+    void commitRename()
+  }, [commitRename, renamePending])
+
+  const filterLabel = useMemo(() => {
+    if (filterCount === 0) return 'Filters'
+    return `Filters · ${filterCount}`
+  }, [filterCount])
+
+  const viewButtonClasses = (mode: 'grid' | 'detail') =>
+    `inline-flex h-9 items-center px-4 text-[12px] font-medium transition-colors ${
+      view === mode ? 'bg-[var(--sand-100,#F3EBDD)] text-[var(--text,#1F1E1B)]' : 'text-[var(--text-muted,#6B645B)]'
+    }`
+
   return (
-    <header className="sticky top-0 z-40 border-b border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]/90 backdrop-blur">
-      <div className="flex items-center gap-3 px-4 py-2">
-        <StoneTrailLogo className="shrink-0" />
-        <div className="flex flex-1 items-center gap-2 overflow-hidden">
+    <header className="sticky top-0 z-40 border-b border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]/95 backdrop-blur">
+      <div className="mx-auto flex h-16 max-w-7xl items-center gap-4 px-4 sm:px-6 lg:px-8">
+        <div className="flex min-w-0 items-center gap-3">
+          <StoneTrailLogo className="hidden lg:inline-flex shrink-0" showLabel={false} />
           <button
             type="button"
             onClick={onBack}
-            className="inline-flex h-8 items-center rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 text-[12px] font-medium text-[var(--text,#1F1E1B)] transition-colors hover:border-[var(--text-muted,#6B645B)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--stone-trail-brand-focus,#4A463F)]"
+            className="inline-flex h-9 items-center rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 text-[12px] font-medium text-[var(--text,#1F1E1B)] shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-colors hover:border-[var(--text-muted,#6B645B)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--stone-trail-brand-focus,#4A463F)] md:hidden"
             aria-label="Back to projects"
           >
             ← Projects
           </button>
-          <div className="truncate text-sm font-medium text-[var(--text,#1F1E1B)] opacity-80" title={projectName}>
-            {projectName}
+          <nav className="hidden items-center text-sm text-[var(--text-muted,#6B645B)] md:flex">
+            <button type="button" onClick={onBack} className="font-medium text-[var(--text,#1F1E1B)] hover:underline focus:outline-none">
+              Projects
+            </button>
+            <span className="mx-2">›</span>
+            <span className="max-w-[180px] truncate font-medium text-[var(--text,#1F1E1B)]" title={projectName}>
+              {projectName}
+            </span>
+          </nav>
+        </div>
+
+        <div className="flex flex-1 flex-col items-center text-center">
+          {editing ? (
+            <div className="flex items-center gap-2">
+              <input
+                ref={inputRef}
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+                onKeyDown={handleTitleKey}
+                onBlur={handleBlur}
+                disabled={renamePending}
+                className="h-11 min-w-[200px] rounded-xl border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 text-center text-xl font-semibold text-[var(--text,#1F1E1B)] shadow-inner focus:outline-none focus:ring-2 focus:ring-[var(--stone-trail-brand-focus,#4A463F)]"
+              />
+              <button
+                type="button"
+                onClick={() => void commitRename()}
+                className="h-9 w-9 rounded-full border border-[var(--border,#E1D3B9)] text-sm"
+                disabled={renamePending}
+                aria-label="Save project name"
+              >
+                ✓
+              </button>
+              <button
+                type="button"
+                onClick={cancelEditing}
+                className="h-9 w-9 rounded-full border border-[var(--border,#E1D3B9)] text-sm"
+                disabled={renamePending}
+                aria-label="Cancel renaming"
+              >
+                ✕
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3">
+              <h1
+                className="text-2xl font-bold leading-tight tracking-tight text-[var(--text,#1F1E1B)]"
+                onDoubleClick={startEditing}
+                title="Double-click to rename"
+              >
+                {projectName}
+              </h1>
+              <button
+                type="button"
+                onClick={startEditing}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border,#E1D3B9)] text-sm text-[var(--text-muted,#6B645B)] hover:text-[var(--text,#1F1E1B)]"
+                aria-label="Rename project"
+              >
+                ✎
+              </button>
+            </div>
+          )}
+          {renameError ? (
+            <p className="mt-1 text-xs text-[#B42318]">{renameError}</p>
+          ) : null}
+        </div>
+
+        <div className="flex min-w-[280px] flex-1 items-center justify-end gap-2 text-[12px]">
+          <button
+            type="button"
+            onClick={onImport}
+            className="inline-flex h-9 items-center rounded-full border border-transparent bg-[var(--charcoal-800,#1F1E1B)] px-4 text-[12px] font-semibold text-white shadow-sm transition hover:bg-[var(--charcoal-700,#2B2824)]"
+          >
+            Import
+          </button>
+          <div className="inline-flex items-center rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]">
+            <button type="button" className={`${viewButtonClasses('grid')} rounded-l-full`} onClick={() => onChangeView('grid')}>
+              Grid
+            </button>
+            <button type="button" className={`${viewButtonClasses('detail')} rounded-r-full`} onClick={() => onChangeView('detail')}>
+              Detail
+            </button>
+          </div>
+          {view === 'grid' ? (
+            <label className="hidden items-center gap-2 whitespace-nowrap text-[11px] text-[var(--text-muted,#6B645B)] lg:flex">
+              Size
+              <input
+                type="range"
+                min={minGridSize}
+                max={240}
+                value={gridSize}
+                onChange={(event) => onGridSizeChange(Number(event.target.value))}
+                aria-label="Thumbnail size"
+              />
+            </label>
+          ) : null}
+          <div className="relative">
+            <button
+              type="button"
+              ref={filtersButtonRef}
+              onClick={() => setFiltersOpen((open) => !open)}
+              className={`inline-flex h-9 items-center rounded-full border px-4 text-[12px] font-medium ${
+                filterCount ? 'border-[var(--text,#1F1E1B)] text-[var(--text,#1F1E1B)]' : 'border-[var(--border,#E1D3B9)] text-[var(--text-muted,#6B645B)]'
+              }`}
+              aria-haspopup="dialog"
+              aria-expanded={filtersOpen}
+            >
+              {filterLabel}
+            </button>
+            {filtersOpen ? (
+              <FiltersPopover
+                ref={filtersRef}
+                controls={filters}
+                onReset={() => {
+                  onResetFilters()
+                  setFiltersOpen(false)
+                }}
+                onClose={() => setFiltersOpen(false)}
+              />
+            ) : null}
+          </div>
+          <button
+            type="button"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border,#E1D3B9)] text-lg text-[var(--text-muted,#6B645B)]"
+            aria-label="More actions"
+          >
+            …
+          </button>
+          <div className="flex flex-col items-end text-[11px] text-[var(--text-muted,#6B645B)]">
+            <div className="flex items-center gap-2">
+              {loadingAssets ? <span>Syncing…</span> : null}
+              {loadError ? <span className="text-[#B42318]">{loadError}</span> : null}
+              <span className="text-[var(--text,#1F1E1B)]">
+                {visibleCount} photos{selectedDayLabel ? ` • ${selectedDayLabel}` : ''}
+              </span>
+            </div>
           </div>
         </div>
       </div>
     </header>
+  )
+}
+
+const FiltersPopover = React.forwardRef<HTMLDivElement, {
+  controls: WorkspaceFilterControls
+  onReset: () => void
+  onClose: () => void
+}>(({ controls, onReset, onClose }, ref) => {
+  return (
+    <div
+      ref={ref}
+      className="absolute right-0 top-full z-50 mt-3 w-80 rounded-2xl border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-4 text-[12px] shadow-xl"
+    >
+      <div className="mb-3 flex items-center justify-between">
+        <div className="font-semibold text-[var(--text,#1F1E1B)]">Filters</div>
+        <button type="button" onClick={onReset} className="text-[11px] text-[var(--river-500,#6B7C7A)] hover:underline">
+          Reset
+        </button>
+      </div>
+      {controls.dateFilterActive ? (
+        <div className="mb-3 rounded-xl border border-[var(--border,#E1D3B9)] bg-[var(--sand-50,#FBF7EF)] px-3 py-2">
+          <div className="text-[11px] font-semibold text-[var(--text,#1F1E1B)]">Date</div>
+          <div className="mt-1 flex items-center justify-between text-[11px] text-[var(--text-muted,#6B645B)]">
+            <span className="truncate">{controls.selectedDayLabel ?? 'Custom date range'}</span>
+            <button type="button" onClick={() => { controls.clearDateFilter(); onClose() }} className="font-medium text-[var(--river-500,#6B7C7A)] hover:underline">
+              Clear
+            </button>
+          </div>
+        </div>
+      ) : null}
+      <div className="space-y-3">
+        <div>
+          <div className="mb-1 text-[11px] uppercase tracking-wide text-[var(--text-muted,#6B645B)]">Rating</div>
+          <MinStarRow value={controls.minStars} onChange={controls.setMinStars} />
+        </div>
+        <div>
+          <div className="mb-1 text-[11px] uppercase tracking-wide text-[var(--text-muted,#6B645B)]">Color</div>
+          <ColorFilter value={controls.filterColor} onChange={controls.setFilterColor} />
+        </div>
+        <div className="grid grid-cols-2 gap-2 text-[11px]">
+          <label className="inline-flex items-center gap-2 rounded-full border border-[var(--border,#E1D3B9)] px-3 py-1">
+            <input type="checkbox" checked={controls.showJPEG} onChange={(event) => controls.setShowJPEG(event.target.checked)} className="accent-[var(--text,#1F1E1B)]" />
+            JPEG
+          </label>
+          <label className="inline-flex items-center gap-2 rounded-full border border-[var(--border,#E1D3B9)] px-3 py-1">
+            <input type="checkbox" checked={controls.showRAW} onChange={(event) => controls.setShowRAW(event.target.checked)} className="accent-[var(--text,#1F1E1B)]" />
+            RAW
+          </label>
+          <label className="inline-flex items-center gap-2 rounded-full border border-[var(--border,#E1D3B9)] px-3 py-1">
+            <input type="checkbox" checked={controls.onlyPicked} onChange={(event) => controls.setOnlyPicked(event.target.checked)} className="accent-[var(--text,#1F1E1B)]" />
+            Picks only
+          </label>
+          <label className="inline-flex items-center gap-2 rounded-full border border-[var(--border,#E1D3B9)] px-3 py-1">
+            <input type="checkbox" checked={controls.hideRejected} onChange={(event) => controls.setHideRejected(event.target.checked)} className="accent-[var(--text,#1F1E1B)]" />
+            Hide rejects
+          </label>
+        </div>
+      </div>
+    </div>
+  )
+})
+FiltersPopover.displayName = 'FiltersPopover'
+
+function MinStarRow({ value, onChange }: { value: 0 | 1 | 2 | 3 | 4 | 5; onChange: (v: 0 | 1 | 2 | 3 | 4 | 5) => void }) {
+  const stars = [0, 1, 2, 3, 4, 5] as const
+  return (
+    <div className="inline-flex items-center gap-1">
+      {stars.map((s) => (
+        <button
+          key={s}
+          type="button"
+          className={`rounded-full px-2 py-0.5 text-[11px] ${value >= s ? 'border border-[var(--text,#1F1E1B)] text-[var(--text,#1F1E1B)]' : 'border border-[var(--border,#E1D3B9)] text-[var(--text-muted,#6B645B)]'}`}
+          onClick={() => onChange(s)}
+          aria-label={`Minimum ${s} star${s === 1 ? '' : 's'}`}
+        >
+          {s === 0 ? 'All' : '★'.repeat(s)}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function ColorFilter({ value, onChange }: { value: 'Any' | ColorTag; onChange: (v: 'Any' | ColorTag) => void }) {
+  const options: Array<{ label: string; value: 'Any' | ColorTag }> = [
+    { label: 'Any', value: 'Any' },
+    { label: 'Red', value: 'Red' },
+    { label: 'Green', value: 'Green' },
+    { label: 'Blue', value: 'Blue' },
+    { label: 'Yellow', value: 'Yellow' },
+    { label: 'Purple', value: 'Purple' },
+    { label: 'None', value: 'None' },
+  ]
+  return (
+    <div className="relative w-full">
+      <select
+        className="w-full appearance-none rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 py-1 text-[12px] focus:outline-none"
+        value={value}
+        onChange={(event) => onChange(event.target.value as 'Any' | ColorTag)}
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+      <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-[10px] text-[var(--text-muted,#6B645B)]">▾</span>
+    </div>
   )
 }
 

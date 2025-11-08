@@ -40,6 +40,12 @@ class ProjectDelete(BaseModel):
     confirm_title: str = Field(..., min_length=1)
     delete_assets: bool = False
 
+
+class ProjectUpdate(BaseModel):
+    title: Optional[str] = Field(default=None, min_length=1)
+    client: Optional[str] = None
+    note: Optional[str] = None
+
 # Uploads/Assets
 class UploadInitIn(BaseModel):
     filename: str

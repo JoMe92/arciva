@@ -3,7 +3,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { TOKENS } from './utils'
 import { listProjectAssets, assetThumbUrl, assetPreviewUrl, updateAssetPreview, getAsset, type AssetListItem, type AssetDetail } from '../../shared/api/assets'
-import { getProject, type ProjectApiResponse } from '../../shared/api/projects'
+import { getProject, updateProject, type ProjectApiResponse } from '../../shared/api/projects'
 import { initUpload, putUpload, completeUpload } from '../../shared/api/uploads'
 import { placeholderRatioForAspect } from '../../shared/placeholder'
 import type { Photo, ImgType, ColorTag } from './types'
@@ -311,6 +311,20 @@ export default function ProjectWorkspace() {
     initialData: cachedProject,
   })
   const projectName = projectDetail?.title?.trim() || `Project ${id || '—'}`
+  const renameMutation = useMutation({
+    mutationFn: ({ title }: { title: string }) => {
+      if (!id) throw new Error('Project id missing')
+      return updateProject(id, { title })
+    },
+    onSuccess: (updated) => {
+      if (!id) return
+      queryClient.setQueryData(['project', id], updated)
+      queryClient.setQueryData<ProjectApiResponse[] | undefined>(['projects'], (prev) => {
+        if (!prev) return prev
+        return prev.map((proj) => (proj.id === updated.id ? { ...proj, title: updated.title, updated_at: updated.updated_at } : proj))
+      })
+    },
+  })
   const [searchParams, setSearchParams] = useSearchParams()
 
   const [photos, setPhotos] = useState<Photo[]>([])
@@ -323,6 +337,12 @@ export default function ProjectWorkspace() {
   const [view, setView] = useState<'grid' | 'detail'>('detail')
   const [current, setCurrent] = useState(0)
   const importInFlightRef = useRef(false)
+  const handleRename = useCallback(async (nextTitle: string) => {
+    if (!id) return
+    const trimmed = nextTitle.trim() || 'Untitled project'
+    if (trimmed === projectName.trim()) return
+    await renameMutation.mutateAsync({ title: trimmed })
+  }, [id, projectName, renameMutation])
 
   const refreshAssets = useCallback(async (focusNewest: boolean = false) => {
     if (!id) return
@@ -502,6 +522,16 @@ export default function ProjectWorkspace() {
     setSearchParams(next, { replace: true })
   }, [searchParams, setSearchParams])
 
+  const resetFilters = useCallback(() => {
+    setMinStars(0)
+    setFilterColor('Any')
+    setShowJPEG(true)
+    setShowRAW(true)
+    setOnlyPicked(false)
+    setHideRejected(true)
+    clearDateFilter()
+  }, [clearDateFilter])
+
   const visible: Photo[] = useMemo(() => photos.filter((p) => {
     const dateMatch = !selectedDayKey || photoKeyMap.get(p.id) === selectedDayKey
     const typeOk = (p.type === 'JPEG' && showJPEG) || (p.type === 'RAW' && showRAW)
@@ -511,6 +541,18 @@ export default function ProjectWorkspace() {
     const colorOk = filterColor === 'Any' || p.tag === filterColor
     return dateMatch && typeOk && ratingOk && pickOk && rejectOk && colorOk
   }), [photos, selectedDayKey, photoKeyMap, showJPEG, showRAW, minStars, onlyPicked, hideRejected, filterColor])
+
+  const activeFilterCount = useMemo(() => {
+    let count = 0
+    if (minStars > 0) count += 1
+    if (filterColor !== 'Any') count += 1
+    if (!showJPEG) count += 1
+    if (!showRAW) count += 1
+    if (onlyPicked) count += 1
+    if (!hideRejected) count += 1
+    if (selectedDayKey) count += 1
+    return count
+  }, [minStars, filterColor, showJPEG, showRAW, onlyPicked, hideRejected, selectedDayKey])
 
   useEffect(() => { if (current >= visible.length) setCurrent(Math.max(0, visible.length - 1)) }, [visible, current])
 
@@ -682,7 +724,42 @@ export default function ProjectWorkspace() {
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[var(--surface-subtle,#FBF7EF)] text-[var(--text,#1F1E1B)]">
-      <TopBar projectName={projectName} onBack={goBack} />
+      <TopBar
+        projectName={projectName}
+        onBack={goBack}
+        onRename={handleRename}
+        renamePending={renameMutation.isPending}
+        renameError={renameMutation.isError ? (renameMutation.error as Error).message : null}
+        onImport={() => setImportOpen(true)}
+        view={view}
+        onChangeView={setView}
+        gridSize={gridSize}
+        minGridSize={minThumbForSix}
+        onGridSizeChange={setGridSize}
+        filters={{
+          minStars,
+          setMinStars,
+          filterColor,
+          setFilterColor,
+          showJPEG,
+          setShowJPEG,
+          showRAW,
+          setShowRAW,
+          onlyPicked,
+          setOnlyPicked,
+          hideRejected,
+          setHideRejected,
+          selectedDayLabel: selectedDayNode ? selectedDayNode.label : null,
+          dateFilterActive: Boolean(selectedDayKey),
+          clearDateFilter,
+        }}
+        filterCount={activeFilterCount}
+        onResetFilters={resetFilters}
+        visibleCount={visible.length}
+        selectedDayLabel={selectedDayNode ? selectedDayNode.label : null}
+        loadingAssets={loadingAssets}
+        loadError={loadError}
+      />
       {uploadBanner && (
         <div className="pointer-events-none fixed bottom-6 right-6 z-50">
           <div
@@ -740,47 +817,6 @@ export default function ProjectWorkspace() {
         />
 
         <main ref={contentRef} className="relative flex min-h-0 flex-col bg-[var(--surface,#FFFFFF)] border-r border-[var(--border,#E1D3B9)]">
-          <div className="border-b border-[var(--border,#E1D3B9)] px-3 py-2 flex items-center gap-2 text-xs">
-            <button className={`px-2 py-1 rounded border ${view === 'grid' ? 'bg-[var(--sand100,#F3EBDD)] border-[var(--border,#E1D3B9)]' : 'border-[var(--border,#E1D3B9)]'}`} onClick={() => setView('grid')}>Grid</button>
-            <button className={`px-2 py-1 rounded border ${view === 'detail' ? 'bg-[var(--sand100,#F3EBDD)] border-[var(--border,#E1D3B9)]' : 'border-[var(--border,#E1D3B9)]'}`} onClick={() => setView('detail')}>Detail</button>
-            {view === 'grid' && (
-              <div className="inline-flex items-center gap-2 ml-2">
-                <span className="text-[11px]">Size</span>
-                <input type="range" min={minThumbForSix} max={240} value={gridSize} onChange={(e) => setGridSize(Number(e.target.value))} />
-              </div>
-            )}
-            {loadingAssets && <span className="text-[11px] text-[var(--text-muted,#6B645B)]">Syncing…</span>}
-            {loadError && <span className="text-[11px] text-[#B42318]">{loadError}</span>}
-            <span className="ml-auto text-[var(--text-muted,#6B645B)]">
-              {visible.length} photos{selectedDayNode ? ` • ${selectedDayNode.label}` : ''}
-            </span>
-          </div>
-
-          <div className="border-b border-[var(--border,#E1D3B9)] px-3 py-2 text-xs grid grid-cols-[1fr_1fr_1fr] gap-3">
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] uppercase tracking-wide text-[var(--text-muted,#6B645B)]">Rating</span>
-              <MinStarRow value={minStars} onChange={(v) => setMinStars(v)} />
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] uppercase tracking-wide text-[var(--text-muted,#6B645B)]">Color</span>
-              <ColorFilter value={filterColor} onChange={setFilterColor} />
-            </div>
-            <div className="flex items-center gap-3">
-              <label className="inline-flex items-center gap-1">
-                <input type="checkbox" checked={showJPEG} onChange={(e) => setShowJPEG(e.target.checked)} className="accent-[var(--text,#1F1E1B)]" /> JPEG
-              </label>
-              <label className="inline-flex items-center gap-1">
-                <input type="checkbox" checked={showRAW} onChange={(e) => setShowRAW(e.target.checked)} className="accent-[var(--text,#1F1E1B)]" /> RAW
-              </label>
-              <label className="inline-flex items-center gap-1">
-                <input type="checkbox" checked={onlyPicked} onChange={(e) => setOnlyPicked(e.target.checked)} className="accent-[var(--text,#1F1E1B)]" /> Picks
-              </label>
-              <label className="inline-flex items-center gap-1">
-                <input type="checkbox" checked={hideRejected} onChange={(e) => setHideRejected(e.target.checked)} className="accent-[var(--text,#1F1E1B)]" /> Hide rejects
-              </label>
-            </div>
-          </div>
-
           <div className="flex-1 min-h-0 overflow-hidden">
             {!hasAny ? (
               <div className="flex h-full items-center justify-center overflow-auto p-6">
@@ -788,7 +824,7 @@ export default function ProjectWorkspace() {
               </div>
             ) : visible.length === 0 ? (
               <div className="flex h-full items-center justify-center overflow-auto p-6">
-                <NoResults onReset={() => { setMinStars(0); setFilterColor('Any'); setShowJPEG(true); setShowRAW(true); setOnlyPicked(false); setHideRejected(true); clearDateFilter() }} />
+                <NoResults onReset={resetFilters} />
               </div>
             ) : view === 'grid' ? (
               <div className="h-full overflow-auto">
@@ -913,28 +949,6 @@ function MetadataSummary({
         <p className="text-[11px] text-[var(--text-muted,#6B645B)]">No metadata available for this asset.</p>
       ) : null}
     </div>
-  )
-}
-
-function MinStarRow({ value, onChange }: { value: 0 | 1 | 2 | 3 | 4 | 5; onChange: (v: 0 | 1 | 2 | 3 | 4 | 5) => void }) {
-  const stars = [0, 1, 2, 3, 4, 5] as const
-  return (
-    <div className="inline-flex items-center gap-1">
-      {stars.map((s) => (
-        <button key={s} className={`px-1 py-0.5 border rounded ${value >= s ? 'border-[var(--text,#1F1E1B)]' : 'border-[var(--border,#E1D3B9)] text-[var(--text-muted,#6B645B)]'}`} onClick={() => onChange(s)} aria-label={`Min ${s} stars`}>
-          {s === 0 ? '0' : '★'.repeat(s)}
-        </button>
-      ))}
-    </div>
-  )
-}
-
-function ColorFilter({ value, onChange }: { value: 'Any' | ColorTag; onChange: (v: 'Any' | ColorTag) => void }) {
-  const options: ['Any', ColorTag][] = [['Any', 'Any'], ['Red', 'Red'], ['Green', 'Green'], ['Blue', 'Blue'], ['Yellow', 'Yellow'], ['Purple', 'Purple'], ['None', 'None']] as any
-  return (
-    <select className="border border-[var(--border,#E1D3B9)] rounded px-2 py-1" value={value} onChange={(e) => onChange(e.target.value as any)}>
-      {options.map(([k, v]) => <option key={k} value={v}>{k}</option>)}
-    </select>
   )
 }
 

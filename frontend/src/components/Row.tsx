@@ -27,8 +27,15 @@ const Row: React.FC<{
           if (it.kind === 'create') {
             // CreateCard: kleiner & 1 Spalte
             return (
-                  <div key={`c-${i}`} className={`${spanClass(1)} ${it.scale ? `scale-[${it.scale}] origin-top-left` : ''}`}>
-                    {archiveMode ? null : <CreateCard onClick={onCreate} aspect={it.aspect || 'portrait'} compact={isCompactRow} />}
+              <div key={`c-${i}`} className={`${spanClass(1)} ${it.scale ? `scale-[${it.scale}] origin-top-left` : ''}`}>
+                {archiveMode ? null : (
+                  <CreateCard
+                    onClick={onCreate}
+                    aspect={it.aspect || 'portrait'}
+                    compact={isCompactRow}
+                    matchAspectRatio={it.matchAspectRatio}
+                  />
+                )}
               </div>
             )
           }

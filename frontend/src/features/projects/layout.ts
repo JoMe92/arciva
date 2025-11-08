@@ -1,13 +1,28 @@
-import type { Project } from './types'
+import type { Project, ProjectPreviewImage } from './types'
+import { aspectRatioValue, fallbackAspectRatioForAspect } from './utils'
 
 export type Aspect = Project['aspect']
 export type LayoutKind = 'project' | 'create'
 
 export type LayoutItem =
-  | { kind: 'create'; aspect?: Aspect; span: 1; scale?: number }
+  | { kind: 'create'; aspect?: Aspect; span: 1; scale?: number; matchAspectRatio?: string }
   | { kind: 'project'; project: Project; span: 1 | 2 }
 
 export type LayoutRow = { items: LayoutItem[]; cols: 3 | 4; gapX: 'gap-x-10' | 'gap-x-16'; offsetTop?: string }
+
+function primaryPreview(project: Project): ProjectPreviewImage | null {
+  if (!project.previewImages || !project.previewImages.length) return null
+  return project.previewImages.reduce<ProjectPreviewImage | null>((best, current) => {
+    if (!current) return best
+    if (!best) return current
+    return current.order < best.order ? current : best
+  }, null)
+}
+
+function primaryAspectRatioString(project: Project): string {
+  const preview = primaryPreview(project)
+  return aspectRatioValue(preview?.width, preview?.height) ?? fallbackAspectRatioForAspect(project.aspect)
+}
 
 /**
  * Baut ein „artistisches“ Raster:
@@ -21,35 +36,20 @@ export function buildLayout(projects: Project[], withCreate = true): LayoutRow[]
 
   // Erste Reihe
   if (withCreate) {
-    const first = rest[0]
-    if (first) {
-      if (first.aspect === 'landscape') {
-        // Create klein + Landscape groß
-        rows.push({
-          cols: 3,
-          gapX: 'gap-x-10',
-          items: [
-            { kind: 'create', aspect: 'landscape', span: 1 },
-            { kind: 'project', project: first, span: 2 },
-          ],
-          offsetTop: 'mt-0',
-        })
-        rest.shift()
-      } else {
-        // Drei Portrait/Square nebeneinander (falls vorhanden)
-        const a = rest.shift()!
-        const b = rest[0] && rest[0].aspect !== 'landscape' ? rest.shift()! : undefined
-        rows.push({
-          cols: 3,
-          gapX: 'gap-x-10',
-          items: [
-            { kind: 'create', aspect: first?.aspect || 'portrait', span: 1 },
-            { kind: 'project', project: a, span: 1 },
-            ...(b ? [{ kind: 'project', project: b, span: 1 } as LayoutItem] : []),
-          ],
-          offsetTop: 'mt-0',
-        })
-      }
+    const primary = rest.shift()
+    if (primary) {
+      const secondary = rest.shift()
+      const primaryRatio = primaryAspectRatioString(primary)
+      rows.push({
+        cols: 3,
+        gapX: 'gap-x-10',
+        items: [
+          { kind: 'create', aspect: primary.aspect, span: 1, matchAspectRatio: primaryRatio },
+          { kind: 'project', project: primary, span: 1 },
+          ...(secondary ? [{ kind: 'project', project: secondary, span: 1 } as LayoutItem] : []),
+        ],
+        offsetTop: 'mt-0',
+      })
     } else {
       // Keine Projekte → nur Create in Standardgröße
       rows.push({

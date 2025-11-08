@@ -8,9 +8,15 @@ const MEDIA_MAX_COMPACT = 'max-h-[320px] md:max-h-[420px]'
 // tailwind v4 scan hint
 const __scan = 'aspect-[3/4] aspect-[16/9] aspect-square'
 
-const CreateCard: React.FC<{ onClick: () => void; aspect?: Project['aspect']; compact?: boolean }> = ({ onClick, aspect = 'portrait', compact = false }) => {
+const CreateCard: React.FC<{
+  onClick: () => void
+  aspect?: Project['aspect']
+  compact?: boolean
+  matchAspectRatio?: string
+}> = ({ onClick, aspect = 'portrait', compact = false, matchAspectRatio }) => {
   const ratio = placeholderRatioForAspect(aspect)
   const maxHeightClass = compact ? MEDIA_MAX_COMPACT : MEDIA_MAX_DEFAULT
+  const aspectStyle = matchAspectRatio ? { aspectRatio: matchAspectRatio } : undefined
 
   return (
     <div className="relative">
@@ -21,7 +27,7 @@ const CreateCard: React.FC<{ onClick: () => void; aspect?: Project['aspect']; co
         className="block w-full focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus,#6B7C7A)] rounded-xl"
       >
         <div className="overflow-hidden rounded-t-xl bg-[var(--placeholder-bg-beige,#F3EBDD)]">
-          <div className={`relative ${aspectClass(aspect)} w-full ${maxHeightClass} overflow-hidden`}>
+          <div className={`relative ${aspectClass(aspect)} w-full ${maxHeightClass} overflow-hidden`} style={aspectStyle}>
             <RawPlaceholder ratio={ratio} className="absolute inset-0" />
           </div>
         </div>

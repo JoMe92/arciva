@@ -1,41 +1,18 @@
 import React from 'react'
 import type { Project } from '../features/projects/types'
-import { aspectClass, placeholderRatioForAspect } from '../features/projects/utils'
+import {
+  aspectClass,
+  placeholderRatioForAspect,
+  aspectRatioValue,
+  fallbackAspectRatioForAspect,
+  orientationFromRatio,
+  parseRatio,
+  ratioFromDimensions,
+} from '../features/projects/utils'
 import { RawPlaceholder } from './RawPlaceholder'
 
 const MEDIA_MAX_DEFAULT = 'max-h-[420px] md:max-h-[520px]'
 const MEDIA_MAX_COMPACT = 'max-h-[320px] md:max-h-[420px]'
-
-function aspectRatioValue(width?: number | null, height?: number | null): string | null {
-  if (!width || !height) return null
-  if (width <= 0 || height <= 0) return null
-  return `${width} / ${height}`
-}
-
-function ratioFromDimensions(width?: number | null, height?: number | null): number | null {
-  if (!width || !height) return null
-  if (width <= 0 || height <= 0) return null
-  return width / height
-}
-
-function parseRatio(value?: string | null): number | null {
-  if (!value) return null
-  const parts = value.split('/').map((part) => Number(part.trim()))
-  if (parts.length !== 2) return null
-  const [w, h] = parts
-  if (!Number.isFinite(w) || !Number.isFinite(h)) return null
-  if (h === 0) return null
-  return w / h
-}
-
-type Orientation = 'landscape' | 'portrait' | 'square'
-
-function orientationFromRatio(ratio: number | null): Orientation | null {
-  if (!ratio || ratio <= 0) return null
-  const EPSILON = 0.02
-  if (Math.abs(ratio - 1) <= EPSILON) return 'square'
-  return ratio > 1 ? 'landscape' : 'portrait'
-}
 
 const ProjectCard: React.FC<{
   p: Project
@@ -65,11 +42,7 @@ const ProjectCard: React.FC<{
   const primaryPreview = previews[0] ?? null
   const currentUrl = current?.url ?? null
   const showNav = hovered && previews.length > 1
-  const fallbackAspectRatio = React.useMemo(() => {
-    if (p.aspect === 'landscape') return '16 / 9'
-    if (p.aspect === 'portrait') return '3 / 4'
-    return '1 / 1'
-  }, [p.aspect])
+  const fallbackAspectRatio = React.useMemo(() => fallbackAspectRatioForAspect(p.aspect), [p.aspect])
   const fallbackAspectRatioValue = React.useMemo(() => parseRatio(fallbackAspectRatio), [fallbackAspectRatio])
   const primaryAspectRatio = aspectRatioValue(primaryPreview?.width, primaryPreview?.height) ?? fallbackAspectRatio
   const primaryAspectRatioValue = ratioFromDimensions(primaryPreview?.width, primaryPreview?.height) ?? fallbackAspectRatioValue
@@ -133,21 +106,14 @@ const ProjectCard: React.FC<{
 
   return (
     <div className="relative">
-      {/* Klickfläche: Bild */}
+      {/* Bildbereich: nur Navigation/Preview */}
       <div
-        role="button"
         tabIndex={0}
-        aria-label={`Open project: ${p.title}`}
-        aria-keyshortcuts="Enter Space"
+        aria-label={`Preview project: ${p.title}`}
         data-testid={`project-card-${p.id}`}
-        onClick={() => onOpen(p.id)}
-        onDoubleClick={() => onOpen(p.id)}
         onKeyDown={(e) => {
           const key = (e.key || '').toLowerCase()
-          if (key === 'enter' || key === ' ' || key === 'spacebar') {
-            e.preventDefault()
-            onOpen(p.id)
-          } else if ((key === 'arrowleft' || key === 'arrowright') && previews.length > 1) {
+          if ((key === 'arrowleft' || key === 'arrowright') && previews.length > 1) {
             e.preventDefault()
             if (key === 'arrowleft') {
               setActivePreview((idx) => (idx === 0 ? previews.length - 1 : idx - 1))

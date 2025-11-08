@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { RawPlaceholder, RawPlaceholderFrame } from '../../components/RawPlaceholder'
 import { TOKENS } from './utils'
 import type { Photo, ImgType, ColorTag } from './types'
@@ -10,6 +10,43 @@ const COLOR_MAP: Record<ColorTag, string> = {
   Blue: '#60A5FA',
   Yellow: '#FBBF24',
   Purple: '#C084FC',
+}
+
+export type DateTreeDayNode = {
+  id: string
+  label: string
+  count: number
+  year: string
+  month: string
+  day: string
+  parentYearId: string
+  parentMonthId: string
+}
+
+export type DateTreeMonthNode = {
+  id: string
+  label: string
+  count: number
+  year: string
+  month: string
+  parentYearId: string
+  days: DateTreeDayNode[]
+}
+
+export type DateTreeYearNode = {
+  id: string
+  label: string
+  count: number
+  year: string
+  months: DateTreeMonthNode[]
+}
+
+function setsAreEqual<T>(a: Set<T>, b: Set<T>): boolean {
+  if (a.size !== b.size) return false
+  for (const value of a) {
+    if (!b.has(value)) return false
+  }
+  return true
 }
 
 // Brand
@@ -27,62 +64,203 @@ export function TopBar({ projectName, onBack }: { projectName: string; onBack: (
   return (
     <div className="flex items-center gap-2 px-3 py-2 bg-[var(--surface,#FFFFFF)] border-b border-[var(--border,#E1D3B9)] sticky top-0 z-40">
       <StoneTrailIcon size={28} />
+      <button onClick={onBack} className="px-2 py-1 rounded border border-[var(--border,#E1D3B9)] text-xs" aria-label="Back to Projects">← Projects</button>
       <div className="text-sm opacity-80">{projectName}</div>
-      <div className="ml-auto flex items-center gap-2 text-xs">
-        <button onClick={onBack} className="px-2 py-1 rounded border border-[var(--border,#E1D3B9)]" aria-label="Back to Projects">← Projects</button>
-      </div>
     </div>
   )
 }
 
+function CountBadge({ count, className = '' }: { count: number; className?: string }) {
+  return (
+    <span
+      className={`inline-flex min-w-[1.75rem] justify-center rounded-full bg-[var(--sand-100,#F3EBDD)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--text-muted,#6B645B)]${
+        className ? ` ${className}` : ''
+      }`}
+    >
+      {count}
+    </span>
+  )
+}
+
 export function Sidebar({
-  dateTree, onOpenImport, folderMode, setFolderMode, customFolder, setCustomFolder,
+  dateTree,
+  onOpenImport,
+  onSelectDay,
+  selectedDayKey,
+  selectedDay,
+  onClearDateFilter,
 }: {
-  dateTree: { name: string; children?: any[] }[]
+  dateTree: DateTreeYearNode[]
   onOpenImport: () => void
-  folderMode: 'date' | 'custom'
-  setFolderMode: (m: 'date' | 'custom') => void
-  customFolder: string
-  setCustomFolder: (s: string) => void
+  onSelectDay: (day: DateTreeDayNode) => void
+  selectedDayKey: string | null
+  selectedDay: DateTreeDayNode | null
+  onClearDateFilter: () => void
 }) {
+  const [expandedYears, setExpandedYears] = useState<Set<string>>(() => new Set())
+  const [expandedMonths, setExpandedMonths] = useState<Set<string>>(() => new Set())
+
+  useEffect(() => {
+    const allowedYears = new Set(dateTree.map((year) => year.id))
+    setExpandedYears((prev) => {
+      const next = new Set<string>()
+      prev.forEach((id) => {
+        if (allowedYears.has(id)) next.add(id)
+      })
+      if (!next.size && dateTree[0]) next.add(dateTree[0].id)
+      if (setsAreEqual(prev, next)) return prev
+      return next
+    })
+
+    const allowedMonths = new Set<string>()
+    dateTree.forEach((year) => year.months.forEach((month) => allowedMonths.add(month.id)))
+    setExpandedMonths((prev) => {
+      const next = new Set<string>()
+      prev.forEach((id) => {
+        if (allowedMonths.has(id)) next.add(id)
+      })
+      if (setsAreEqual(prev, next)) return prev
+      return next
+    })
+  }, [dateTree])
+
+  useEffect(() => {
+    if (!selectedDay) return
+    setExpandedYears((prev) => {
+      if (prev.has(selectedDay.parentYearId)) return prev
+      const next = new Set(prev)
+      next.add(selectedDay.parentYearId)
+      return next
+    })
+    setExpandedMonths((prev) => {
+      if (prev.has(selectedDay.parentMonthId)) return prev
+      const next = new Set(prev)
+      next.add(selectedDay.parentMonthId)
+      return next
+    })
+  }, [selectedDay])
+
+  const toggleYear = useCallback((yearId: string) => {
+    setExpandedYears((prev) => {
+      const next = new Set(prev)
+      if (next.has(yearId)) next.delete(yearId)
+      else next.add(yearId)
+      return next
+    })
+  }, [])
+
+  const toggleMonth = useCallback((monthId: string) => {
+    setExpandedMonths((prev) => {
+      const next = new Set(prev)
+      if (next.has(monthId)) next.delete(monthId)
+      else next.add(monthId)
+      return next
+    })
+  }, [])
+
+  const hasSelection = Boolean(selectedDayKey)
+
   return (
     <aside className="flex h-full min-h-0 flex-col border-r border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-3 text-xs">
       <button onClick={onOpenImport} className="w-full mb-3 px-3 py-2 rounded-md text-xs font-medium" style={{ backgroundColor: TOKENS.clay500, color: '#fff' }}>
         Import photos…
       </button>
-      <div className="mb-3">
-        <div className="text-[11px] uppercase tracking-wider text-[var(--text-muted,#6B645B)] mb-1">Destination</div>
-        <div className="space-y-2">
-          <label className="block">
-            <input type="radio" name="dest" checked={folderMode === 'date'} onChange={() => setFolderMode('date')} className="accent-[var(--text,#1F1E1B)]" /> Auto (YYYY/MM/DD)
-          </label>
-          <label className="block">
-            <input type="radio" name="dest" checked={folderMode === 'custom'} onChange={() => setFolderMode('custom')} className="accent-[var(--text,#1F1E1B)]" /> Custom
-          </label>
-          {folderMode === 'custom' && (
-            <input value={customFolder} onChange={(e) => setCustomFolder(e.target.value)} className="mt-1 w-full rounded border border-[var(--border,#E1D3B9)] px-2 py-1" placeholder="Folder name" />
-          )}
-        </div>
+      <div className="mb-2 flex items-center justify-between">
+        <div className="text-[11px] uppercase tracking-wider text-[var(--text-muted,#6B645B)]">Date folders</div>
+        {hasSelection ? (
+          <button type="button" onClick={onClearDateFilter} className="text-[11px] text-[var(--river-500,#6B7C7A)] hover:underline">
+            Clear
+          </button>
+        ) : null}
       </div>
-      <div className="folder-tree flex-1 min-h-0 pr-1">
-        <div className="text-[11px] uppercase tracking-wider text-[var(--text-muted,#6B645B)] mb-1">Folders (virtual)</div>
-        <Tree nodes={dateTree} />
+      {selectedDay ? (
+        <div className="mb-2 rounded border border-[var(--border,#E1D3B9)] bg-[var(--sand-50,#FBF7EF)] px-2 py-1 text-[11px] text-[var(--text,#1F1E1B)]">
+          Viewing {selectedDay.label}
+        </div>
+      ) : null}
+      <div className="folder-tree flex-1 min-h-0 overflow-y-auto pr-1">
+        {dateTree.length ? (
+          <ul className="space-y-1">
+            {dateTree.map((year) => {
+              const expanded = expandedYears.has(year.id)
+              const canExpand = year.months.length > 0
+              return (
+                <li key={year.id}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (canExpand) toggleYear(year.id)
+                    }}
+                    aria-expanded={canExpand ? expanded : undefined}
+                    className={`flex w-full items-center gap-2 rounded px-2 py-1 text-left ${canExpand ? 'hover:bg-[var(--sand-50,#FBF7EF)]' : ''}`}
+                  >
+                    <span className="inline-flex w-4 justify-center text-[11px] text-[var(--text-muted,#6B645B)]">
+                      {canExpand ? (expanded ? '▾' : '▸') : ''}
+                    </span>
+                    <span className="flex-1 truncate font-medium text-[var(--text,#1F1E1B)]">{year.label}</span>
+                    <CountBadge count={year.count} />
+                  </button>
+                  {expanded && canExpand ? (
+                    <ul className="mt-1 space-y-1 pl-4">
+                      {year.months.map((month) => {
+                        const monthExpanded = expandedMonths.has(month.id)
+                        const monthHasDays = month.days.length > 0
+                        return (
+                          <li key={month.id}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (monthHasDays) toggleMonth(month.id)
+                              }}
+                              aria-expanded={monthHasDays ? monthExpanded : undefined}
+                              className={`flex w-full items-center gap-2 rounded px-2 py-1 text-left ${monthHasDays ? 'hover:bg-[var(--sand-50,#FBF7EF)]' : ''}`}
+                            >
+                              <span className="inline-flex w-4 justify-center text-[11px] text-[var(--text-muted,#6B645B)]">
+                                {monthHasDays ? (monthExpanded ? '▾' : '▸') : ''}
+                              </span>
+                              <span className="flex-1 truncate text-[var(--text,#1F1E1B)]">{month.label}</span>
+                              <CountBadge count={month.count} />
+                            </button>
+                            {monthExpanded && monthHasDays ? (
+                              <ul className="mt-1 space-y-1 pl-4">
+                                {month.days.map((day) => {
+                                  const isSelected = day.id === selectedDayKey
+                                  return (
+                                    <li key={day.id}>
+                                      <button
+                                        type="button"
+                                        onClick={() => onSelectDay(day)}
+                                        aria-pressed={isSelected}
+                                        className={`flex w-full items-center justify-between rounded px-2 py-1 text-left ${
+                                          isSelected
+                                            ? 'border border-[var(--charcoal-800,#1F1E1B)] bg-[var(--sand-100,#F3EBDD)] font-semibold text-[var(--text,#1F1E1B)]'
+                                            : 'border border-transparent text-[var(--text,#1F1E1B)] hover:border-[var(--sand-300,#E1D3B9)] hover:bg-[var(--sand-50,#FBF7EF)]'
+                                        }`}
+                                      >
+                                        <span className="truncate">{day.label}</span>
+                                        <CountBadge count={day.count} />
+                                      </button>
+                                    </li>
+                                  )
+                                })}
+                              </ul>
+                            ) : null}
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  ) : null}
+                </li>
+              )
+            })}
+          </ul>
+        ) : (
+          <div className="rounded border border-[var(--border,#E1D3B9)] bg-[var(--sand-50,#FBF7EF)] px-2 py-3 text-[11px] text-[var(--text-muted,#6B645B)]">
+            No photos yet.
+          </div>
+        )}
       </div>
     </aside>
-  )
-}
-
-export function Tree({ nodes }: { nodes: { name: string; children?: { name: string; children?: any[] }[] }[] }) {
-  return (
-    <ul className="space-y-1">
-      {nodes.map((n) => (
-        <li key={n.name}>
-          <details open><summary className="cursor-pointer select-none">{n.name}</summary>
-            {n.children && <div className="pl-4 mt-1"><Tree nodes={n.children as any} /></div>}
-          </details>
-        </li>
-      ))}
-    </ul>
   )
 }
 
@@ -92,19 +270,39 @@ export function computeCols(containerWidth: number, size: number, gap: number) {
 }
 
 export function GridView({
-  items, size, gap = 12, containerWidth, onOpen,
-}: { items: Photo[]; size: number; gap?: number; containerWidth: number; onOpen: (idx: number) => void }) {
+  items,
+  size,
+  gap = 12,
+  containerWidth,
+  onOpen,
+  onSelect,
+  selectedId,
+}: {
+  items: Photo[]
+  size: number
+  gap?: number
+  containerWidth: number
+  onOpen: (idx: number) => void
+  onSelect?: (idx: number) => void
+  selectedId?: string | null
+}) {
   const cols = computeCols(containerWidth, size, gap)
   const twoLine = cols >= 4
   const template = `repeat(auto-fill, minmax(${size}px, 1fr))`
   return (
     <div className="p-3 grid" style={{ gridTemplateColumns: template, gap }}>
       {items.map((p, idx) => (
-        <div key={p.id} className="group border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] flex flex-col">
+        <div
+          key={p.id}
+          className={`group border bg-[var(--surface,#FFFFFF)] flex flex-col transition-shadow ${
+            selectedId === p.id ? 'border-[var(--charcoal-800,#1F1E1B)] shadow-[0_0_0_1px_var(--charcoal-800,#1F1E1B)]' : 'border-[var(--border,#E1D3B9)]'
+          }`}
+        >
           <div className="relative aspect-square w-full overflow-hidden bg-[var(--placeholder-bg-beige,#F3EBDD)] flex items-center justify-center">
             <button
               className="absolute inset-0 flex items-center justify-center focus:outline-none"
               type="button"
+              onClick={() => onSelect?.(idx)}
               onDoubleClick={() => onOpen(idx)}
               aria-label={`Open ${p.name || 'photo'}`}
             >

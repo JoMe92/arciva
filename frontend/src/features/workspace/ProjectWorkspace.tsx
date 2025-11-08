@@ -10,6 +10,7 @@ import { TopBar, Sidebar, GridView, DetailView, EmptyState, NoResults, computeCo
 
 const SIDEBAR_WIDTH = 288
 const INSPECTOR_WIDTH = 260
+const IGNORED_METADATA_WARNINGS = new Set(['EXIFTOOL_ERROR', 'EXIFTOOL_NOT_INSTALLED', 'EXIFTOOL_JSON_ERROR'])
 const DATE_KEY_DELIM = '__'
 const UNKNOWN_VALUE = 'unknown'
 const MONTH_NAMES = [
@@ -651,7 +652,10 @@ export default function ProjectWorkspace() {
       .sort((a, b) => a[0].localeCompare(b[0]))
       .map(([key, value]) => ({ key, value }))
   }, [currentAssetDetail?.metadata])
-  const metadataWarnings = currentAssetDetail?.metadata_warnings ?? currentPhoto?.metadataWarnings ?? []
+  const metadataWarnings = useMemo(() => {
+    const warnings = currentAssetDetail?.metadata_warnings ?? currentPhoto?.metadataWarnings ?? []
+    return warnings.filter((warning) => !IGNORED_METADATA_WARNINGS.has(warning))
+  }, [currentAssetDetail?.metadata_warnings, currentPhoto?.metadataWarnings])
   const detailDateLabel = useMemo(() => {
     if (!currentPhoto) return '—'
     const source = currentPhoto.capturedAt ?? currentPhoto.uploadedAt ?? currentPhoto.date
@@ -824,20 +828,6 @@ export default function ProjectWorkspace() {
               <Row label="Flag" value={currentPhoto.picked ? 'Picked' : '—'} />
               <Row label="Rejected" value={currentPhoto.rejected ? 'Yes' : 'No'} />
               <Row label="Color" value={currentPhoto.tag} />
-              <div className="mt-3 space-y-2 rounded border border-[var(--border,#E1D3B9)] bg-[var(--sand-50,#FBF7EF)] p-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-[var(--text-muted,#6B645B)]">Project card</span>
-                  <span className="font-medium text-[11px] text-[var(--text,#1F1E1B)]">
-                    {currentPhoto.picked ? `Included (#${(currentPhoto.previewOrder ?? 0) + 1})` : 'Hidden'}
-                  </span>
-                </div>
-                <p className="text-[11px] text-[var(--text-muted,#6B645B)]">
-                  Toggle <kbd className="rounded border border-[var(--border,#E1D3B9)] px-1">P</kbd> to pick or unpick this image. All picked images appear on the project card carousel.
-                </p>
-                {pickError ? (
-                  <p className="text-[10px] text-[#B42318]">{pickError}</p>
-                ) : null}
-              </div>
               <MetadataSummary
                 entries={metadataEntries}
                 warnings={metadataWarnings}

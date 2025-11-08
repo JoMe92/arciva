@@ -101,7 +101,6 @@ const ProjectCard: React.FC<{
       return
     }
     setHovered(false)
-    setActivePreview(0)
   }
 
   return (
@@ -123,7 +122,7 @@ const ProjectCard: React.FC<{
           }
         }}
         onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => { setHovered(false); setActivePreview(0) }}
+        onMouseLeave={() => setHovered(false)}
         onFocus={handleFocus}
         onBlur={handleBlur}
         className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus,#6B7C7A)] rounded-xl"

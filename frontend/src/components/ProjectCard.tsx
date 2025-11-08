@@ -12,6 +12,31 @@ function aspectRatioValue(width?: number | null, height?: number | null): string
   return `${width} / ${height}`
 }
 
+function ratioFromDimensions(width?: number | null, height?: number | null): number | null {
+  if (!width || !height) return null
+  if (width <= 0 || height <= 0) return null
+  return width / height
+}
+
+function parseRatio(value?: string | null): number | null {
+  if (!value) return null
+  const parts = value.split('/').map((part) => Number(part.trim()))
+  if (parts.length !== 2) return null
+  const [w, h] = parts
+  if (!Number.isFinite(w) || !Number.isFinite(h)) return null
+  if (h === 0) return null
+  return w / h
+}
+
+type Orientation = 'landscape' | 'portrait' | 'square'
+
+function orientationFromRatio(ratio: number | null): Orientation | null {
+  if (!ratio || ratio <= 0) return null
+  const EPSILON = 0.02
+  if (Math.abs(ratio - 1) <= EPSILON) return 'square'
+  return ratio > 1 ? 'landscape' : 'portrait'
+}
+
 const ProjectCard: React.FC<{
   p: Project
   onOpen: (id: string) => void
@@ -45,7 +70,14 @@ const ProjectCard: React.FC<{
     if (p.aspect === 'portrait') return '3 / 4'
     return '1 / 1'
   }, [p.aspect])
+  const fallbackAspectRatioValue = React.useMemo(() => parseRatio(fallbackAspectRatio), [fallbackAspectRatio])
   const primaryAspectRatio = aspectRatioValue(primaryPreview?.width, primaryPreview?.height) ?? fallbackAspectRatio
+  const primaryAspectRatioValue = ratioFromDimensions(primaryPreview?.width, primaryPreview?.height) ?? fallbackAspectRatioValue
+  const tileOrientation = orientationFromRatio(primaryAspectRatioValue)
+  const currentRatio = ratioFromDimensions(current?.width, current?.height)
+  const currentOrientation = orientationFromRatio(currentRatio)
+  const shouldCoverCurrent =
+    activePreview === 0 || !tileOrientation || !currentOrientation || currentOrientation === tileOrientation
 
   React.useEffect(() => {
     setActivePreview(0)
@@ -140,7 +172,9 @@ const ProjectCard: React.FC<{
               <img
                 src={currentUrl ?? undefined}
                 alt={`${p.title} – ${p.client}`}
-                className="absolute inset-0 h-full w-full object-cover transition-[transform] duration-150 ease-out"
+                className={`absolute inset-0 h-full w-full object-center transition-[transform] duration-150 ease-out ${
+                  shouldCoverCurrent ? 'object-cover' : 'object-contain'
+                }`}
               />
             ) : (
               <RawPlaceholder ratio={placeholderRatio} className="absolute inset-0" />

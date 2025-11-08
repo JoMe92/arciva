@@ -4,11 +4,33 @@ import { aspectRatioValue, fallbackAspectRatioForAspect } from './utils'
 export type Aspect = Project['aspect']
 export type LayoutKind = 'project' | 'create'
 
-export type LayoutItem =
-  | { kind: 'create'; aspect?: Aspect; span: 1; scale?: number; matchAspectRatio?: string }
-  | { kind: 'project'; project: Project; span: 1 | 2 }
+export type ArtistSize = 's' | 'm' | 'l'
 
-export type LayoutRow = { items: LayoutItem[]; cols: 3 | 4; gapX: 'gap-x-10' | 'gap-x-16'; offsetTop?: string }
+export type ArtistFootprint = {
+  size: ArtistSize
+  margin: number
+}
+
+export type FirstRowArtistPlan = {
+  templateColumns: [number, number, number]
+  footprints: Record<'create' | string, ArtistFootprint>
+  createAspect?: Aspect
+  createMatchRatio?: string
+  gap: number
+}
+
+export type LayoutItem =
+  | { kind: 'create'; aspect?: Aspect; span: 1; matchAspectRatio?: string; artist?: ArtistFootprint }
+  | { kind: 'project'; project: Project; span: 1 | 2; artist?: ArtistFootprint }
+
+export type LayoutRow = {
+  items: LayoutItem[]
+  cols: 3 | 4
+  gapX: 'gap-x-10' | 'gap-x-16'
+  offsetTop?: string
+  artistTemplate?: string
+  artistGap?: number
+}
 
 function primaryPreview(project: Project): ProjectPreviewImage | null {
   if (!project.previewImages || !project.previewImages.length) return null
@@ -30,7 +52,7 @@ function primaryAspectRatioString(project: Project): string {
  * - danach: landscapes = span 2, portrait/square = span 1
  * - leichte Offsets für Rhythmus
  */
-export function buildLayout(projects: Project[], withCreate = true): LayoutRow[] {
+export function buildLayout(projects: Project[], withCreate = true, firstRowPlan?: FirstRowArtistPlan): LayoutRow[] {
   const rows: LayoutRow[] = []
   const rest = [...projects]
 
@@ -40,15 +62,38 @@ export function buildLayout(projects: Project[], withCreate = true): LayoutRow[]
     if (primary) {
       const secondary = rest.shift()
       const primaryRatio = primaryAspectRatioString(primary)
+      const artistTemplate = firstRowPlan ? firstRowPlan.templateColumns.map((v) => `${v}fr`).join(' ') : undefined
       rows.push({
         cols: 3,
         gapX: 'gap-x-10',
         items: [
-          { kind: 'create', aspect: primary.aspect, span: 1, matchAspectRatio: primaryRatio },
-          { kind: 'project', project: primary, span: 1 },
-          ...(secondary ? [{ kind: 'project', project: secondary, span: 1 } as LayoutItem] : []),
+          {
+            kind: 'create',
+            aspect: firstRowPlan?.createAspect ?? primary.aspect,
+            span: 1,
+            matchAspectRatio: firstRowPlan?.createMatchRatio ?? primaryRatio,
+            artist: firstRowPlan?.footprints.create,
+          },
+          {
+            kind: 'project',
+            project: primary,
+            span: 1,
+            artist: firstRowPlan?.footprints[primary.id],
+          },
+          ...(secondary
+            ? [
+              {
+                kind: 'project',
+                project: secondary,
+                span: 1,
+                artist: firstRowPlan?.footprints[secondary.id],
+              } as LayoutItem,
+            ]
+            : []),
         ],
         offsetTop: 'mt-0',
+        artistTemplate,
+        artistGap: firstRowPlan?.gap,
       })
     } else {
       // Keine Projekte → nur Create in Standardgröße

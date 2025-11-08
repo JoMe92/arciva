@@ -786,7 +786,15 @@ export default function ProjectWorkspace() {
               </div>
             ) : view === 'grid' ? (
               <div className="h-full overflow-auto">
-                <GridView items={visible} size={gridSize} gap={GAP} containerWidth={contentW} onOpen={(idx) => { setCurrent(idx); setView('detail') }} />
+                <GridView
+                  items={visible}
+                  size={gridSize}
+                  gap={GAP}
+                  containerWidth={contentW}
+                  onOpen={(idx) => { setCurrent(idx); setView('detail') }}
+                  onSelect={(idx) => setCurrent(idx)}
+                  selectedId={visible[current]?.id}
+                />
               </div>
             ) : (
               <DetailView items={visible} index={current} setIndex={setCurrent} className="h-full" />

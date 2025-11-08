@@ -272,19 +272,39 @@ export function computeCols(containerWidth: number, size: number, gap: number) {
 }
 
 export function GridView({
-  items, size, gap = 12, containerWidth, onOpen,
-}: { items: Photo[]; size: number; gap?: number; containerWidth: number; onOpen: (idx: number) => void }) {
+  items,
+  size,
+  gap = 12,
+  containerWidth,
+  onOpen,
+  onSelect,
+  selectedId,
+}: {
+  items: Photo[]
+  size: number
+  gap?: number
+  containerWidth: number
+  onOpen: (idx: number) => void
+  onSelect?: (idx: number) => void
+  selectedId?: string | null
+}) {
   const cols = computeCols(containerWidth, size, gap)
   const twoLine = cols >= 4
   const template = `repeat(auto-fill, minmax(${size}px, 1fr))`
   return (
     <div className="p-3 grid" style={{ gridTemplateColumns: template, gap }}>
       {items.map((p, idx) => (
-        <div key={p.id} className="group border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] flex flex-col">
+        <div
+          key={p.id}
+          className={`group border bg-[var(--surface,#FFFFFF)] flex flex-col transition-shadow ${
+            selectedId === p.id ? 'border-[var(--charcoal-800,#1F1E1B)] shadow-[0_0_0_1px_var(--charcoal-800,#1F1E1B)]' : 'border-[var(--border,#E1D3B9)]'
+          }`}
+        >
           <div className="relative aspect-square w-full overflow-hidden bg-[var(--placeholder-bg-beige,#F3EBDD)] flex items-center justify-center">
             <button
               className="absolute inset-0 flex items-center justify-center focus:outline-none"
               type="button"
+              onClick={() => onSelect?.(idx)}
               onDoubleClick={() => onOpen(idx)}
               aria-label={`Open ${p.name || 'photo'}`}
             >

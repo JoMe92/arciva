@@ -14,6 +14,38 @@ body {
   --placeholder-bg-stop: #eadfcb;
   --placeholder-motif-bar: #4a463f;
   --placeholder-motif-circle: #a56a4a;
+  --stone-trail-mark-surface: #f8f0e3;
+  --stone-trail-mark-stroke: #8c6a4a;
+  --stone-trail-mark-dot-large: #a56a4a;
+  --stone-trail-mark-dot-medium: #d7c5a6;
+  --stone-trail-mark-dot-small: #4a463f;
+  --stone-trail-mark-text: #1f1e1b;
+}
+
+:root[data-theme='dark'] {
+  --stone-trail-mark-surface: #1f1e1b;
+  --stone-trail-mark-stroke: #d8b28a;
+  --stone-trail-mark-dot-large: #f4c49f;
+  --stone-trail-mark-dot-medium: #d7c5a6;
+  --stone-trail-mark-dot-small: #f4e7d3;
+  --stone-trail-mark-text: #f4e7d3;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --stone-trail-mark-surface: #1f1e1b;
+    --stone-trail-mark-stroke: #d8b28a;
+    --stone-trail-mark-dot-large: #f4c49f;
+    --stone-trail-mark-dot-medium: #d7c5a6;
+    --stone-trail-mark-dot-small: #f4e7d3;
+    --stone-trail-mark-text: #f4e7d3;
+  }
+}
+
+.stone-trail-logo {
+  text-decoration: none;
+  cursor: default;
+  user-select: none;
 }
 
 .thumb-strip {

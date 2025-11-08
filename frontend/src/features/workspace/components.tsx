@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { RawPlaceholder, RawPlaceholderFrame } from '../../components/RawPlaceholder'
+import StoneTrailLogo from '../../components/StoneTrailLogo'
 import { TOKENS } from './utils'
 import type { Photo, ImgType, ColorTag } from './types'
 
@@ -49,24 +50,26 @@ function setsAreEqual<T>(a: Set<T>, b: Set<T>): boolean {
   return true
 }
 
-// Brand
-export function StoneTrailIcon({ size = 28, title = 'Stone Trail', className = '' }: { size?: number; title?: string; className?: string }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" role="img" aria-label={title} className={'block ' + className}>
-      <ellipse cx={7} cy={16} rx={2.6} ry={2} fill={TOKENS.clay500} />
-      <ellipse cx={12} cy={12} rx={2.2} ry={1.7} fill={TOKENS.sand500} />
-      <ellipse cx={16.5} cy={8.5} rx={1.9} ry={1.5} fill={TOKENS.basalt700} />
-    </svg>
-  )
-}
-
 export function TopBar({ projectName, onBack }: { projectName: string; onBack: () => void }) {
   return (
-    <div className="flex items-center gap-2 px-3 py-2 bg-[var(--surface,#FFFFFF)] border-b border-[var(--border,#E1D3B9)] sticky top-0 z-40">
-      <StoneTrailIcon size={28} />
-      <button onClick={onBack} className="px-2 py-1 rounded border border-[var(--border,#E1D3B9)] text-xs" aria-label="Back to Projects">← Projects</button>
-      <div className="text-sm opacity-80">{projectName}</div>
-    </div>
+    <header className="sticky top-0 z-40 border-b border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]/90 backdrop-blur">
+      <div className="flex items-center gap-3 px-4 py-2">
+        <StoneTrailLogo className="shrink-0" />
+        <div className="flex flex-1 items-center gap-2 overflow-hidden">
+          <button
+            type="button"
+            onClick={onBack}
+            className="inline-flex h-8 items-center rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 text-[12px] font-medium text-[var(--text,#1F1E1B)] transition-colors hover:border-[var(--text-muted,#6B645B)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--stone-trail-brand-focus,#4A463F)]"
+            aria-label="Back to projects"
+          >
+            ← Projects
+          </button>
+          <div className="truncate text-sm font-medium text-[var(--text,#1F1E1B)] opacity-80" title={projectName}>
+            {projectName}
+          </div>
+        </div>
+      </div>
+    </header>
   )
 }
 

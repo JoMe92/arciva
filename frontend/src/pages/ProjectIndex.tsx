@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import StoneTrailIcon from '../components/StoneTrailIcon'
+import StoneTrailLogo from '../components/StoneTrailLogo'
 import Splash from '../components/Splash'
 import { Project } from '../features/projects/types'
 import { unique } from '../features/projects/utils'
@@ -21,12 +21,7 @@ import DeleteModal from '../components/modals/DeleteModal'
 const AppBar: React.FC<{ onCreate: () => void; onToggleArchive: () => void; archiveMode: boolean }> = ({ onCreate, onToggleArchive, archiveMode }) => (
   <div className="sticky top-0 z-40 border-b border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]/90 backdrop-blur">
     <div className="mx-auto max-w-7xl px-4 py-2 flex items-center gap-3">
-      <div className="flex items-center gap-2">
-        <span className="inline-flex h-6 w-6 items-center justify-center rounded-xl border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]">
-          <StoneTrailIcon size={18} />
-        </span>
-        <span className="text-sm font-medium text-[var(--text,#1F1E1B)]">Stone Trail</span>
-      </div>
+      <StoneTrailLogo className="shrink-0" />
       <div className="ml-auto flex items-center gap-2">
         <button onClick={onToggleArchive} className="inline-flex h-8 items-center rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 text-[12px] hover:border-[var(--text-muted,#6B645B)]">
           {archiveMode ? 'Exit archive' : 'Enter archive'}

@@ -10,6 +10,7 @@ import type { Photo, ImgType, ColorTag } from './types'
 import {
   TopBar,
   Sidebar,
+  InspectorPanel,
   GridView,
   DetailView,
   EmptyState,
@@ -19,16 +20,19 @@ import {
   type DateTreeYearNode,
   type DateTreeMonthNode,
   type DateTreeDayNode,
-  type SidebarMode,
   type GridSelectOptions,
 } from './components'
 
-const SIDEBAR_WIDTHS: Record<SidebarMode, number> = {
-  expanded: 304,
-  slim: 60,
-  hidden: 0,
-}
-const INSPECTOR_WIDTH = 260
+const LEFT_MIN_WIDTH = 280
+const LEFT_MAX_WIDTH = 420
+const LEFT_DEFAULT_WIDTH = 320
+const LEFT_COLLAPSED_WIDTH = 64
+const RIGHT_MIN_WIDTH = 320
+const RIGHT_MAX_WIDTH = 480
+const RIGHT_DEFAULT_WIDTH = 360
+const RIGHT_COLLAPSED_WIDTH = 64
+const HANDLE_WIDTH = 12
+const RESIZE_STEP = 16
 const IGNORED_METADATA_WARNINGS = new Set(['EXIFTOOL_ERROR', 'EXIFTOOL_NOT_INSTALLED', 'EXIFTOOL_JSON_ERROR'])
 const DATE_KEY_DELIM = '__'
 const UNKNOWN_VALUE = 'unknown'
@@ -510,49 +514,80 @@ export default function ProjectWorkspace() {
   const [onlyPicked, setOnlyPicked] = useState(false)
   const [hideRejected, setHideRejected] = useState(true)
   const [filterColor, setFilterColor] = useState<'Any' | ColorTag>('Any')
-  const [sidebarMode, setSidebarMode] = useState<SidebarMode>('expanded')
-  const [lastVisibleSidebarMode, setLastVisibleSidebarMode] = useState<SidebarMode>('expanded')
+  const storageScope = useMemo(() => (id ? `workspace:${id}` : 'workspace'), [id])
+  const leftWidthKey = `${storageScope}:left-width`
+  const leftCollapsedKey = `${storageScope}:left-collapsed`
+  const rightWidthKey = `${storageScope}:right-width`
+  const rightCollapsedKey = `${storageScope}:right-collapsed`
+  const [leftPanelWidth, setLeftPanelWidth] = useState(LEFT_DEFAULT_WIDTH)
+  const [rightPanelWidth, setRightPanelWidth] = useState(RIGHT_DEFAULT_WIDTH)
+  const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(false)
+  const [rightPanelCollapsed, setRightPanelCollapsed] = useState(false)
 
   useEffect(() => {
-    if (sidebarMode !== 'hidden') {
-      setLastVisibleSidebarMode(sidebarMode)
+    if (typeof window === 'undefined') return
+    const storedWidth = window.localStorage.getItem(leftWidthKey)
+    if (storedWidth) {
+      const parsed = Number(storedWidth)
+      if (Number.isFinite(parsed)) {
+        setLeftPanelWidth(clampNumber(parsed, LEFT_MIN_WIDTH, LEFT_MAX_WIDTH))
+      }
     }
-  }, [sidebarMode])
+    const storedCollapsed = window.localStorage.getItem(leftCollapsedKey)
+    if (storedCollapsed !== null) {
+      setLeftPanelCollapsed(storedCollapsed === '1')
+    }
+  }, [leftWidthKey, leftCollapsedKey])
 
-  const collapseSidebar = useCallback(() => {
-    setSidebarMode((prev) => {
-      if (prev === 'expanded') return 'slim'
-      if (prev === 'slim') return 'hidden'
-      return prev
-    })
-  }, [])
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const storedWidth = window.localStorage.getItem(rightWidthKey)
+    if (storedWidth) {
+      const parsed = Number(storedWidth)
+      if (Number.isFinite(parsed)) {
+        setRightPanelWidth(clampNumber(parsed, RIGHT_MIN_WIDTH, RIGHT_MAX_WIDTH))
+      }
+    }
+    const storedCollapsed = window.localStorage.getItem(rightCollapsedKey)
+    if (storedCollapsed !== null) {
+      setRightPanelCollapsed(storedCollapsed === '1')
+    }
+  }, [rightWidthKey, rightCollapsedKey])
 
-  const expandSidebar = useCallback(() => {
-    setSidebarMode((prev) => {
-      if (prev === 'hidden') return lastVisibleSidebarMode
-      if (prev === 'slim') return 'expanded'
-      return prev
-    })
-  }, [lastVisibleSidebarMode])
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem(leftWidthKey, String(leftPanelWidth))
+  }, [leftPanelWidth, leftWidthKey])
 
-  const handleSidebarModeChange = useCallback((next: SidebarMode) => {
-    setSidebarMode(next)
-  }, [])
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem(rightWidthKey, String(rightPanelWidth))
+  }, [rightPanelWidth, rightWidthKey])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem(leftCollapsedKey, leftPanelCollapsed ? '1' : '0')
+  }, [leftCollapsedKey, leftPanelCollapsed])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem(rightCollapsedKey, rightPanelCollapsed ? '1' : '0')
+  }, [rightCollapsedKey, rightPanelCollapsed])
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (!event.altKey) return
       if (event.key === '[') {
         event.preventDefault()
-        collapseSidebar()
+        setLeftPanelCollapsed(true)
       } else if (event.key === ']') {
         event.preventDefault()
-        expandSidebar()
+        setLeftPanelCollapsed(false)
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [collapseSidebar, expandSidebar])
+  }, [])
 
   useEffect(() => {
     prevPhotosRef.current = photos
@@ -578,7 +613,98 @@ export default function ProjectWorkspace() {
   const [gridSize, setGridSizeState] = useState(Math.max(140, minThumbForSix))
   useEffect(() => setGridSizeState((s) => Math.max(s, minThumbForSix)), [minThumbForSix])
   const setGridSize = (n: number) => setGridSizeState(Math.max(n, minThumbForSix))
-  const sidebarWidth = SIDEBAR_WIDTHS[sidebarMode]
+  const effectiveLeftWidth = leftPanelCollapsed ? LEFT_COLLAPSED_WIDTH : leftPanelWidth
+  const effectiveRightWidth = rightPanelCollapsed ? RIGHT_COLLAPSED_WIDTH : rightPanelWidth
+
+  const handleLeftHandlePointerDown = useCallback(
+    (event: React.PointerEvent<HTMLButtonElement>) => {
+      if (event.pointerType === 'mouse' && event.button !== 0) return
+      event.preventDefault()
+      const pointerId = event.pointerId
+      const target = event.currentTarget
+      const startX = event.clientX
+      const startWidth = leftPanelWidth
+      if (leftPanelCollapsed) {
+        setLeftPanelCollapsed(false)
+      }
+      const handlePointerMove = (moveEvent: PointerEvent) => {
+        const delta = moveEvent.clientX - startX
+        setLeftPanelWidth(clampNumber(startWidth + delta, LEFT_MIN_WIDTH, LEFT_MAX_WIDTH))
+      }
+      const handlePointerUp = () => {
+        window.removeEventListener('pointermove', handlePointerMove)
+        window.removeEventListener('pointerup', handlePointerUp)
+        target.releasePointerCapture?.(pointerId)
+      }
+      target.setPointerCapture?.(pointerId)
+      window.addEventListener('pointermove', handlePointerMove)
+      window.addEventListener('pointerup', handlePointerUp)
+    },
+    [leftPanelCollapsed, leftPanelWidth],
+  )
+
+  const handleRightHandlePointerDown = useCallback(
+    (event: React.PointerEvent<HTMLButtonElement>) => {
+      if (event.pointerType === 'mouse' && event.button !== 0) return
+      event.preventDefault()
+      const pointerId = event.pointerId
+      const target = event.currentTarget
+      const startX = event.clientX
+      const startWidth = rightPanelWidth
+      if (rightPanelCollapsed) {
+        setRightPanelCollapsed(false)
+      }
+      const handlePointerMove = (moveEvent: PointerEvent) => {
+        const delta = moveEvent.clientX - startX
+        setRightPanelWidth(clampNumber(startWidth - delta, RIGHT_MIN_WIDTH, RIGHT_MAX_WIDTH))
+      }
+      const handlePointerUp = () => {
+        window.removeEventListener('pointermove', handlePointerMove)
+        window.removeEventListener('pointerup', handlePointerUp)
+        target.releasePointerCapture?.(pointerId)
+      }
+      target.setPointerCapture?.(pointerId)
+      window.addEventListener('pointermove', handlePointerMove)
+      window.addEventListener('pointerup', handlePointerUp)
+    },
+    [rightPanelCollapsed, rightPanelWidth],
+  )
+
+  const handleLeftHandleKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLButtonElement>) => {
+      if (event.key === 'ArrowLeft') {
+        if (leftPanelCollapsed) return
+        event.preventDefault()
+        setLeftPanelWidth((prev) => clampNumber(prev - RESIZE_STEP, LEFT_MIN_WIDTH, LEFT_MAX_WIDTH))
+      } else if (event.key === 'ArrowRight') {
+        event.preventDefault()
+        setLeftPanelCollapsed(false)
+        setLeftPanelWidth((prev) => clampNumber(prev + RESIZE_STEP, LEFT_MIN_WIDTH, LEFT_MAX_WIDTH))
+      } else if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault()
+        setLeftPanelCollapsed((prev) => !prev)
+      }
+    },
+    [leftPanelCollapsed],
+  )
+
+  const handleRightHandleKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLButtonElement>) => {
+      if (event.key === 'ArrowLeft') {
+        if (rightPanelCollapsed) return
+        event.preventDefault()
+        setRightPanelWidth((prev) => clampNumber(prev - RESIZE_STEP, RIGHT_MIN_WIDTH, RIGHT_MAX_WIDTH))
+      } else if (event.key === 'ArrowRight') {
+        event.preventDefault()
+        setRightPanelCollapsed(false)
+        setRightPanelWidth((prev) => clampNumber(prev + RESIZE_STEP, RIGHT_MIN_WIDTH, RIGHT_MAX_WIDTH))
+      } else if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault()
+        setRightPanelCollapsed((prev) => !prev)
+      }
+    },
+    [rightPanelCollapsed],
+  )
 
   const [folderMode, setFolderMode] = useState<'date' | 'custom'>('date')
   const [customFolder, setCustomFolder] = useState('My Folder')
@@ -1009,7 +1135,7 @@ export default function ProjectWorkspace() {
     if (!currentAssetDetail?.metadata) return []
     return Object.entries(currentAssetDetail.metadata)
       .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([key, value]) => ({ key, value }))
+      .map(([key, value]) => ({ key, value: formatMetadataValue(value) }))
   }, [currentAssetDetail?.metadata])
   const metadataWarnings = useMemo(() => {
     const warnings = currentAssetDetail?.metadata_warnings ?? currentPhoto?.metadataWarnings ?? []
@@ -1023,6 +1149,34 @@ export default function ProjectWorkspace() {
     if (Number.isNaN(parsed.getTime())) return '—'
     return parsed.toLocaleDateString()
   }, [currentPhoto])
+  const inspectorRows = useMemo(() => {
+    if (!currentPhoto) return []
+    const sizeLabel =
+      assetDetailFetching && !currentAssetDetail
+        ? 'Loading…'
+        : currentAssetDetail
+          ? formatBytes(currentAssetDetail.size_bytes)
+          : '—'
+    const dimensionsLabel = formatDimensions(currentAssetDetail?.width, currentAssetDetail?.height)
+    return [
+      { label: 'Name', value: currentPhoto.name || '—' },
+      { label: 'Type', value: currentPhoto.type },
+      { label: 'Date', value: detailDateLabel },
+      { label: 'Size', value: sizeLabel },
+      { label: 'Dimensions', value: dimensionsLabel },
+      { label: 'Rating', value: `${currentPhoto.rating}★` },
+      { label: 'Flag', value: currentPhoto.picked ? 'Picked' : '—' },
+      { label: 'Rejected', value: currentPhoto.rejected ? 'Yes' : 'No' },
+      { label: 'Color', value: currentPhoto.tag },
+    ]
+  }, [assetDetailFetching, currentAssetDetail, currentPhoto, detailDateLabel])
+  const metadataLoading = Boolean(currentAssetId) && assetDetailFetching
+  const metadataErrorMessage = useMemo(() => {
+    if (!assetDetailError) return null
+    if (assetDetailError instanceof Error) return assetDetailError.message
+    if (typeof assetDetailError === 'string') return assetDetailError
+    return 'Unable to load metadata'
+  }, [assetDetailError])
 
   const hasAny = photos.length > 0
 
@@ -1038,7 +1192,6 @@ export default function ProjectWorkspace() {
         onRename={handleRename}
         renamePending={renameMutation.isPending}
         renameError={renameMutation.isError ? (renameMutation.error as Error).message : null}
-        onImport={() => setImportOpen(true)}
         view={view}
         onChangeView={setView}
         gridSize={gridSize}
@@ -1113,7 +1266,9 @@ export default function ProjectWorkspace() {
 
       <div
         className="flex-1 min-h-0 grid overflow-hidden"
-        style={{ gridTemplateColumns: `${sidebarWidth}px minmax(0,1fr) ${INSPECTOR_WIDTH}px` }}
+        style={{
+          gridTemplateColumns: `${effectiveLeftWidth}px ${HANDLE_WIDTH}px minmax(0,1fr) ${HANDLE_WIDTH}px ${effectiveRightWidth}px`,
+        }}
       >
         <Sidebar
           dateTree={dateTree}
@@ -1122,17 +1277,34 @@ export default function ProjectWorkspace() {
           selectedDayKey={selectedDayKey}
           selectedDay={selectedDayNode}
           onClearDateFilter={clearDateFilter}
-          mode={sidebarMode}
-          onModeChange={handleSidebarModeChange}
-          onCollapse={collapseSidebar}
-          onExpand={expandSidebar}
+          collapsed={leftPanelCollapsed}
+          onCollapse={() => setLeftPanelCollapsed(true)}
+          onExpand={() => setLeftPanelCollapsed(false)}
         />
 
-        <main ref={contentRef} className="relative flex min-h-0 flex-col bg-[var(--surface,#FFFFFF)] border-r border-[var(--border,#E1D3B9)]">
+        <button
+          type="button"
+          role="separator"
+          aria-orientation="vertical"
+          aria-valuemin={LEFT_COLLAPSED_WIDTH}
+          aria-valuemax={LEFT_MAX_WIDTH}
+          aria-valuenow={leftPanelCollapsed ? LEFT_COLLAPSED_WIDTH : leftPanelWidth}
+          aria-valuetext={leftPanelCollapsed ? 'Collapsed' : `${Math.round(leftPanelWidth)} pixels`}
+          aria-label="Resize Import panel"
+          tabIndex={0}
+          className="group flex h-full w-full cursor-col-resize items-center justify-center border-x border-[var(--border,#EDE1C6)] bg-[var(--sand-50,#FBF7EF)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)]"
+          onPointerDown={handleLeftHandlePointerDown}
+          onKeyDown={handleLeftHandleKeyDown}
+          onDoubleClick={() => setLeftPanelCollapsed((prev) => !prev)}
+        >
+          <span className="h-10 w-[2px] rounded-full bg-[var(--border,#EDE1C6)] transition-colors group-hover:bg-[var(--text-muted,#6B645B)]" aria-hidden="true" />
+        </button>
+
+        <main ref={contentRef} className="relative flex min-h-0 flex-col bg-[var(--surface,#FFFFFF)]">
           <div className="flex-1 min-h-0 overflow-hidden">
             {!hasAny ? (
               <div className="flex h-full items-center justify-center overflow-auto p-6">
-                <EmptyState onImport={() => setImportOpen(true)} />
+                <EmptyState />
               </div>
             ) : visible.length === 0 ? (
               <div className="flex h-full items-center justify-center overflow-auto p-6">
@@ -1164,39 +1336,35 @@ export default function ProjectWorkspace() {
           </div>
         </main>
 
-        <aside className="h-full overflow-y-auto bg-[var(--surface,#FFFFFF)] p-3 text-xs">
-          <h4 className="font-medium mb-2">Inspector</h4>
-          {currentPhoto ? (
-            <div className="space-y-2">
-              <Row label="Name" value={currentPhoto.name} />
-              <Row label="Type" value={currentPhoto.type} />
-              <Row label="Date" value={detailDateLabel} />
-              <Row
-                label="Size"
-                value={
-                  assetDetailFetching && !currentAssetDetail
-                    ? 'Loading…'
-                    : currentAssetDetail
-                      ? formatBytes(currentAssetDetail.size_bytes)
-                      : '—'
-                }
-              />
-              <Row label="Dimensions" value={formatDimensions(currentAssetDetail?.width, currentAssetDetail?.height)} />
-              <Row label="Rating" value={`${currentPhoto.rating}★`} />
-              <Row label="Flag" value={currentPhoto.picked ? 'Picked' : '—'} />
-              <Row label="Rejected" value={currentPhoto.rejected ? 'Yes' : 'No'} />
-              <Row label="Color" value={currentPhoto.tag} />
-              <MetadataSummary
-                entries={metadataEntries}
-                warnings={metadataWarnings}
-                loading={Boolean(currentAssetId) && assetDetailFetching}
-                error={assetDetailError}
-              />
-            </div>
-          ) : (
-            <div className="text-[var(--text-muted,#6B645B)]">No selection</div>
-          )}
-        </aside>
+        <button
+          type="button"
+          role="separator"
+          aria-orientation="vertical"
+          aria-valuemin={RIGHT_COLLAPSED_WIDTH}
+          aria-valuemax={RIGHT_MAX_WIDTH}
+          aria-valuenow={rightPanelCollapsed ? RIGHT_COLLAPSED_WIDTH : rightPanelWidth}
+          aria-valuetext={rightPanelCollapsed ? 'Collapsed' : `${Math.round(rightPanelWidth)} pixels`}
+          aria-label="Resize Inspector panel"
+          tabIndex={0}
+          className="group flex h-full w-full cursor-col-resize items-center justify-center border-x border-[var(--border,#EDE1C6)] bg-[var(--sand-50,#FBF7EF)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)]"
+          onPointerDown={handleRightHandlePointerDown}
+          onKeyDown={handleRightHandleKeyDown}
+          onDoubleClick={() => setRightPanelCollapsed((prev) => !prev)}
+        >
+          <span className="h-10 w-[2px] rounded-full bg-[var(--border,#EDE1C6)] transition-colors group-hover:bg-[var(--text-muted,#6B645B)]" aria-hidden="true" />
+        </button>
+
+        <InspectorPanel
+          collapsed={rightPanelCollapsed}
+          onCollapse={() => setRightPanelCollapsed(true)}
+          onExpand={() => setRightPanelCollapsed(false)}
+          summaryRows={inspectorRows}
+          hasSelection={Boolean(currentPhoto)}
+          metadataEntries={metadataEntries}
+          metadataWarnings={metadataWarnings}
+          metadataLoading={metadataLoading}
+          metadataError={metadataErrorMessage}
+        />
       </div>
 
       {importOpen && (
@@ -1209,65 +1377,6 @@ export default function ProjectWorkspace() {
           customFolder={customFolder}
         />
       )}
-    </div>
-  )
-}
-
-// Inline Kleinteile (nur diese Seite)
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between border-b border-[var(--border,#E1D3B9)] py-1">
-      <span className="text-[var(--text-muted,#6B645B)]">{label}</span>
-      <span className="font-mono text-[11px]">{value}</span>
-    </div>
-  )
-}
-
-function MetadataSummary({
-  entries,
-  warnings,
-  loading,
-  error,
-}: {
-  entries: { key: string; value: unknown }[]
-  warnings: string[]
-  loading: boolean
-  error: unknown
-}) {
-  const hasEntries = entries.length > 0
-  const errorMessage = error instanceof Error ? error.message : typeof error === 'string' ? error : null
-
-  return (
-    <div className="mt-4 space-y-2 rounded border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-3">
-      <div className="flex items-center justify-between text-[11px] uppercase tracking-wide text-[var(--text-muted,#6B645B)]">
-        <span>Metadata</span>
-        {loading ? <span className="text-[var(--text-muted,#6B645B)] normal-case">Loading…</span> : null}
-      </div>
-      {errorMessage ? <p className="text-[10px] text-[#B42318]">{errorMessage}</p> : null}
-      {warnings.length ? (
-        <ul className="space-y-1 text-[10px] text-[#B45309]">
-          {warnings.map((warning) => (
-            <li key={warning} className="flex items-center gap-2">
-              <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-[#F59E0B] text-[#B45309]">!</span>
-              <span className="truncate">{warning}</span>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      {hasEntries ? (
-        <div className="max-h-64 overflow-auto rounded border border-[var(--border,#E1D3B9)]">
-          <div className="divide-y divide-[var(--border,#E1D3B9)]">
-            {entries.map(({ key, value }) => (
-              <div key={key} className="grid grid-cols-[minmax(0,0.55fr)_minmax(0,1fr)] gap-3 px-3 py-1.5">
-                <div className="font-mono text-[10px] text-[var(--text-muted,#6B645B)] break-words">{key}</div>
-                <div className="text-[11px] text-[var(--text,#1F1E1B)] break-words">{formatMetadataValue(value)}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : !loading && !errorMessage ? (
-        <p className="text-[11px] text-[var(--text-muted,#6B645B)]">No metadata available for this asset.</p>
-      ) : null}
     </div>
   )
 }
@@ -1297,6 +1406,13 @@ function formatBytes(size: number): string {
 function formatDimensions(width?: number | null, height?: number | null): string {
   if (!width || !height) return '—'
   return `${width}×${height}`
+}
+
+function clampNumber(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) return min
+  if (value < min) return min
+  if (value > max) return max
+  return value
 }
 
 function formatMetadataValue(input: unknown): string {

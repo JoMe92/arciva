@@ -29,7 +29,6 @@ describe('TopBar layout', () => {
         onRename={vi.fn()}
         renamePending={false}
         renameError={null}
-        onImport={vi.fn()}
         view="grid"
         onChangeView={vi.fn()}
         gridSize={160}

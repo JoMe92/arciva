@@ -2,10 +2,9 @@ import React from 'react'
 import { S } from '../features/projects/utils'
 
 /**
- * Colour tokens used exclusively by the StoneTrailIcon. These mirror
- * the custom CSS variables but provide fallback values. Should you
- * theme the application with different variables, adjust these
- * defaults accordingly.
+ * Colour tokens used exclusively by the Arciva master mark. These mirror
+ * the custom CSS variables but provide fallback values. If you theme the
+ * application with different variables, adjust these defaults accordingly.
  */
 const TOKENS = {
   circleFill: 'var(--stone-trail-mark-surface, #FBF7EF)',
@@ -22,14 +21,14 @@ export interface StoneTrailIconProps {
 }
 
 /**
- * Renders the Stone Trail master mark: three ascending pebbles placed
+ * Renders the Arciva master mark: three ascending pebbles placed
  * within a circular container. The SVG scales to any requested size
  * and exposes a title for assistive technologies.
  */
 export const StoneTrailIcon: React.FC<StoneTrailIconProps> = ({
   size = 32,
   className = '',
-  title = 'Stone Trail',
+  title = 'Arciva',
 }) => {
   return (
     <svg

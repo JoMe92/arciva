@@ -11,17 +11,26 @@ type StoneTrailLogoProps = {
    */
   title?: string
   /**
+   * A concise slogan shown beneath the wordmark.
+   */
+  slogan?: string
+  /**
    * Hide the wordmark when space constrained (icon-only presentation).
    */
   showLabel?: boolean
 }
 
 /**
- * Displays the Stone Trail master logo (three pebbles inside a ring) paired
- * with the “Stone Trail” wordmark. The element is intentionally static—no
- * hover, focus, or pointer affordances—per the product specification.
+ * Displays the Arciva master logo (three pebbles inside a ring) paired
+ * with the Arciva wordmark and a supporting slogan. This view is static
+ * per the product specification—no hover or pointer affordances.
  */
-export function StoneTrailLogo({ className = '', title = 'Stone Trail', showLabel = true }: StoneTrailLogoProps) {
+export function StoneTrailLogo({
+  className = '',
+  title = 'Arciva',
+  slogan = 'Organize once. Find forever.',
+  showLabel = true,
+}: StoneTrailLogoProps) {
   return (
     <div className={`stone-trail-logo inline-flex items-center gap-3 cursor-default select-none font-semibold text-[var(--stone-trail-mark-text,#1F1E1B)] ${className}`}>
       <span className="sr-only">{title} logo</span>
@@ -29,8 +38,13 @@ export function StoneTrailLogo({ className = '', title = 'Stone Trail', showLabe
         <StoneTrailIcon size={44} title={`${title} logo`} />
       </span>
       {showLabel ? (
-        <span className="stone-trail-logo__label text-base tracking-tight leading-tight" aria-hidden>
-          {title}
+        <span className="stone-trail-logo__label flex flex-col gap-1 text-base tracking-tight leading-tight" aria-hidden>
+          <span className="font-semibold">{title}</span>
+          {slogan ? (
+            <span className="stone-trail-logo__slogan text-[11px] font-normal uppercase tracking-[0.2em] leading-tight text-[var(--text-muted,#6B645B)]">
+              {slogan}
+            </span>
+          ) : null}
         </span>
       ) : null}
     </div>

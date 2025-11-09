@@ -397,10 +397,10 @@ export default function ProjectIndex() {
       <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-10">
         <header className="mb-4">
           <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-[var(--text,#1F1E1B)]">
-            {archiveMode ? 'Archive' : 'Projects'}
+            {archiveMode ? 'Archive' : 'Project Cards'}
           </h1>
           <p className="text-sm text-[var(--text-muted,#6B645B)]">
-            {archiveMode ? 'Archived projects are hidden from the main view.' : 'Choose a project — the app is project-first.'}
+            {archiveMode ? 'Archived projects are hidden from the main view.' : 'A Project Card is your project hub—context, assets, and progress, neatly linked and searchable.'}
           </p>
         </header>
 

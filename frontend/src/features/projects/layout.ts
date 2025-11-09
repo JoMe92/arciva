@@ -47,16 +47,16 @@ function primaryAspectRatioString(project: Project): string {
 }
 
 /**
- * Baut ein „artistisches“ Raster:
- * - erste Reihe abhängig vom ersten echten Projekt
- * - danach: landscapes = span 2, portrait/square = span 1
- * - leichte Offsets für Rhythmus
+ * Builds an artistic grid:
+ * - first row depends on the first actual project
+ * - afterwards: landscapes span 2, portrait/square span 1
+ * - subtle offsets add rhythm
  */
 export function buildLayout(projects: Project[], withCreate = true, firstRowPlan?: FirstRowArtistPlan): LayoutRow[] {
   const rows: LayoutRow[] = []
   const rest = [...projects]
 
-  // Erste Reihe
+  // First row
   if (withCreate) {
     const primary = rest.shift()
     if (primary) {
@@ -96,7 +96,7 @@ export function buildLayout(projects: Project[], withCreate = true, firstRowPlan
         artistGap: firstRowPlan?.gap,
       })
     } else {
-      // Keine Projekte → nur Create in Standardgröße
+      // No projects left → show only a default create slot
       rows.push({
         cols: 3,
         gapX: 'gap-x-10',
@@ -106,7 +106,7 @@ export function buildLayout(projects: Project[], withCreate = true, firstRowPlan
     }
   }
 
-  // Folgereihen
+  // Subsequent rows
   let rowIndex = 1
   while (rest.length) {
     const cols: 3 | 4 = rowIndex % 2 === 0 ? 4 : 3
@@ -117,10 +117,10 @@ export function buildLayout(projects: Project[], withCreate = true, firstRowPlan
     while (usedCols < cols && rest.length) {
       const p = rest[0]
       const span: 1 | 2 = p.aspect === 'landscape' && usedCols <= cols - 2 ? 2 : 1
-      // Regel: max 1 landscape pro Reihe
+      // Rule: max 1 landscape per row
       const hasLandscape = items.some(i => i.kind === 'project' && i.span === 2)
       if (span === 2 && hasLandscape) {
-        // wenn schon Landscape drin, nimm ein Portrait/Square
+        // if a landscape already exists, prefer a portrait/square
         const idx = rest.findIndex(x => x.aspect !== 'landscape')
         if (idx > 0) {
           const swapped = rest.splice(idx, 1)[0]
@@ -142,7 +142,7 @@ export function buildLayout(projects: Project[], withCreate = true, firstRowPlan
       cols,
       gapX,
       items,
-      offsetTop: rowIndex % 2 ? 'mt-6' : 'mt-2', // kleine Versätze
+      offsetTop: rowIndex % 2 ? 'mt-6' : 'mt-2', // slight offsets
     })
     rowIndex++
   }

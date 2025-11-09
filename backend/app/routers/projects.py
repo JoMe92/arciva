@@ -86,10 +86,10 @@ async def create_project(
     db.add(p)
     await db.flush()
 
-    # server defaults (created_at/updated_at) laden
+    # load server defaults (created_at/updated_at)
     await db.refresh(p)
 
-    # commit (Session ist expire_on_commit=False, daher p weiterhin befüllt)
+    # commit (session uses expire_on_commit=False so `p` remains populated)
     await db.commit()
 
     result = schemas.ProjectOut(

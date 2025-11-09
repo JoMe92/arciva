@@ -180,7 +180,7 @@ const ProjectCard: React.FC<{
         </div>
       </div>
 
-      {/* Weißer Footer unten */}
+      {/* white footer at the bottom */}
       <div className="rounded-b-xl border border-[var(--border,#E1D3B9)] border-t-0 bg-[var(--surface,#FFFFFF)] px-1.5 sm:px-2 md:px-3 pt-2 pb-3">
         <div className="flex items-start justify-between gap-3">
           <div>

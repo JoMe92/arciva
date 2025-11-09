@@ -1,8 +1,17 @@
 import { withBase } from './base'
 
+export type AssetStatus =
+  | 'UPLOADING'
+  | 'QUEUED'
+  | 'PROCESSING'
+  | 'READY'
+  | 'DUPLICATE'
+  | 'MISSING_SOURCE'
+  | 'ERROR'
+
 export type AssetListItem = {
   id: string
-  status: string
+  status: AssetStatus
   thumb_url?: string | null
   preview_url?: string | null
   original_filename?: string | null
@@ -28,7 +37,7 @@ export type AssetDerivative = {
 
 export type AssetDetail = {
   id: string
-  status: string
+  status: AssetStatus
   original_filename: string
   mime: string
   size_bytes: number

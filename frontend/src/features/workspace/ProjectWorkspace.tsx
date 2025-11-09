@@ -313,6 +313,7 @@ function mapAssetToPhoto(item: AssetListItem, existing?: Photo): Photo {
     isPreview,
     previewOrder: typeof item.preview_order === 'number' ? item.preview_order : existing?.previewOrder ?? null,
     metadataWarnings: Array.isArray(item.metadata_warnings) ? item.metadata_warnings : existing?.metadataWarnings ?? [],
+    status: item.status,
   }
 }
 

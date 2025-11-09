@@ -70,6 +70,8 @@ export type WorkspaceFilterControls = {
   clearDateFilter: () => void
 }
 
+const SHORTCUTS_LEGEND_ID = 'shortcuts-legend'
+
 export function TopBar({
   projectName,
   onBack,
@@ -115,6 +117,9 @@ export function TopBar({
   const inputRef = useRef<HTMLInputElement | null>(null)
   const filtersRef = useRef<HTMLDivElement | null>(null)
   const filtersButtonRef = useRef<HTMLButtonElement | null>(null)
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
+  const shortcutsButtonRef = useRef<HTMLButtonElement | null>(null)
+  const shortcutsLegendRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     if (!editing) {
@@ -150,6 +155,27 @@ export function TopBar({
       document.removeEventListener('keydown', handleKey)
     }
   }, [filtersOpen])
+
+  useEffect(() => {
+    if (!shortcutsOpen) return
+    const handleClick = (event: MouseEvent) => {
+      const target = event.target as Node
+      if (shortcutsLegendRef.current?.contains(target)) return
+      if (shortcutsButtonRef.current?.contains(target)) return
+      setShortcutsOpen(false)
+    }
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setShortcutsOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    document.addEventListener('keydown', handleKey)
+    return () => {
+      document.removeEventListener('mousedown', handleClick)
+      document.removeEventListener('keydown', handleKey)
+    }
+  }, [shortcutsOpen])
 
   const startEditing = useCallback(() => {
     setDraft(projectName)
@@ -340,6 +366,18 @@ export function TopBar({
           </div>
           <button
             type="button"
+            ref={shortcutsButtonRef}
+            onClick={() => setShortcutsOpen((open) => !open)}
+            className={`inline-flex h-9 items-center rounded-full border px-4 text-[12px] font-medium ${
+              shortcutsOpen ? 'border-[var(--text,#1F1E1B)] text-[var(--text,#1F1E1B)]' : 'border-[var(--border,#E1D3B9)] text-[var(--text-muted,#6B645B)]'
+            }`}
+            aria-expanded={shortcutsOpen}
+            aria-controls={SHORTCUTS_LEGEND_ID}
+          >
+            ⌨ Shortcuts
+          </button>
+          <button
+            type="button"
             className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border,#E1D3B9)] text-lg text-[var(--text-muted,#6B645B)]"
             aria-label="More actions"
           >
@@ -356,6 +394,7 @@ export function TopBar({
           </div>
         </div>
       </div>
+      {shortcutsOpen && <ShortcutsLegend ref={shortcutsLegendRef} onClose={() => setShortcutsOpen(false)} />}
     </header>
   )
 }
@@ -419,6 +458,48 @@ const FiltersPopover = React.forwardRef<HTMLDivElement, {
   )
 })
 FiltersPopover.displayName = 'FiltersPopover'
+
+const SHORTCUTS: Array<{ keys: string; description: string }> = [
+  { keys: 'G', description: 'Switch to the grid view' },
+  { keys: 'D', description: 'Open detail view' },
+  { keys: 'P', description: 'Pick or preview the selection' },
+  { keys: 'X', description: 'Reject the selected assets' },
+  { keys: '1-5', description: 'Apply a star rating' },
+  { keys: 'Left / Right arrows', description: 'Move between photos' },
+  { keys: 'Alt + [ / ]', description: 'Collapse or expand the date rail' },
+]
+
+const ShortcutsLegend = React.forwardRef<HTMLDivElement, { onClose: () => void }>(({ onClose }, ref) => (
+  <div ref={ref} id={SHORTCUTS_LEGEND_ID} role="region" aria-label="Keyboard shortcuts" className="w-full">
+    <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 sm:px-6 lg:px-8 pb-3 pt-2">
+      <div className="rounded-2xl border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-4 shadow-xl">
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-semibold text-[var(--text,#1F1E1B)]">Keyboard shortcuts</p>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close shortcuts legend"
+            className="text-sm text-[var(--text-muted,#6B645B)] transition hover:text-[var(--text,#1F1E1B)]"
+          >
+            ✕
+          </button>
+        </div>
+        <ul className="mt-3 grid gap-2 text-[11px] sm:grid-cols-2">
+          {SHORTCUTS.map((shortcut) => (
+            <li
+              key={shortcut.keys}
+              className="flex items-center justify-between gap-3 rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--surface-subtle,#FBF7EF)] px-3 py-2"
+            >
+              <span className="font-mono text-[11px] text-[var(--text-muted,#6B645B)]">{shortcut.keys}</span>
+              <span className="text-right text-[var(--text,#1F1E1B)]">{shortcut.description}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  </div>
+))
+ShortcutsLegend.displayName = 'ShortcutsLegend'
 
 function MinStarRow({ value, onChange }: { value: 0 | 1 | 2 | 3 | 4 | 5; onChange: (v: 0 | 1 | 2 | 3 | 4 | 5) => void }) {
   const stars = [0, 1, 2, 3, 4, 5] as const
@@ -1041,16 +1122,76 @@ export function ThumbContent({ p }: { p: Photo }) {
   )
 }
 
+type BadgeTone = 'success' | 'warning' | 'danger' | 'muted' | 'accent'
+
+const BADGE_TONE_STYLES: Record<BadgeTone, string> = {
+  success: 'bg-[var(--success,#34B37A)] text-white',
+  warning: 'bg-[var(--warning,#E4AD07)] text-[var(--text,#1F1E1B)]',
+  danger: 'bg-[var(--danger,#C73A37)] text-white',
+  muted: 'bg-[var(--border,#E1D3B9)] text-[var(--text,#1F1E1B)]',
+  accent: 'bg-[var(--accent,#D7C5A6)] text-[var(--on-accent,#3A2F23)]',
+}
+
+function Badge({ label, tone = 'muted', icon, ariaLabel }: { label: string; tone?: BadgeTone; icon?: string; ariaLabel?: string }) {
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full px-2 py-[2px] text-[10px] font-semibold tracking-wide ${BADGE_TONE_STYLES[tone]}`}
+      aria-label={ariaLabel ?? label}
+    >
+      {icon ? <span aria-hidden>{icon}</span> : null}
+      <span className="leading-none">{label}</span>
+    </span>
+  )
+}
+
 export function ThumbOverlay({ p, twoLine }: { p: Photo; twoLine?: boolean }) {
   // leben via DOM-Custom-Events (gleiche Mechanik wie im Monolith)
   const emit = (name: 'rate' | 'pick' | 'reject' | 'color', detail: any) => {
     const ev = new CustomEvent(name, { detail }); window.dispatchEvent(ev)
   }
+  const pickBadge = p.picked
+    ? { label: 'Picked', tone: 'success', icon: '✔', ariaLabel: 'Picked asset' }
+    : p.rejected
+      ? { label: 'Rejected', tone: 'danger', icon: '✕', ariaLabel: 'Rejected asset' }
+      : { label: 'Pending', tone: 'muted', icon: '•', ariaLabel: 'Pick or reject pending' }
+
+  const ratingBadgeLabel = `★${p.rating > 0 ? p.rating : '—'}`
+  const ratingBadge = { label: ratingBadgeLabel, tone: 'accent' as BadgeTone, ariaLabel: `Rating: ${p.rating} star${p.rating === 1 ? '' : 's'}` }
+
+  const statusBadge = (() => {
+    switch (p.status) {
+      case 'READY':
+        return { label: 'Ready', tone: 'success' as BadgeTone, icon: '✔', ariaLabel: 'Asset ready' }
+      case 'PROCESSING':
+      case 'QUEUED':
+      case 'UPLOADING':
+        return { label: 'Processing', tone: 'warning' as BadgeTone, icon: '⏳', ariaLabel: 'Asset processing' }
+      case 'ERROR':
+        return { label: 'Error', tone: 'danger' as BadgeTone, icon: '⚠', ariaLabel: 'Processing error' }
+      case 'MISSING_SOURCE':
+        return { label: 'Missing source', tone: 'danger' as BadgeTone, icon: '⚠', ariaLabel: 'Missing source' }
+      case 'DUPLICATE':
+        return { label: 'Duplicate', tone: 'muted' as BadgeTone, icon: '≡', ariaLabel: 'Duplicate asset' }
+      default:
+        return { label: 'Processing', tone: 'warning' as BadgeTone, icon: '⏳', ariaLabel: `Status: ${p.status}` }
+    }
+  })()
+
   return (
     <div className="border-t border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-2 py-1 text-[11px]">
+      <div className="flex items-start justify-between gap-3">
+        <span className="min-w-0 text-[12px] font-semibold text-[var(--text,#1F1E1B)] truncate">{p.name}</span>
+        <div className="flex flex-wrap items-center justify-end gap-1">
+          <Badge {...pickBadge} />
+          <Badge {...ratingBadge} />
+          <Badge {...statusBadge} />
+        </div>
+      </div>
       {twoLine ? (
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center justify-between gap-2"><span className="truncate">{p.name}</span><StarRow value={p.rating} onChange={(r) => emit('rate', { id: p.id, r })} /></div>
+        <div className="mt-2 flex flex-col gap-1">
+          <div className="flex items-center justify-end gap-2">
+            <StarRow value={p.rating} onChange={(r) => emit('rate', { id: p.id, r })} />
+          </div>
           <div className="flex items-center justify-end gap-2">
             <button className={`px-1 border rounded ${p.picked ? 'border-[var(--text,#1F1E1B)]' : 'border-[var(--border,#E1D3B9)]'}`} onClick={() => emit('pick', { id: p.id })} title="Pick (P)">P</button>
             <button className={`px-1 border rounded ${p.rejected ? 'border-[var(--text,#1F1E1B)]' : 'border-[var(--border,#E1D3B9)]'}`} onClick={() => emit('reject', { id: p.id })} title="Reject (X)">X</button>
@@ -1058,13 +1199,14 @@ export function ThumbOverlay({ p, twoLine }: { p: Photo; twoLine?: boolean }) {
           </div>
         </div>
       ) : (
-        <div className="flex items-center justify-between">
-          <span className="truncate mr-2">{p.name}</span>
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <StarRow value={p.rating} onChange={(r) => emit('rate', { id: p.id, r })} />
+            <ColorSwatch value={p.tag} onPick={(t) => emit('color', { id: p.id, t })} />
+          </div>
           <div className="flex items-center gap-2">
             <button className={`px-1 border rounded ${p.picked ? 'border-[var(--text,#1F1E1B)]' : 'border-[var(--border,#E1D3B9)]'}`} onClick={() => emit('pick', { id: p.id })} title="Pick (P)">P</button>
             <button className={`px-1 border rounded ${p.rejected ? 'border-[var(--text,#1F1E1B)]' : 'border-[var(--border,#E1D3B9)]'}`} onClick={() => emit('reject', { id: p.id })} title="Reject (X)">X</button>
-            <StarRow value={p.rating} onChange={(r) => emit('rate', { id: p.id, r })} />
-            <ColorSwatch value={p.tag} onPick={(t) => emit('color', { id: p.id, t })} />
           </div>
         </div>
       )}

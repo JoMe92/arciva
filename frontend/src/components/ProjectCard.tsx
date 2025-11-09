@@ -37,11 +37,12 @@ const ProjectCard: React.FC<{
   }, [p.previewImages, p.image])
   const [hovered, setHovered] = React.useState(false)
   const [activePreview, setActivePreview] = React.useState(0)
-  const hasImage = previews.length > 0
-  const current = hasImage ? previews[Math.max(0, Math.min(activePreview, previews.length - 1))] : null
+  const previewCount = previews.length
+  const hasImage = previewCount > 0
+  const current = hasImage ? previews[Math.max(0, Math.min(activePreview, previewCount - 1))] : null
   const primaryPreview = previews[0] ?? null
   const currentUrl = current?.url ?? null
-  const showNav = hovered && previews.length > 1
+  const showNav = hovered && previewCount > 1
   const fallbackAspectRatio = React.useMemo(() => fallbackAspectRatioForAspect(p.aspect), [p.aspect])
   const fallbackAspectRatioValue = React.useMemo(() => parseRatio(fallbackAspectRatio), [fallbackAspectRatio])
   const primaryAspectRatio = aspectRatioValue(primaryPreview?.width, primaryPreview?.height) ?? fallbackAspectRatio
@@ -55,6 +56,69 @@ const ProjectCard: React.FC<{
   React.useEffect(() => {
     setActivePreview(0)
   }, [previews])
+
+  const cycleRelative = React.useCallback(
+    (delta: number) => {
+      setActivePreview((idx) => {
+        if (!previewCount) return 0
+        const next = (idx + delta + previewCount) % previewCount
+        return next
+      })
+    },
+    [previewCount],
+  )
+
+  const wheelAccumulatorRef = React.useRef(0)
+
+  const handleWheel = React.useCallback(
+    (event: React.WheelEvent<HTMLDivElement>) => {
+      if (previewCount < 2) return
+      const primaryDelta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY
+      if (!primaryDelta) return
+      wheelAccumulatorRef.current += primaryDelta
+      const threshold = 40
+      if (Math.abs(wheelAccumulatorRef.current) < threshold) {
+        event.preventDefault()
+        event.stopPropagation()
+        return
+      }
+      const direction = wheelAccumulatorRef.current > 0 ? 1 : -1
+      wheelAccumulatorRef.current = 0
+      event.preventDefault()
+      event.stopPropagation()
+      cycleRelative(direction)
+    },
+    [cycleRelative, previewCount],
+  )
+
+  React.useEffect(() => {
+    if (!hovered || previewCount < 2) return
+    if (typeof window === 'undefined') return
+    const handler = (event: KeyboardEvent) => {
+      const key = (event.key || '').toLowerCase()
+      if (key === 'arrowleft' || key === 'arrowup') {
+        event.preventDefault()
+        cycleRelative(-1)
+        return
+      }
+      if (key === 'arrowright' || key === 'arrowdown') {
+        event.preventDefault()
+        cycleRelative(1)
+        return
+      }
+      if (key === 'home') {
+        event.preventDefault()
+        setActivePreview(0)
+        return
+      }
+      if (key === 'end') {
+        event.preventDefault()
+        setActivePreview(Math.max(0, previewCount - 1))
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [cycleRelative, hovered, previewCount])
 
   const [promoting, setPromoting] = React.useState(false)
   const canPromote = Boolean(
@@ -125,6 +189,7 @@ const ProjectCard: React.FC<{
         onMouseLeave={() => setHovered(false)}
         onFocus={handleFocus}
         onBlur={handleBlur}
+        onWheel={handleWheel}
         className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus,#6B7C7A)] rounded-xl"
       >
         <div className="overflow-hidden rounded-t-xl bg-[var(--placeholder-bg-beige,#F3EBDD)] relative">

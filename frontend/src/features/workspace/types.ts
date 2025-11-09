@@ -1,4 +1,5 @@
 import type { PlaceholderRatio } from '../../shared/placeholder'
+import type { AssetStatus } from '../../shared/api/assets'
 
 export type ImgType = 'JPEG' | 'RAW'
 export type ColorTag = 'None' | 'Red' | 'Green' | 'Blue' | 'Yellow' | 'Purple'
@@ -14,6 +15,7 @@ export type Photo = {
   picked: boolean
   rejected: boolean
   tag: ColorTag
+  status: AssetStatus
   thumbSrc?: string | null
   previewSrc?: string | null
   placeholderRatio: PlaceholderRatio

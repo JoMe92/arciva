@@ -1465,7 +1465,7 @@ export function DetailView({
   const cur = items[index]
   const canPrev = index > 0
   const canNext = index < items.length - 1
-  const STRIP_H = 136
+  const STRIP_H = 180
   const THUMB = 96
 
   const rootClass = ['grid', 'h-full', 'min-h-0', className].filter(Boolean).join(' ')

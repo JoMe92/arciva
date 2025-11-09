@@ -70,7 +70,7 @@ async def _load_preview_map(
 
     return normalized_map
 
-logger = logging.getLogger("nivio.projects")
+logger = logging.getLogger("arciva.projects")
 
 router = APIRouter(prefix="/v1/projects", tags=["projects"])
 

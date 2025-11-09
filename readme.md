@@ -1,4 +1,4 @@
-# Nivio
+# Arciva
 
 [![Status](https://img.shields.io/badge/status-MVP%20%7C%20local%20setup-blue)](#)
 [![Architecture Docs](https://img.shields.io/badge/docs-arc42%20%2B%20ADRs-informational)](docs/architecture/arc42.md)
@@ -6,7 +6,14 @@
 [![License](https://img.shields.io/badge/license-MIT-lightgrey)](#)
 [![Stars](https://img.shields.io/github/stars/OWNER/REPO?style=social)](#)
 
-Nivio is a modern, project‑based web workspace for visual assets. Create projects, ingest at speed, and browse crisp thumbnails immediately. Originals remain immutable; your library stays clean.
+Arciva — Organize once. Find forever.
+Project-first photo management with smart cards, fast search, and reliable archiving with zero fuss.
+
+Workflows that stick: From intake to export—one flow, no context switching.
+
+Arciva turns projects into smart cards—so your people shots, letters, and assets stay organized and instantly findable.
+Arciva is a project-centric photo archive with indexed metadata, fast retrieval, and predictable structure.
+Arciva keeps every project on file and at your fingertips—organized once, found forever.
 
 > Status: MVP in active development (local setup without Docker). Containers will follow later.
 
@@ -26,10 +33,10 @@ Nivio is a modern, project‑based web workspace for visual assets. Create proje
 ---
 
 ## Overview
-- Project‑first organization (client, shoot, concept)
-- Clean separation: metadata in PostgreSQL; binaries in object storage (MinIO/S3) or POSIX via adapter
-- Content‑addressed originals (SHA‑256) and versioned derivatives
-- Async ingest pipeline (hash → EXIF → thumbnails) backed by Redis workers
+- Project cards, not folders: every people shoot, letter, or brief lives on a single scannable card with people, files, notes, and status.
+- Templates and scoped collections enforce consistent fields, statuses, and storage rules across Case / People / Admin workflows.
+- Smart indexing (EXIF, faces, tags, OCR text, filenames) lets you find any asset instantly—scoped to a project or across the whole archive.
+- Rules & retention, permissions, and immutable audit trails keep large teams and administrations governance-ready.
 
 ---
 
@@ -119,7 +126,7 @@ Environment lives in `.env` (template: `.env.example`). Each entry below include
 - **`APP_ENV`**: tells the backend which profile to load (`dev`, `staging`, `prod`). Leave as `dev` for local work; ops teams can override per deployment.
 - **`SECRET_KEY`**: signing key for sessions and JWTs. The template ships with `changeme` so development works instantly. For any shared or public environment, replace it via `openssl rand -hex 32` (or `python -c 'import secrets; print(secrets.token_hex(32))'`) and keep it private.
 - **`ALLOWED_ORIGINS__0/1/...`**: FastAPI reads these exploded keys and builds the CORS whitelist. Defaults grant requests from `http://localhost:5173` (the Vite dev server). Add more lines (increment the suffix) for any additional domains you serve the frontend from.
-- **`DATABASE_URL`**: SQLAlchemy connection string. When you run `pixi run dev-stack`, Docker spins up Postgres with credentials `nivio:nivio` on port `5432` (or `5433` if already occupied). The template points at that instance. If you host Postgres elsewhere, swap in the appropriate URL (format: `postgresql+asyncpg://user:password@host:port/dbname`).
+- **`DATABASE_URL`**: SQLAlchemy connection string. When you run `pixi run dev-stack`, Docker spins up Postgres with credentials `arciva:arciva` on port `5432` (or `5433` if already occupied). The template points at that instance. If you host Postgres elsewhere, swap in the appropriate URL (format: `postgresql+asyncpg://user:password@host:port/dbname`).
 - **`REDIS_URL`**: URL for the task queue. The dev stack starts Redis on `localhost:6379`, matching the sample value. Override if you use a different Redis server.
 - **`FS_ROOT`, `FS_UPLOADS_DIR`, `FS_ORIGINALS_DIR`, `FS_DERIVATIVES_DIR`**: local filesystem storage (POSIX adapter). Choose an absolute base path (e.g. `$HOME/photo-store`), use it consistently for all four variables, and create the directories with `mkdir -p <path>/{uploads,originals,derivatives}`.
 - **`THUMB_SIZES`**: comma-separated list inside square brackets that defines which thumbnail widths (in pixels) the worker generates. `[512]` keeps processing light; add more sizes like `[256,512,1024]` when you need multiple renditions.
@@ -135,7 +142,7 @@ SECRET_KEY=changeme
 ALLOWED_ORIGINS__0=http://localhost:5173
 ALLOWED_ORIGINS__1=http://127.0.0.1:5173
 
-DATABASE_URL=postgresql+asyncpg://nivio:1234@127.0.0.1:5432/nivio_dev
+DATABASE_URL=postgresql+asyncpg://arciva:1234@127.0.0.1:5432/arciva_dev
 REDIS_URL=redis://127.0.0.1:6379/0
 
 FS_ROOT=/absolute/path/to/photo-store
@@ -168,7 +175,7 @@ WORKER_CONCURRENCY=2
    ALLOWED_ORIGINS__2=https://demo.example.com
    ```
 5. **Point `DATABASE_URL` at PostgreSQL**  
-   - If you run `pixi run dev-stack`, Docker launches Postgres with credentials `nivio`/`nivio` and database `nivio` on port `5432` (or `5433` if 5432 is in use). The template already matches this; only change it if you manage Postgres yourself.  
+   - If you run `pixi run dev-stack`, Docker launches Postgres with credentials `arciva`/`arciva` and database `arciva` on port `5432` (or `5433` if 5432 is in use). The template already matches this; only change it if you manage Postgres yourself.  
    - Custom setup? Follow the format `postgresql+asyncpg://USER:PASSWORD@HOST:PORT/DBNAME`.
 6. **Point `REDIS_URL` at Redis**  
    `dev-stack` starts Redis on `redis://127.0.0.1:6379/0`. Keep that value unless you connect to another Redis instance; in that case update the host/port and optional database number at the end.

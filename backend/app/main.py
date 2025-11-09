@@ -6,12 +6,12 @@ from .deps import get_settings
 from .routers import projects, uploads, assets
 from .logging_utils import setup_logging
 
-api_logger = logging.getLogger("nivio.api")
+api_logger = logging.getLogger("arciva.api")
 
 def create_app() -> FastAPI:
     s = get_settings()
     setup_logging(s.logs_dir)
-    app = FastAPI(title="Nivio API", version="0.1.0")
+    app = FastAPI(title="Arciva API", version="0.1.0")
 
     app.add_middleware(
         CORSMiddleware,

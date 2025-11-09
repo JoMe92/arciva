@@ -42,13 +42,13 @@ ALLOWED_ORIGINS__0=http://localhost:5173
 ALLOWED_ORIGINS__1=http://127.0.0.1:5173
 
 # Async SQLAlchemy URL for Postgres (local defaults)
-DATABASE_URL=postgresql+asyncpg://nivio:1234@127.0.0.1:5432/nivio_dev
+DATABASE_URL=postgresql+asyncpg://arciva:1234@127.0.0.1:5432/arciva_dev
 # Redis URL for tasks/caching (local default)
 REDIS_URL=redis://127.0.0.1:6379/0
 # App secret (dev only!)
 SECRET_KEY=dev-secret-change-me
 # Conda environment name
-CONDA_ENV=nivio
+CONDA_ENV=arciva
 # Infra control: auto | true | false
 # auto → if local Postgres/Redis are already running on 5432/6379, skip Docker
 USE_DOCKER=auto
@@ -144,9 +144,9 @@ services:
     image: postgres:16-alpine
     container_name: dev-db-1
     environment:
-      POSTGRES_DB: nivio
-      POSTGRES_USER: nivio
-      POSTGRES_PASSWORD: nivio
+      POSTGRES_DB: arciva
+      POSTGRES_USER: arciva
+      POSTGRES_PASSWORD: arciva
     ports: ["${HOST_DB_PORT:-5432}:5432"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
@@ -195,7 +195,7 @@ ensure_compose_up() {
   is_port_open 127.0.0.1 6379 && HOST_REDIS_PORT=6380
   export HOST_DB_PORT HOST_REDIS_PORT
 
-  export NEW_DATABASE_URL="postgresql+asyncpg://nivio:nivio@127.0.0.1:${HOST_DB_PORT}/nivio"
+  export NEW_DATABASE_URL="postgresql+asyncpg://arciva:arciva@127.0.0.1:${HOST_DB_PORT}/arciva"
   export NEW_REDIS_URL="redis://127.0.0.1:${HOST_REDIS_PORT}/0"
 
   write_compose
@@ -223,10 +223,10 @@ conda_activate() {
   if command -v conda >/dev/null 2>&1; then
     # shellcheck disable=SC1091
     source "$(conda info --base)/etc/profile.d/conda.sh"
-    conda activate "${CONDA_ENV:-nivio}" || warn "Failed to activate conda env ${CONDA_ENV:-nivio}; falling back"
+    conda activate "${CONDA_ENV:-arciva}" || warn "Failed to activate conda env ${CONDA_ENV:-arciva}; falling back"
   elif [[ -n "${MAMBA_EXE:-}" ]] || command -v micromamba >/dev/null 2>&1; then
     eval "$(micromamba shell hook --shell=bash)" || true
-    micromamba activate "${CONDA_ENV:-nivio}" || warn "Failed to activate micromamba env ${CONDA_ENV:-nivio}; falling back"
+    micromamba activate "${CONDA_ENV:-arciva}" || warn "Failed to activate micromamba env ${CONDA_ENV:-arciva}; falling back"
   else
     warn "Conda not found; will use virtualenv as fallback"
   fi
@@ -244,7 +244,7 @@ start_backend() {
 
   if command -v conda >/dev/null 2>&1 || command -v micromamba >/dev/null 2>&1; then
     conda_activate
-    info "Conda env: ${CONDA_ENV:-nivio}"
+    info "Conda env: ${CONDA_ENV:-arciva}"
     DATABASE_URL="${NEW_DATABASE_URL:-$DATABASE_URL}" \
       REDIS_URL="${NEW_REDIS_URL:-$REDIS_URL}" \
       python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload \

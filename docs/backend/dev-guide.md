@@ -1,6 +1,8 @@
 # Backend Dev Guide (FastAPI + ARQ + POSIX)
 
-This guide explains how to **develop**, **run**, and **test** the Nivio backend locally, including the worker (Terminal B) and the frontend integration.
+This guide explains how to **develop**, **run**, and **test** the Arciva backend locally, including the worker (Terminal B) and the frontend integration.
+
+Arciva — Organize once. Find forever. Project-first photo management with smart cards, fast search, and rule-based archiving.
 
 ---
 
@@ -22,7 +24,7 @@ This guide explains how to **develop**, **run**, and **test** the Nivio backend 
 ## 3) Environment variables (recap)
 Key variables in `.env` (repo root):
 ```
-DATABASE_URL=postgresql+asyncpg://nivio:1234@127.0.0.1:5432/nivio_dev
+DATABASE_URL=postgresql+asyncpg://arciva:1234@127.0.0.1:5432/arciva_dev
 REDIS_URL=redis://127.0.0.1:6379/0
 ALLOWED_ORIGINS=["http://localhost:5173","http://127.0.0.1:5173"]
 FS_ROOT=/home/<you>/photo-store
@@ -37,7 +39,7 @@ THUMB_SIZES=[256]
 ## 4) One-time: Create tables
 From the repo root:
 ```bash
-conda activate nivio
+conda activate arciva
 python - <<'PY'
 import asyncio
 from backend.app.db import engine, Base
@@ -56,7 +58,7 @@ PY
 ### Terminal A — API
 ```bash
 cd ~/dev/FilmCabinetFrontend
-conda activate nivio
+conda activate arciva
 uvicorn backend.app.main:app --reload --port 8000
 ```
 - Health: `http://127.0.0.1:8000/health` → `{ "ok": true }`
@@ -64,7 +66,7 @@ uvicorn backend.app.main:app --reload --port 8000
 ### Terminal B — Worker (ARQ)
 ```bash
 cd ~/dev/FilmCabinetFrontend
-conda activate nivio
+conda activate arciva
 arq backend.worker.worker.WorkerSettings
 ```
 - Needs Redis reachable on `REDIS_URL`.

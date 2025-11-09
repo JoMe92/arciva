@@ -51,7 +51,7 @@ def setup_logging(log_dir: str, level: int = logging.INFO, module_log_level: Opt
     # Optionally raise level for our application namespace without touching
     # other loggers such as SQLAlchemy which can be noisy.
     if module_log_level is not None:
-        logging.getLogger("nivio").setLevel(module_log_level)
+        logging.getLogger("arciva").setLevel(module_log_level)
 
     # Capture uvicorn access logs as well so HTTP status codes appear in the file.
     for name in ("uvicorn", "uvicorn.access", "uvicorn.error"):

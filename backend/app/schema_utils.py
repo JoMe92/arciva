@@ -10,7 +10,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from .db import engine as async_engine
 
-logger = logging.getLogger("nivio.schema")
+logger = logging.getLogger("arciva.schema")
 
 _preview_columns_ready = False
 _preview_columns_lock = asyncio.Lock()

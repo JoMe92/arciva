@@ -120,3 +120,6 @@ Every code change must conclude with a commit that follows the **Conventional Co
 4. Ensure documentation is updated (if public APIs or UX is changed).
 5. Create a single, meaningful commit using the Conventional Commits format.
 
+
+ALWAYS FOLLOW THES STEPS WEHN DOING CHANGES IN THE CODEBASE
+

@@ -70,7 +70,7 @@ async def _load_preview_map(
 
     return normalized_map
 
-logger = logging.getLogger("nivio.projects")
+logger = logging.getLogger("arciva.projects")
 
 router = APIRouter(prefix="/v1/projects", tags=["projects"])
 
@@ -86,10 +86,10 @@ async def create_project(
     db.add(p)
     await db.flush()
 
-    # server defaults (created_at/updated_at) laden
+    # load server defaults (created_at/updated_at)
     await db.refresh(p)
 
-    # commit (Session ist expire_on_commit=False, daher p weiterhin befüllt)
+    # commit (session uses expire_on_commit=False so `p` remains populated)
     await db.commit()
 
     result = schemas.ProjectOut(
@@ -184,6 +184,65 @@ async def get_project(
         preview_images=preview_map.get(proj.id, []),
     )
     logger.info("get_project: id=%s asset_count=%s", proj.id, count)
+    return result
+
+
+@router.patch("/{project_id}", response_model=schemas.ProjectOut)
+async def update_project(
+    project_id: UUID,
+    body: schemas.ProjectUpdate,
+    db: AsyncSession = Depends(get_db),
+):
+    logger.info("update_project: id=%s", project_id)
+    await ensure_preview_columns(db)
+    proj = (
+        await db.execute(
+            select(models.Project).where(models.Project.id == project_id)
+        )
+    ).scalar_one_or_none()
+    if not proj:
+        logger.warning("update_project: id=%s not found", project_id)
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    updated = False
+    if body.title is not None:
+        proj.title = body.title.strip() or proj.title
+        updated = True
+    if body.client is not None:
+        proj.client = body.client.strip() or None
+        updated = True
+    if body.note is not None:
+        proj.note = body.note.strip() or None
+        updated = True
+
+    if updated:
+        await db.flush()
+        await db.commit()
+        await db.refresh(proj)
+    else:
+        await db.flush()
+
+    count = (
+        await db.execute(
+            select(func.count())
+            .select_from(models.ProjectAsset)
+            .where(models.ProjectAsset.project_id == proj.id)
+        )
+    ).scalar_one()
+
+    preview_map = await _load_preview_map(db, [proj.id])
+
+    result = schemas.ProjectOut(
+        id=proj.id,
+        title=proj.title,
+        client=proj.client,
+        note=proj.note,
+        created_at=proj.created_at,
+        updated_at=proj.updated_at,
+        asset_count=count,
+        preview_images=preview_map.get(proj.id, []),
+    )
+    logger.info("update_project: id=%s success", project_id)
     return result
 
 

@@ -167,10 +167,10 @@ async def _ensure_asset_metadata_populated(
         await db.refresh(asset)
 
 router = APIRouter(prefix="/v1", tags=["assets"])
-logger = logging.getLogger("nivio.assets")
+logger = logging.getLogger("arciva.assets")
 
 @router.get("/projects/{project_id}/assets", response_model=list[schemas.AssetListItem])
-async def list_assets(project_id: UUID, limit: int = 50, db: AsyncSession = Depends(get_db)):
+async def list_assets(project_id: UUID, limit: int = 1000, db: AsyncSession = Depends(get_db)):
     await ensure_asset_metadata_column(db)
     await ensure_preview_columns(db)
     # list latest by added_at

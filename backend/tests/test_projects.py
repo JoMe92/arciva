@@ -57,6 +57,27 @@ async def test_create_and_fetch_project(client):
 
 
 @pytest.mark.asyncio
+async def test_update_project_fields(client):
+    payload = {"title": "Original", "client": "ACME", "note": "something"}
+    r = await client.post("/v1/projects", json=payload)
+    assert r.status_code == 201
+    proj_id = r.json()["id"]
+
+    update_payload = {"title": "Renamed", "client": "Globex", "note": " "}
+    r = await client.patch(f"/v1/projects/{proj_id}", json=update_payload)
+    assert r.status_code == 200
+    updated = r.json()
+    assert updated["title"] == "Renamed"
+    assert updated["client"] == "Globex"
+    assert updated["note"] is None
+
+    r = await client.get(f"/v1/projects/{proj_id}")
+    assert r.status_code == 200
+    fetched = r.json()
+    assert fetched["title"] == "Renamed"
+    assert fetched["client"] == "Globex"
+
+@pytest.mark.asyncio
 async def test_delete_project_requires_confirmation(client):
     payload = {"title": "Delete Me", "client": "ACME", "note": "test note"}
     r = await client.post("/v1/projects", json=payload)

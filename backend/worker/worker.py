@@ -24,7 +24,7 @@ from backend.app.services.raw_reader import RawReadResult, RawReaderService
 SETTINGS = get_settings()
 setup_logging(SETTINGS.logs_dir)
 
-logger = logging.getLogger("nivio.worker.ingest")
+logger = logging.getLogger("arciva.worker.ingest")
 logger.info("worker process started")
 
 DERIVATIVE_PRESETS: list[Tuple[str, int]] = [

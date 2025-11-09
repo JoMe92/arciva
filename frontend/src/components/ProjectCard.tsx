@@ -1,9 +1,18 @@
 import React from 'react'
 import type { Project } from '../features/projects/types'
-import { aspectClass, placeholderRatioForAspect } from '../features/projects/utils'
+import {
+  aspectClass,
+  placeholderRatioForAspect,
+  aspectRatioValue,
+  fallbackAspectRatioForAspect,
+  orientationFromRatio,
+  parseRatio,
+  ratioFromDimensions,
+} from '../features/projects/utils'
 import { RawPlaceholder } from './RawPlaceholder'
 
-const MEDIA_MAX = 'max-h-[420px] md:max-h-[520px]'
+const MEDIA_MAX_DEFAULT = 'max-h-[420px] md:max-h-[520px]'
+const MEDIA_MAX_COMPACT = 'max-h-[320px] md:max-h-[420px]'
 
 const ProjectCard: React.FC<{
   p: Project
@@ -13,7 +22,8 @@ const ProjectCard: React.FC<{
   archiveMode: boolean
   onEdit: (p: Project) => void
   onSelectPrimary?: (projectId: string, assetId: string) => Promise<void>
-}> = ({ p, onOpen, onEdit, onSelectPrimary }) => {
+  compact?: boolean
+}> = ({ p, onOpen, onEdit, onSelectPrimary, compact = false }) => {
   const placeholderRatio = placeholderRatioForAspect(p.aspect)
   const previews = React.useMemo(() => {
     const list = (p.previewImages ?? [])
@@ -29,8 +39,18 @@ const ProjectCard: React.FC<{
   const [activePreview, setActivePreview] = React.useState(0)
   const hasImage = previews.length > 0
   const current = hasImage ? previews[Math.max(0, Math.min(activePreview, previews.length - 1))] : null
+  const primaryPreview = previews[0] ?? null
   const currentUrl = current?.url ?? null
   const showNav = hovered && previews.length > 1
+  const fallbackAspectRatio = React.useMemo(() => fallbackAspectRatioForAspect(p.aspect), [p.aspect])
+  const fallbackAspectRatioValue = React.useMemo(() => parseRatio(fallbackAspectRatio), [fallbackAspectRatio])
+  const primaryAspectRatio = aspectRatioValue(primaryPreview?.width, primaryPreview?.height) ?? fallbackAspectRatio
+  const primaryAspectRatioValue = ratioFromDimensions(primaryPreview?.width, primaryPreview?.height) ?? fallbackAspectRatioValue
+  const tileOrientation = orientationFromRatio(primaryAspectRatioValue)
+  const currentRatio = ratioFromDimensions(current?.width, current?.height)
+  const currentOrientation = orientationFromRatio(currentRatio)
+  const shouldCoverCurrent =
+    activePreview === 0 || !tileOrientation || !currentOrientation || currentOrientation === tileOrientation
 
   React.useEffect(() => {
     setActivePreview(0)
@@ -81,26 +101,18 @@ const ProjectCard: React.FC<{
       return
     }
     setHovered(false)
-    setActivePreview(0)
   }
 
   return (
     <div className="relative">
-      {/* Klickfläche: Bild */}
+      {/* Bildbereich: nur Navigation/Preview */}
       <div
-        role="button"
         tabIndex={0}
-        aria-label={`Open project: ${p.title}`}
-        aria-keyshortcuts="Enter Space"
+        aria-label={`Preview project: ${p.title}`}
         data-testid={`project-card-${p.id}`}
-        onClick={() => onOpen(p.id)}
-        onDoubleClick={() => onOpen(p.id)}
         onKeyDown={(e) => {
           const key = (e.key || '').toLowerCase()
-          if (key === 'enter' || key === ' ' || key === 'spacebar') {
-            e.preventDefault()
-            onOpen(p.id)
-          } else if ((key === 'arrowleft' || key === 'arrowright') && previews.length > 1) {
+          if ((key === 'arrowleft' || key === 'arrowright') && previews.length > 1) {
             e.preventDefault()
             if (key === 'arrowleft') {
               setActivePreview((idx) => (idx === 0 ? previews.length - 1 : idx - 1))
@@ -110,19 +122,24 @@ const ProjectCard: React.FC<{
           }
         }}
         onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => { setHovered(false); setActivePreview(0) }}
+        onMouseLeave={() => setHovered(false)}
         onFocus={handleFocus}
         onBlur={handleBlur}
         className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus,#6B7C7A)] rounded-xl"
       >
-        <div className="overflow-hidden rounded-t-xl bg-[var(--surface,#FFFFFF)] relative">
+        <div className="overflow-hidden rounded-t-xl bg-[var(--placeholder-bg-beige,#F3EBDD)] relative">
           {/* identischer Medien-Wrapper mit vertikalem Limit */}
-          <div className={`relative ${aspectClass(p.aspect)} w-full ${MEDIA_MAX} overflow-hidden`}>
+          <div
+            className={`relative ${aspectClass(p.aspect)} w-full ${compact ? MEDIA_MAX_COMPACT : MEDIA_MAX_DEFAULT} overflow-hidden`}
+            style={{ aspectRatio: primaryAspectRatio }}
+          >
             {hasImage ? (
               <img
                 src={currentUrl ?? undefined}
                 alt={`${p.title} – ${p.client}`}
-                className="absolute inset-0 h-full w-full object-cover"
+                className={`absolute inset-0 h-full w-full object-center transition-[transform] duration-150 ease-out ${
+                  shouldCoverCurrent ? 'object-cover' : 'object-contain'
+                }`}
               />
             ) : (
               <RawPlaceholder ratio={placeholderRatio} className="absolute inset-0" />
@@ -163,7 +180,7 @@ const ProjectCard: React.FC<{
         </div>
       </div>
 
-      {/* Weißer Footer unten */}
+      {/* white footer at the bottom */}
       <div className="rounded-b-xl border border-[var(--border,#E1D3B9)] border-t-0 bg-[var(--surface,#FFFFFF)] px-1.5 sm:px-2 md:px-3 pt-2 pb-3">
         <div className="flex items-start justify-between gap-3">
           <div>

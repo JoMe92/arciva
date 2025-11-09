@@ -17,7 +17,7 @@ from ..deps import get_settings
 from ..storage import PosixStorage
 from ..schema_utils import ensure_preview_columns
 
-logger = logging.getLogger("nivio.uploads")
+logger = logging.getLogger("arciva.uploads")
 
 router = APIRouter(prefix="/v1", tags=["uploads"])
 

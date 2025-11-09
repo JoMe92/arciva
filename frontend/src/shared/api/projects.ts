@@ -23,6 +23,12 @@ export type ProjectPreviewImageApi = {
   height: number | null
 }
 
+export type ProjectUpdatePayload = {
+  title?: string
+  client?: string | null
+  note?: string | null
+}
+
 function getBaseUrl() {
   const envUrl = import.meta.env.VITE_API_BASE_URL
   return typeof envUrl === 'string' && envUrl.length > 0 ? envUrl.replace(/\/$/, '') : 'http://127.0.0.1:8000'
@@ -53,6 +59,13 @@ export function listProjects() {
 export function createProject(payload: ProjectCreatePayload) {
   return request<ProjectApiResponse>('/v1/projects', {
     method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function updateProject(projectId: string, payload: ProjectUpdatePayload) {
+  return request<ProjectApiResponse>(`/v1/projects/${projectId}`, {
+    method: 'PATCH',
     body: JSON.stringify(payload),
   })
 }

@@ -1,0 +1,23 @@
+name: "🧩 User Story"
+description: "Describe a user need"
+title: "feat: <summary>"
+labels: ["user-story"]
+body:
+  - type: textarea
+    id: story
+    attributes:
+      label: Story
+      placeholder: |
+        As a <user>, I want <goal>, so that <benefit>.
+    validations:
+      required: true
+  - type: textarea
+    id: ac
+    attributes:
+      label: Acceptance criteria
+      placeholder: |
+        - [ ] Given <precondition>, when <action>, then <outcome>.
+        - [ ] …
+      render: markdown
+    validations:
+      required: true

@@ -36,6 +36,7 @@ const ProjectCard: React.FC<{
     return list
   }, [p.previewImages, p.image])
   const [hovered, setHovered] = React.useState(false)
+  const [imageLoaded, setImageLoaded] = React.useState(false)
   const [activePreview, setActivePreview] = React.useState(0)
   const previewCount = previews.length
   const hasImage = previewCount > 0
@@ -54,8 +55,16 @@ const ProjectCard: React.FC<{
     activePreview === 0 || !tileOrientation || !currentOrientation || currentOrientation === tileOrientation
 
   React.useEffect(() => {
+    setImageLoaded(false)
+  }, [currentUrl])
+
+  React.useEffect(() => {
     setActivePreview(0)
   }, [previews])
+
+  const handleImageLoad = () => {
+    setImageLoaded(true)
+  }
 
   const cycleRelative = React.useCallback(
     (delta: number) => {
@@ -202,13 +211,20 @@ const ProjectCard: React.FC<{
               <img
                 src={currentUrl ?? undefined}
                 alt={`${p.title} – ${p.client}`}
-                className={`absolute inset-0 h-full w-full object-center transition-[transform] duration-150 ease-out ${
+                className={`absolute inset-0 h-full w-full object-center transition-[opacity,transform,filter] duration-500 ease-out ${
                   shouldCoverCurrent ? 'object-cover' : 'object-contain'
-                }`}
+                } ${imageLoaded ? 'opacity-100 blur-0 scale-100' : 'opacity-0 blur-3xl scale-[1.03]'}`}
+                loading="lazy"
+                decoding="async"
+                onLoad={handleImageLoad}
               />
-            ) : (
-              <RawPlaceholder ratio={placeholderRatio} className="absolute inset-0" />
-            )}
+            ) : null}
+            <RawPlaceholder
+              ratio={placeholderRatio}
+              className={`absolute inset-0 pointer-events-none ${hasImage ? 'transition-opacity duration-500 ease-out' : ''} ${
+                hasImage && imageLoaded ? 'opacity-0' : 'opacity-100'
+              }`}
+            />
             {canPromote && (
               <button
                 type="button"

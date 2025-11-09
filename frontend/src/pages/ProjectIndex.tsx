@@ -10,6 +10,7 @@ import { PROJECTS } from '../features/projects/data'
 import { useArchive } from '../features/projects/archive'
 import { useLastOpened } from '../features/projects/useLastOpened'
 import ProjectGrid from '../components/ProjectGrid'
+import ProjectGridSkeleton from '../components/ProjectGridSkeleton'
 import StateHint from '../components/StateHint'
 import CreateModal from '../components/modals/CreateModal'
 import EditModal from '../components/modals/EditModal'
@@ -388,6 +389,8 @@ export default function ProjectIndex() {
     [deleteMutation, deleteTarget],
   )
 
+  const showLoadingSkeleton = loadingProjects && !apiProjects
+
   return (
     <div className="min-h-screen bg-[var(--surface-subtle,#FBF7EF)]">
       <div className="sticky top-0 z-40">
@@ -419,16 +422,20 @@ export default function ProjectIndex() {
           />
         )}
 
-        <ProjectGrid
-          items={filtered}
-          onOpen={onOpen}
-          onArchive={onArchive}
-          onUnarchive={onUnarchive}
-          onCreate={openCreateModal}
-          archiveMode={archiveMode}
-          onEdit={openEditor}
-          onSelectPrimary={handleSelectPrimary}
-        />
+        {showLoadingSkeleton ? (
+          <ProjectGridSkeleton />
+        ) : (
+          <ProjectGrid
+            items={filtered}
+            onOpen={onOpen}
+            onArchive={onArchive}
+            onUnarchive={onUnarchive}
+            onCreate={openCreateModal}
+            archiveMode={archiveMode}
+            onEdit={openEditor}
+            onSelectPrimary={handleSelectPrimary}
+          />
+        )}
 
         <EditModal
           open={editOpen}

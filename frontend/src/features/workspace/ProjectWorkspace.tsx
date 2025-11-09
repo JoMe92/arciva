@@ -32,20 +32,14 @@ const INSPECTOR_WIDTH = 260
 const IGNORED_METADATA_WARNINGS = new Set(['EXIFTOOL_ERROR', 'EXIFTOOL_NOT_INSTALLED', 'EXIFTOOL_JSON_ERROR'])
 const DATE_KEY_DELIM = '__'
 const UNKNOWN_VALUE = 'unknown'
-const MONTH_NAMES = [
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
-]
+const MONTH_FORMATTER = new Intl.DateTimeFormat(undefined, { month: 'long' })
+
+function localizedMonthLabel(monthValue: string) {
+  if (monthValue === UNKNOWN_VALUE) return 'Unknown month'
+  const monthNumber = Number(monthValue)
+  if (!Number.isFinite(monthNumber) || monthNumber < 1 || monthNumber > 12) return 'Unknown month'
+  return MONTH_FORMATTER.format(new Date(Date.UTC(2000, monthNumber - 1, 1)))
+}
 
 type DateParts = {
   yearValue: string
@@ -119,8 +113,7 @@ function computeDateParts(photo: Photo): DateParts {
   const daySort = dayValue === UNKNOWN_VALUE ? Number.NEGATIVE_INFINITY : (parsed ?? new Date(0)).getTime()
 
   const yearLabel = yearValue === UNKNOWN_VALUE ? 'Unknown date' : yearValue
-  const monthLabel =
-    monthValue === UNKNOWN_VALUE ? 'Unknown month' : MONTH_NAMES[Math.min(Math.max(Number(monthValue) - 1, 0), MONTH_NAMES.length - 1)]
+  const monthLabel = localizedMonthLabel(monthValue)
   const dayLabel =
     yearValue === UNKNOWN_VALUE || monthValue === UNKNOWN_VALUE || dayValue === UNKNOWN_VALUE
       ? 'Unknown day'

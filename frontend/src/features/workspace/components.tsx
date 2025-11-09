@@ -711,6 +711,40 @@ export function Sidebar({
     })
   }, [])
 
+  const yearHeaderRefs = useRef<Record<string, HTMLButtonElement | null>>({})
+  const focusYearHeaderByIndex = useCallback(
+    (index: number) => {
+      const year = dateTree[index]
+      if (!year) return
+      const button = yearHeaderRefs.current[year.id]
+      button?.focus()
+    },
+    [dateTree]
+  )
+  const handleYearKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLButtonElement>, index: number, year: DateTreeYearNode) => {
+      if (dateTree.length === 0) return
+      const lastIndex = dateTree.length - 1
+
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Home' || event.key === 'End') {
+        event.preventDefault()
+        let targetIndex = index
+        if (event.key === 'ArrowDown') targetIndex = Math.min(index + 1, lastIndex)
+        else if (event.key === 'ArrowUp') targetIndex = Math.max(index - 1, 0)
+        else if (event.key === 'Home') targetIndex = 0
+        else if (event.key === 'End') targetIndex = lastIndex
+        focusYearHeaderByIndex(targetIndex)
+        return
+      }
+
+      if ((event.key === 'Enter' || event.key === ' ') && year.months.length > 0) {
+        event.preventDefault()
+        toggleYear(year.id)
+      }
+    },
+    [dateTree, focusYearHeaderByIndex, toggleYear]
+  )
+
   const handleSlimYearClick = useCallback(
     (yearId: string) => {
       ensureYearExpanded(yearId)
@@ -729,79 +763,103 @@ export function Sidebar({
     }
 
     return (
-      <ul className="space-y-1.5">
-        {dateTree.map((year) => {
-          const expanded = expandedYears.has(year.id)
-          const canExpand = year.months.length > 0
+      <ul className="space-y-2">
+        {dateTree.map((year, yearIndex) => {
+          const yearExpanded = expandedYears.has(year.id)
+          const hasMonths = year.months.length > 0
+          const yearHeaderId = `date-year-header-${year.id}`
+          const yearPanelId = `date-year-panel-${year.id}`
           return (
             <li key={year.id}>
               <button
                 type="button"
-                onClick={() => {
-                  if (canExpand) toggleYear(year.id)
+                ref={(el) => {
+                  if (el) yearHeaderRefs.current[year.id] = el
+                  else delete yearHeaderRefs.current[year.id]
                 }}
-                aria-expanded={canExpand ? expanded : undefined}
-                className={`group flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition ${
-                  expanded ? 'bg-[var(--surface,#FFFFFF)] shadow-[0_12px_30px_rgba(31,30,27,0.08)]' : 'hover:bg-white/70'
+                id={yearHeaderId}
+                onClick={() => {
+                  if (hasMonths) toggleYear(year.id)
+                }}
+                onKeyDown={(event) => handleYearKeyDown(event, yearIndex, year)}
+                aria-expanded={hasMonths ? yearExpanded : undefined}
+                aria-controls={hasMonths ? yearPanelId : undefined}
+                aria-disabled={!hasMonths}
+                className={`group flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-[13px] font-semibold transition ${
+                  yearExpanded ? 'bg-[var(--surface,#FFFFFF)] shadow-[0_12px_30px_rgba(31,30,27,0.08)]' : 'hover:bg-white/70'
                 }`}
               >
                 <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-[var(--sand-300,#E1D3B9)] bg-white text-[11px] text-[var(--text-muted,#6B645B)]">
-                  {canExpand ? (expanded ? '▾' : '▸') : '•'}
+                  {hasMonths ? (yearExpanded ? '▾' : '▸') : '•'}
                 </span>
-                <span className="flex-1 truncate text-[13px] font-semibold text-[var(--text,#1F1E1B)]">{year.label}</span>
+                <span className="flex-1 truncate text-left text-[var(--text,#1F1E1B)]">{year.label}</span>
                 <CountBadge count={year.count} />
               </button>
-              {expanded && canExpand ? (
-                <ul className="mt-1.5 space-y-1.5 pl-5">
-                  {year.months.map((month) => {
-                    const monthExpanded = expandedMonths.has(month.id)
-                    const monthHasDays = month.days.length > 0
-                    return (
-                      <li key={month.id}>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (monthHasDays) toggleMonth(month.id)
-                          }}
-                          aria-expanded={monthHasDays ? monthExpanded : undefined}
-                          className={`flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left transition ${
-                            monthExpanded ? 'bg-white/70 shadow-inner' : 'hover:bg-white/60'
-                          }`}
-                        >
-                          <span className="inline-flex w-4 justify-center text-[11px] text-[var(--text-muted,#6B645B)]">
-                            {monthHasDays ? (monthExpanded ? '▾' : '▸') : ''}
-                          </span>
-                          <span className="flex-1 truncate text-[12px] text-[var(--text,#1F1E1B)]">{month.label}</span>
-                          <CountBadge count={month.count} />
-                        </button>
-                        {monthExpanded && monthHasDays ? (
-                          <ul className="mt-1.5 space-y-1.5 pl-5">
-                            {month.days.map((day) => {
-                              const isSelected = day.id === selectedDayKey
-                              return (
-                                <li key={day.id}>
-                                  <button
-                                    type="button"
-                                    onClick={() => onSelectDay(day)}
-                                    aria-pressed={isSelected}
-                                    className={`flex w-full items-center justify-between rounded-xl border px-3 py-1.5 text-left text-[12px] transition ${
-                                      isSelected
-                                        ? 'border-[var(--charcoal-800,#1F1E1B)] bg-white font-semibold text-[var(--text,#1F1E1B)] shadow-[0_6px_18px_rgba(31,30,27,0.12)]'
-                                        : 'border-transparent text-[var(--text,#1F1E1B)] hover:border-[var(--sand-300,#E1D3B9)] hover:bg-white/70'
-                                    }`}
-                                  >
-                                    <span className="truncate">{day.label}</span>
-                                    <CountBadge count={day.count} className={isSelected ? 'bg-[var(--sand-500,#D7C5A6)] text-[var(--charcoal-800,#1F1E1B)]' : ''} />
-                                  </button>
-                                </li>
-                              )
-                            })}
-                          </ul>
-                        ) : null}
-                      </li>
-                    )
-                  })}
-                </ul>
+              {hasMonths && yearExpanded ? (
+                <div id={yearPanelId} role="region" aria-labelledby={yearHeaderId} className="mt-2 space-y-1.5 rounded-[12px] border border-[var(--sand-300,#E1D3B9)] bg-white/80 px-2 py-2">
+                  <ul className="space-y-1">
+                    {year.months.map((month) => {
+                      const monthExpanded = expandedMonths.has(month.id)
+                      const monthHasDays = month.days.length > 0
+                      const monthHeaderId = `date-month-header-${month.id}`
+                      const monthPanelId = `date-month-panel-${month.id}`
+                      return (
+                        <li key={month.id}>
+                          <button
+                            type="button"
+                            id={monthHeaderId}
+                            onClick={() => {
+                              if (monthHasDays) toggleMonth(month.id)
+                            }}
+                            aria-expanded={monthHasDays ? monthExpanded : undefined}
+                            aria-controls={monthHasDays ? monthPanelId : undefined}
+                            aria-disabled={!monthHasDays}
+                            className={`flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left text-[12px] transition ${
+                              monthExpanded ? 'bg-white/70 shadow-inner' : 'hover:bg-white/60'
+                            }`}
+                          >
+                            <span className="inline-flex w-4 justify-center text-[11px] text-[var(--text-muted,#6B645B)]">
+                              {monthHasDays ? (monthExpanded ? '▾' : '▸') : ''}
+                            </span>
+                            <span className="flex-1 truncate text-[var(--text,#1F1E1B)]">{month.label}</span>
+                            <CountBadge count={month.count} />
+                          </button>
+                          {monthHasDays && monthExpanded ? (
+                            <ul
+                              id={monthPanelId}
+                              aria-labelledby={monthHeaderId}
+                              className="mt-1 space-y-1 pl-5 text-[12px]"
+                            >
+                              {month.days.map((day) => {
+                                const isSelected = day.id === selectedDayKey
+                                return (
+                                  <li key={day.id}>
+                                    <button
+                                      type="button"
+                                      onClick={() => onSelectDay(day)}
+                                      aria-pressed={isSelected}
+                                      className={`flex w-full items-center justify-between rounded-xl border px-3 py-1.5 text-left transition ${
+                                        isSelected
+                                          ? 'border-[var(--charcoal-800,#1F1E1B)] bg-white font-semibold text-[var(--text,#1F1E1B)] shadow-[0_6px_18px_rgba(31,30,27,0.12)]'
+                                          : 'border-transparent text-[var(--text,#1F1E1B)] hover:border-[var(--sand-300,#E1D3B9)] hover:bg-white/70'
+                                      }`}
+                                    >
+                                      <span className="truncate">{day.label}</span>
+                                      <CountBadge
+                                        count={day.count}
+                                        className={isSelected ? 'bg-[var(--sand-500,#D7C5A6)] text-[var(--charcoal-800,#1F1E1B)]' : ''}
+                                      />
+                                    </button>
+                                  </li>
+                                )
+                              })}
+                            </ul>
+                          ) : null}
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </div>
               ) : null}
             </li>
           )
@@ -826,8 +884,8 @@ export function Sidebar({
       </button>
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--text-muted,#6B645B)]">Date folders</div>
-          <p className="text-[11px] text-[var(--text-muted,#6B645B)]">Alt+[ / Alt+] to toggle</p>
+          <div className="text-[13px] font-semibold text-[var(--text,#1F1E1B)]">Date folders</div>
+          <p className="mt-0.5 text-[10px] text-[var(--text-muted,#6B645B)]">Alt+[ / Alt+] to toggle</p>
         </div>
         <div className="flex items-center gap-1 rounded-full bg-white/70 px-1.5 py-0.5 shadow-inner" role="group" aria-label="Toggle date folders rail">
           <button
@@ -923,7 +981,7 @@ export function Sidebar({
     <aside
       id={DATE_RAIL_ID}
       role="complementary"
-      aria-label="Date folders"
+      aria-label="Aufnahmedatum"
       className="relative h-full min-h-0 px-3 py-4 text-xs"
       data-mode={mode}
     >

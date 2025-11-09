@@ -3,6 +3,7 @@ import { AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import StoneTrailLogo from '../components/StoneTrailLogo'
+import { useTheme } from '../shared/theme'
 import Splash from '../components/Splash'
 import { Project } from '../features/projects/types'
 import { unique } from '../features/projects/utils'
@@ -19,22 +20,25 @@ import { updateAssetPreview } from '../shared/api/assets'
 import { withBase } from '../shared/api/base'
 import DeleteModal from '../components/modals/DeleteModal'
 
-const AppBar: React.FC<{ onCreate: () => void; onToggleArchive: () => void; archiveMode: boolean }> = ({ onCreate, onToggleArchive, archiveMode }) => (
-  <div className="sticky top-0 z-40 border-b border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]/90 backdrop-blur">
-    <div className="mx-auto max-w-7xl px-4 py-2 flex items-center gap-3">
-      <StoneTrailLogo className="shrink-0" />
-      <div className="ml-auto flex items-center gap-2">
-        <button onClick={onToggleArchive} className="inline-flex h-8 items-center rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 text-[12px] hover:border-[var(--text-muted,#6B645B)]">
-          {archiveMode ? 'Exit archive' : 'Enter archive'}
-        </button>
-        <button onClick={onCreate} className="inline-flex h-8 items-center rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 text-[12px] hover:border-[var(--text-muted,#6B645B)]">
-          <span className="mr-1">＋</span> New project
-          <kbd className="ml-2 hidden lg:inline text-[10px] text-[var(--text-muted,#6B645B)]">⌘/Ctrl+N</kbd>
-        </button>
+const AppBar: React.FC<{ onCreate: () => void; onToggleArchive: () => void; archiveMode: boolean }> = ({ onCreate, onToggleArchive, archiveMode }) => {
+  const { mode, toggle } = useTheme()
+  return (
+    <div className="sticky top-0 z-40 border-b border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]/90 backdrop-blur">
+      <div className="mx-auto max-w-7xl px-4 py-2 flex items-center gap-3">
+        <StoneTrailLogo className="shrink-0" mode={mode} onToggleTheme={toggle} />
+        <div className="ml-auto flex items-center gap-2">
+          <button onClick={onToggleArchive} className="inline-flex h-8 items-center rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 text-[12px] hover:border-[var(--text-muted,#6B645B)]">
+            {archiveMode ? 'Exit archive' : 'Enter archive'}
+          </button>
+          <button onClick={onCreate} className="inline-flex h-8 items-center rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 text-[12px] hover:border-[var(--text-muted,#6B645B)]">
+            <span className="mr-1">＋</span> New project
+            <kbd className="ml-2 hidden lg:inline text-[10px] text-[var(--text-muted,#6B645B)]">⌘/Ctrl+N</kbd>
+          </button>
+        </div>
       </div>
     </div>
-  </div>
-)
+  )
+}
 
 const FilterBar: React.FC<{
   projects: Project[]; q: string; setQ: (s: string) => void; client: string; setClient: (s: string) => void; tags: string[]; setTags: (t: string[]) => void;
@@ -56,12 +60,12 @@ const FilterBar: React.FC<{
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Search by title…"
-          className="h-9 rounded-full border border-[var(--border,#E1D3B9)] bg-white px-3 text-[12px] outline-none placeholder:text-[var(--text-muted,#6B645B)]"
+          className="h-9 rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 text-[12px] outline-none placeholder:text-[var(--text-muted,#6B645B)]"
         />
         <select
           value={client}
           onChange={(e) => setClient(e.target.value)}
-          className="h-9 rounded-full border border-[var(--border,#E1D3B9)] bg-white px-3 text-[12px] outline-none"
+          className="h-9 rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 text-[12px] outline-none"
         >
           <option value="">All clients</option>
           {clients.map((c) => (
@@ -75,7 +79,7 @@ const FilterBar: React.FC<{
             value={tagSearch}
             onChange={(e) => setTagSearch(e.target.value)}
             placeholder="Find tag…"
-            className="h-9 w-[160px] rounded-full border border-[var(--border,#E1D3B9)] bg-white px-3 pr-6 text-[12px] outline-none placeholder:text-[var(--text-muted,#6B645B)]"
+            className="h-9 w-[160px] rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 pr-6 text-[12px] outline-none placeholder:text-[var(--text-muted,#6B645B)]"
           />
           {tagSearch && (
             <button
@@ -96,7 +100,7 @@ const FilterBar: React.FC<{
                 <button
                   key={t}
                   onClick={() => setTags(tags.includes(t) ? tags.filter((x) => x !== t) : [...tags, t])}
-                  className={`inline-block px-2 py-0.5 rounded-full text-[11px] border ${tags.includes(t) ? 'bg-[var(--basalt-700,#4A463F)] text-white border-transparent' : 'border-[var(--border,#E1D3B9)] text-[var(--text-muted,#6B645B)] hover:border-[var(--text-muted,#6B645B)]'}`}
+                  className={`inline-block px-2 py-0.5 rounded-full text-[11px] border ${tags.includes(t) ? 'bg-[var(--primary,#A56A4A)] text-[var(--primary-contrast,#FFFFFF)] border-[var(--primary,#A56A4A)]' : 'border-[var(--border,#E1D3B9)] text-[var(--text-muted,#6B645B)] hover:border-[var(--text-muted,#6B645B)]'}`}
                 >
                   {t}
                 </button>

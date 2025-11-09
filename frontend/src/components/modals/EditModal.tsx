@@ -118,7 +118,7 @@ const EditModal: React.FC<EditModalProps> = ({
               return (
                 <div
                   key={key}
-                  className={`relative h-20 w-28 shrink-0 overflow-hidden rounded-md border ${isPrimary ? 'border-[var(--basalt-700,#4A463F)]' : 'border-[var(--border,#E1D3B9)] opacity-80'}`}
+                  className={`relative h-20 w-28 shrink-0 overflow-hidden rounded-md border ${isPrimary ? 'border-[var(--primary,#A56A4A)]' : 'border-[var(--border,#E1D3B9)] opacity-80'}`}
                   title={isPrimary ? 'Current cover' : `Preview ${idx + 1}`}
                 >
                   {img.url ? (

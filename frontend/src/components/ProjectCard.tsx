@@ -272,7 +272,7 @@ const ProjectCard: React.FC<{
             <button
               type="button"
               onClick={() => onOpen(p.id)}
-              className="h-8 px-3 rounded-full bg-[var(--basalt-700,#4A463F)] text-white text-[12px] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus,#6B7C7A)]"
+              className="h-8 px-3 rounded-full bg-[var(--primary,#A56A4A)] text-[var(--primary-contrast,#FFFFFF)] text-[12px] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus,#6B7C7A)]"
               aria-label={`Open ${p.title}`}
               data-testid="card-footer-open"
             >
@@ -281,7 +281,7 @@ const ProjectCard: React.FC<{
             <button
               type="button"
               onClick={() => onEdit(p)}
-              className="h-8 px-3 rounded-full border border-[var(--border,#E1D3B9)] bg-white text-[12px] hover:border-[var(--text-muted,#6B645B)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus,#6B7C7A)]"
+              className="h-8 px-3 rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] text-[12px] hover:border-[var(--text-muted,#6B645B)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus,#6B7C7A)]"
               aria-label="Edit project"
               data-testid="card-footer-edit"
             >

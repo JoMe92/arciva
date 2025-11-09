@@ -1,5 +1,6 @@
 import React from 'react'
 import StoneTrailIcon from './StoneTrailIcon'
+import type { ThemeMode } from '../shared/theme'
 
 type StoneTrailLogoProps = {
   /**
@@ -18,6 +19,14 @@ type StoneTrailLogoProps = {
    * Hide the wordmark when space constrained (icon-only presentation).
    */
   showLabel?: boolean
+  /**
+   * Current theme mode, used for accessible labels when the logo toggles modes.
+   */
+  mode?: ThemeMode
+  /**
+   * Optional handler to turn the logo into a light/dark switch.
+   */
+  onToggleTheme?: () => void
 }
 
 /**
@@ -30,24 +39,42 @@ export function StoneTrailLogo({
   title = 'Arciva',
   slogan = 'Organize once. Find forever.',
   showLabel = true,
+  mode,
+  onToggleTheme,
 }: StoneTrailLogoProps) {
+  const Wrapper: React.ElementType = onToggleTheme ? 'button' : 'div'
+  const interactiveClasses = onToggleTheme
+    ? 'cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#C78772)]'
+    : 'cursor-default'
+  const size = showLabel ? 38 : 34
+  const label = onToggleTheme
+    ? mode === 'dark'
+      ? 'Switch to light mode'
+      : 'Switch to dark mode'
+    : `${title} logo`
+
   return (
-    <div className={`stone-trail-logo inline-flex items-center gap-3 cursor-default select-none font-semibold text-[var(--stone-trail-mark-text,#1F1E1B)] ${className}`}>
-      <span className="sr-only">{title} logo</span>
-      <span aria-hidden className="inline-flex h-11 w-11 items-center justify-center">
-        <StoneTrailIcon size={44} title={`${title} logo`} />
+    <Wrapper
+      type={onToggleTheme ? 'button' : undefined}
+      onClick={onToggleTheme}
+      aria-pressed={onToggleTheme ? (mode === 'dark' ? true : false) : undefined}
+      aria-label={label}
+      className={`stone-trail-logo inline-flex items-center gap-2 select-none font-semibold text-[var(--stone-trail-mark-text,#1F1E1B)] ${interactiveClasses} ${className}`}
+    >
+      <span aria-hidden className="inline-flex h-10 w-10 items-center justify-center">
+        <StoneTrailIcon size={size} title={`${title} logo`} />
       </span>
       {showLabel ? (
-        <span className="stone-trail-logo__label flex flex-col gap-1 text-base tracking-tight leading-tight" aria-hidden>
+        <span className="stone-trail-logo__label flex flex-col gap-0.5 text-[15px] tracking-tight leading-tight" aria-hidden>
           <span className="font-semibold">{title}</span>
           {slogan ? (
-            <span className="stone-trail-logo__slogan text-[11px] font-normal uppercase tracking-[0.2em] leading-tight text-[var(--text-muted,#6B645B)]">
+            <span className="stone-trail-logo__slogan text-[10px] font-normal uppercase tracking-[0.2em] leading-tight text-[var(--text-muted,#6B645B)]">
               {slogan}
             </span>
           ) : null}
         </span>
       ) : null}
-    </div>
+    </Wrapper>
   )
 }
 

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { RawPlaceholder, RawPlaceholderFrame } from '../../components/RawPlaceholder'
 import StoneTrailLogo from '../../components/StoneTrailLogo'
+import { useTheme } from '../../shared/theme'
 import { TOKENS } from './utils'
 import type { Photo, ImgType, ColorTag } from './types'
 
@@ -40,6 +41,12 @@ export type DateTreeYearNode = {
   count: number
   year: string
   months: DateTreeMonthNode[]
+}
+
+export type GridSelectOptions = {
+  shiftKey?: boolean
+  metaKey?: boolean
+  ctrlKey?: boolean
 }
 
 function setsAreEqual<T>(a: Set<T>, b: Set<T>): boolean {
@@ -125,6 +132,7 @@ export function TopBar({
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const shortcutsButtonRef = useRef<HTMLButtonElement | null>(null)
   const shortcutsLegendRef = useRef<HTMLDivElement | null>(null)
+  const { mode, toggle } = useTheme()
 
   useEffect(() => {
     if (!editing) {
@@ -245,7 +253,7 @@ export function TopBar({
         style={{ gridTemplateColumns: 'auto 1fr auto' }}
       >
         <div className="flex min-w-0 items-center gap-3">
-          <StoneTrailLogo className="hidden lg:inline-flex shrink-0" showLabel={false} />
+          <StoneTrailLogo className="hidden lg:inline-flex shrink-0" showLabel={false} mode={mode} onToggleTheme={toggle} />
           <button
             type="button"
             onClick={onBack}
@@ -320,8 +328,8 @@ export function TopBar({
           ) : null}
         </div>
 
-        <div className="flex items-center justify-end gap-[var(--s-3)] text-[12px]">
-          <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-[var(--s-3)] text-[12px]">
+          <div className="flex flex-wrap items-center gap-2">
             <div className="inline-flex items-center rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]">
               <button type="button" className={`${viewButtonClasses('grid')} rounded-l-full`} onClick={() => onChangeView('grid')}>
                 Grid
@@ -784,17 +792,17 @@ export function Sidebar({
                 aria-controls={hasMonths ? yearPanelId : undefined}
                 aria-disabled={!hasMonths}
                 className={`group flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-[13px] font-semibold transition ${
-                  yearExpanded ? 'bg-[var(--surface,#FFFFFF)] shadow-[0_12px_30px_rgba(31,30,27,0.08)]' : 'hover:bg-white/70'
+                  yearExpanded ? 'bg-[var(--surface,#FFFFFF)] shadow-[0_12px_30px_rgba(31,30,27,0.08)]' : 'hover:bg-[var(--surface-hover,#F4EBDD)]'
                 }`}
               >
-                <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-[var(--border,#EDE1C6)] bg-white text-[11px] text-[var(--text-muted,#6B645B)]">
+                <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] text-[11px] text-[var(--text-muted,#6B645B)]">
                   {hasMonths ? (yearExpanded ? '▾' : '▸') : '•'}
                 </span>
                 <span className="flex-1 truncate text-left text-[var(--text,#1F1E1B)]">{year.label}</span>
                 <CountBadge count={year.count} />
               </button>
               {hasMonths && yearExpanded ? (
-                <div id={yearPanelId} role="region" aria-labelledby={yearHeaderId} className="mt-2 space-y-1.5 rounded-[12px] border border-[var(--border,#EDE1C6)] bg-white/80 px-2 py-2">
+                <div id={yearPanelId} role="region" aria-labelledby={yearHeaderId} className="mt-2 space-y-1.5 rounded-[12px] border border-[var(--border,#EDE1C6)] bg-[var(--surface-frosted,#F8F0E4)] px-2 py-2">
                   <ul className="space-y-1">
                     {year.months.map((month) => {
                       const monthExpanded = expandedMonths.has(month.id)
@@ -811,7 +819,7 @@ export function Sidebar({
                             }}
                             aria-expanded={monthHasDays ? monthExpanded : undefined}
                             aria-controls={monthHasDays ? monthPanelId : undefined}
-                            className="flex w-full items-center gap-2 rounded-[10px] px-2 py-1 text-left text-[12px] font-medium text-[var(--text,#1F1E1B)] hover:bg-white"
+                            className="flex w-full items-center gap-2 rounded-[10px] px-2 py-1 text-left text-[12px] font-medium text-[var(--text,#1F1E1B)] hover:bg-[var(--surface,#FFFFFF)]"
                           >
                             <span className="inline-flex w-4 justify-center text-[11px] text-[var(--text-muted,#6B645B)]">
                               {monthHasDays ? (monthExpanded ? '▾' : '▸') : ''}
@@ -832,7 +840,7 @@ export function Sidebar({
                                       className={`flex w-full items-center justify-between rounded-xl border px-3 py-1.5 text-left font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)] ${
                                         isSelected
                                           ? 'border-[var(--border-strong,#CBB58F)] bg-[var(--accent,#D7C5A6)] text-[var(--on-accent,#3A2F23)] shadow-[0_6px_18px_rgba(31,30,27,0.12)]'
-                                          : 'border-transparent text-[var(--text,#1F1E1B)] hover:border-[var(--border,#E1D3B9)] hover:bg-white/70'
+                                          : 'border-transparent text-[var(--text,#1F1E1B)] hover:border-[var(--border,#E1D3B9)] hover:bg-[var(--surface-hover,#F4EBDD)]'
                                       }`}
                                     >
                                       <span className="truncate">{day.label}</span>
@@ -1537,7 +1545,7 @@ export function DetailView({
                       setIndex(i)
                     }
                   }}
-                  className={`relative overflow-hidden rounded border focus:outline-none focus:ring-2 focus:ring-[var(--sand200,#E8DFC9)] ${
+                  className={`relative overflow-hidden rounded border focus:outline-none focus:ring-2 focus:ring-[var(--sand-200,#EDE1C6)] ${
                     selectedIds?.has(p.id)
                       ? 'border-[var(--charcoal-800,#1F1E1B)] shadow-[0_0_0_1px_var(--charcoal-800,#1F1E1B)]'
                       : i === index
@@ -1547,7 +1555,7 @@ export function DetailView({
                   style={{ width: THUMB, height: THUMB }}
                   aria-label={`View ${p.name}`}
                 >
-                  <span className="absolute top-1 left-1 rounded bg-white/90 px-1 py-[2px] text-[9px] font-medium border border-[var(--border,#E1D3B9)] text-[var(--text,#1F1E1B)]">
+                  <span className="absolute top-1 left-1 rounded bg-[var(--surface-frosted-strong,#FBF7EF)] px-1 py-[2px] text-[9px] font-medium border border-[var(--border,#E1D3B9)] text-[var(--text,#1F1E1B)]">
                     {p.type}
                   </span>
                   <div className="absolute inset-0 flex items-center justify-center bg-[var(--placeholder-bg-beige,#F3EBDD)]">
@@ -1559,7 +1567,7 @@ export function DetailView({
                   </div>
                 </button>
                 <div className="mt-1 truncate text-center font-medium text-[var(--text,#1F1E1B)]">{p.name}</div>
-                <div className="mt-1 rounded border border-[var(--border,#E1D3B9)] bg-[var(--sand50,#F9F4EB)] px-1 py-0.5">
+                <div className="mt-1 rounded border border-[var(--border,#E1D3B9)] bg-[var(--sand-50,#FBF7EF)] px-1 py-0.5">
                   <div className="flex flex-col gap-0.5 text-[9px]">
                     <span className="flex items-center justify-between gap-1">
                       <span className="font-medium">Rating</span>
@@ -1593,13 +1601,14 @@ export function DetailView({
 export function ThumbContent({ p }: { p: Photo }) {
   return (
     <div className="pointer-events-none absolute top-1 left-1 flex items-center gap-1 text-[10px]">
-      <span className="px-1 py-0.5 bg-white/85 border border-[var(--border,#E1D3B9)] rounded">{p.type}</span>
+      <span className="px-1 py-0.5 rounded border border-[var(--border,#E1D3B9)] bg-[var(--surface-frosted,#F8F0E4)]">{p.type}</span>
       <span className="w-2.5 h-2.5 rounded-full border border-[var(--border,#E1D3B9)]" style={{ backgroundColor: COLOR_MAP[p.tag] }} aria-hidden />
     </div>
   )
 }
 
 type BadgeTone = 'success' | 'warning' | 'danger' | 'muted' | 'accent'
+type BadgeConfig = { label: string; tone: BadgeTone; icon?: string; ariaLabel: string }
 
 const BADGE_TONE_STYLES: Record<BadgeTone, string> = {
   success: 'bg-[var(--success,#34B37A)] text-white',
@@ -1626,31 +1635,31 @@ export function ThumbOverlay({ p, twoLine }: { p: Photo; twoLine?: boolean }) {
   const emit = (name: 'rate' | 'pick' | 'reject' | 'color', detail: any) => {
     const ev = new CustomEvent(name, { detail }); window.dispatchEvent(ev)
   }
-  const pickBadge = p.picked
+  const pickBadge: BadgeConfig = p.picked
     ? { label: 'Picked', tone: 'success', icon: '✔', ariaLabel: 'Picked asset' }
     : p.rejected
       ? { label: 'Rejected', tone: 'danger', icon: '✕', ariaLabel: 'Rejected asset' }
       : { label: 'Pending', tone: 'muted', icon: '•', ariaLabel: 'Pick or reject pending' }
 
   const ratingBadgeLabel = `★${p.rating > 0 ? p.rating : '—'}`
-  const ratingBadge = { label: ratingBadgeLabel, tone: 'accent' as BadgeTone, ariaLabel: `Rating: ${p.rating} star${p.rating === 1 ? '' : 's'}` }
+  const ratingBadge: BadgeConfig = { label: ratingBadgeLabel, tone: 'accent', ariaLabel: `Rating: ${p.rating} star${p.rating === 1 ? '' : 's'}` }
 
-  const statusBadge = (() => {
+  const statusBadge: BadgeConfig = (() => {
     switch (p.status) {
       case 'READY':
-        return { label: 'Ready', tone: 'success' as BadgeTone, icon: '✔', ariaLabel: 'Asset ready' }
+        return { label: 'Ready', tone: 'success', icon: '✔', ariaLabel: 'Asset ready' }
       case 'PROCESSING':
       case 'QUEUED':
       case 'UPLOADING':
-        return { label: 'Processing', tone: 'warning' as BadgeTone, icon: '⏳', ariaLabel: 'Asset processing' }
+        return { label: 'Processing', tone: 'warning', icon: '⏳', ariaLabel: 'Asset processing' }
       case 'ERROR':
-        return { label: 'Error', tone: 'danger' as BadgeTone, icon: '⚠', ariaLabel: 'Processing error' }
+        return { label: 'Error', tone: 'danger', icon: '⚠', ariaLabel: 'Processing error' }
       case 'MISSING_SOURCE':
-        return { label: 'Missing source', tone: 'danger' as BadgeTone, icon: '⚠', ariaLabel: 'Missing source' }
+        return { label: 'Missing source', tone: 'danger', icon: '⚠', ariaLabel: 'Missing source' }
       case 'DUPLICATE':
-        return { label: 'Duplicate', tone: 'muted' as BadgeTone, icon: '≡', ariaLabel: 'Duplicate asset' }
+        return { label: 'Duplicate', tone: 'muted', icon: '≡', ariaLabel: 'Duplicate asset' }
       default:
-        return { label: 'Processing', tone: 'warning' as BadgeTone, icon: '⏳', ariaLabel: `Status: ${p.status}` }
+        return { label: 'Processing', tone: 'warning', icon: '⏳', ariaLabel: `Status: ${p.status}` }
     }
   })()
 
@@ -1711,7 +1720,7 @@ export function ColorSwatch({ value, onPick }: { value: ColorTag; onPick: (t: Co
     <div className="relative inline-block">
       <button aria-label={`Color ${value}`} title={`Color ${value}`} className="w-5 h-5 rounded-full border border-[var(--border,#E1D3B9)]" style={{ backgroundColor: map[value] }} onClick={() => setOpen((v) => !v)} />
       {open && (
-        <div className="absolute right-0 mt-1 bg-white border border-[var(--border,#E1D3B9)] rounded shadow p-2 grid grid-cols-6 gap-1 z-10">
+        <div className="absolute right-0 z-10 mt-1 grid grid-cols-6 gap-1 rounded border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-2 shadow">
           {(Object.keys(map) as ColorTag[]).map((k) => (
             <button key={k} aria-label={k} title={k} className="w-5 h-5 rounded-full border border-[var(--border,#E1D3B9)]" style={{ backgroundColor: map[k] }} onClick={() => { onPick(k); setOpen(false) }} />
           ))}

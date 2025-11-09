@@ -2934,12 +2934,12 @@ function openLocalPicker(kind: 'files' | 'folder' = 'files') {
                   <div className="text-sm font-medium">Select photos or folders from your computer</div>
                   <div className="mt-1 text-xs text-[var(--text-muted,#6B645B)]">We support JPEG and RAW formats. Picking a folder pulls in everything inside.</div>
                   <div className="mt-4 flex justify-center gap-3 text-sm">
-                    <button type="button" onClick={() => openLocalPicker('files')} className="rounded-md bg-[var(--charcoal-800,#1F1E1B)] px-3 py-2 font-medium text-white">Choose files…</button>
+                    <button type="button" onClick={() => openLocalPicker('files')} className="rounded-md bg-[var(--primary,#A56A4A)] px-3 py-2 font-medium text-[var(--primary-contrast,#FFFFFF)]">Choose files…</button>
                     <button type="button" onClick={() => openLocalPicker('folder')} className="rounded-md border border-[var(--border,#E1D3B9)] px-3 py-2">Choose folder…</button>
                   </div>
                   <div className="mt-3 text-xs text-[var(--text-muted,#6B645B)]">Or just drag & drop files and folders here.</div>
                   {localQueueProgress.active && (
-                    <div role="status" aria-live="polite" className="mt-4 flex w-full max-w-[260px] flex-col items-center gap-2 rounded-md border border-[var(--border,#E1D3B9)] bg-white/90 px-3 py-2 text-center text-[11px] text-[var(--text,#1F1E1B)]">
+                    <div role="status" aria-live="polite" className="mt-4 flex w-full max-w-[260px] flex-col items-center gap-2 rounded-md border border-[var(--border,#E1D3B9)] bg-[var(--surface-frosted-strong,#FBF7EF)] px-3 py-2 text-center text-[11px] text-[var(--text,#1F1E1B)]">
                       <div className="flex items-center justify-center gap-2 font-medium">
                         <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border border-[var(--charcoal-800,#1F1E1B)] border-b-transparent" aria-hidden />
                         Preparing files…
@@ -2953,7 +2953,7 @@ function openLocalPicker(kind: 'files' | 'folder' = 'files') {
                     </div>
                   )}
                   {isDragging && (
-                    <div className="mt-4 rounded-md border border-dashed border-[var(--charcoal-800,#1F1E1B)] bg-white/80 px-3 py-2 text-xs font-medium text-[var(--charcoal-800,#1F1E1B)]">
+                    <div className="mt-4 rounded-md border border-dashed border-[var(--charcoal-800,#1F1E1B)] bg-[var(--surface-frosted,#F8F0E4)] px-3 py-2 text-xs font-medium text-[var(--charcoal-800,#1F1E1B)]">
                       Drop to add {mode === 'local' ? 'to your selection' : 'and review before importing'}.
                     </div>
                   )}
@@ -3166,7 +3166,7 @@ function openLocalPicker(kind: 'files' | 'folder' = 'files') {
             <button
               onClick={submit}
               disabled={!canSubmit}
-              className={`px-3 py-1.5 rounded text-white ${canSubmit ? 'bg-[var(--basalt-700,#4A463F)]' : 'bg-[var(--sand-300,#E1D3B9)] cursor-not-allowed'}`}
+              className={`px-3 py-1.5 rounded text-[var(--primary-contrast,#FFFFFF)] ${canSubmit ? 'bg-[var(--primary,#A56A4A)]' : 'bg-[var(--sand-300,#E1D3B9)] cursor-not-allowed'}`}
             >
               Start upload
             </button>

@@ -565,6 +565,7 @@ export default function ProjectWorkspace() {
 
   const contentRef = useRef<HTMLDivElement | null>(null)
   const [contentW, setContentW] = useState(1200)
+  const paginatorRef = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
     if (!contentRef.current) return
     const ro = new ResizeObserver((entries) => setContentW(entries[0].contentRect.width))
@@ -747,6 +748,9 @@ export default function ProjectWorkspace() {
       if (!visible.length) return
       const cur = visible[current]
       if (!cur) return
+      if (lowerKey === 'p' && !e.metaKey && !e.altKey && !e.ctrlKey) {
+        paginatorRef.current?.focus({ preventScroll: true })
+      }
       if (lowerKey === 'p') {
         const targets = resolveActionTargetIds(cur.id)
         targets.forEach((id) => {
@@ -786,6 +790,14 @@ export default function ProjectWorkspace() {
       }
       if (e.key === 'ArrowRight') setCurrent((i) => Math.min(i + 1, visible.length - 1))
       if (e.key === 'ArrowLeft') setCurrent((i) => Math.max(i - 1, 0))
+      if (e.key === 'Home') {
+        e.preventDefault()
+        setCurrent(0)
+      }
+      if (e.key === 'End') {
+        e.preventDefault()
+        setCurrent(Math.max(0, visible.length - 1))
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -1139,14 +1151,15 @@ export default function ProjectWorkspace() {
                 />
               </div>
             ) : (
-              <DetailView
-                items={visible}
-                index={current}
-                setIndex={setCurrent}
-                className="h-full"
-                selectedIds={selectedPhotoIds}
-                onSelect={handlePhotoSelect}
-              />
+            <DetailView
+              items={visible}
+              index={current}
+              setIndex={setCurrent}
+              className="h-full"
+              selectedIds={selectedPhotoIds}
+              onSelect={handlePhotoSelect}
+              paginatorRef={paginatorRef}
+            />
             )}
           </div>
         </main>

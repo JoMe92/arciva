@@ -572,7 +572,7 @@ function ColorFilter({ value, onChange }: { value: 'Any' | ColorTag; onChange: (
 function CountBadge({ count, className = '' }: { count: number; className?: string }) {
   return (
     <span
-      className={`inline-flex items-center justify-center rounded-full bg-[var(--sand-100,#F3EBDD)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--basalt-700,#4A463F)]${
+      className={`inline-flex items-center justify-center rounded-full bg-[var(--sand-100,#F3EBDD)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]${
         className ? ` ${className}` : ''
       }`}
     >
@@ -838,16 +838,16 @@ export function Sidebar({
                                       type="button"
                                       onClick={() => onSelectDay(day)}
                                       aria-pressed={isSelected}
-                                      className={`flex w-full items-center justify-between rounded-xl border px-3 py-1.5 text-left transition ${
+                                      className={`flex w-full items-center justify-between rounded-xl border px-3 py-1.5 text-left font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)] ${
                                         isSelected
-                                          ? 'border-[var(--charcoal-800,#1F1E1B)] bg-white font-semibold text-[var(--text,#1F1E1B)] shadow-[0_6px_18px_rgba(31,30,27,0.12)]'
-                                          : 'border-transparent text-[var(--text,#1F1E1B)] hover:border-[var(--sand-300,#E1D3B9)] hover:bg-white/70'
+                                          ? 'border-[var(--border-strong,#CBB58F)] bg-[var(--accent,#D7C5A6)] text-[var(--on-accent,#3A2F23)] shadow-[0_6px_18px_rgba(31,30,27,0.12)]'
+                                          : 'border-transparent text-[var(--text,#1F1E1B)] hover:border-[var(--border,#E1D3B9)] hover:bg-white/70'
                                       }`}
                                     >
                                       <span className="truncate">{day.label}</span>
                                       <CountBadge
                                         count={day.count}
-                                        className={isSelected ? 'bg-[var(--sand-500,#D7C5A6)] text-[var(--charcoal-800,#1F1E1B)]' : ''}
+                                        className={isSelected ? 'bg-[var(--surface,#FFFFFF)] text-[var(--on-accent,#3A2F23)]' : ''}
                                       />
                                     </button>
                                   </li>
@@ -1075,6 +1075,7 @@ export function DetailView({
   className = '',
   selectedIds,
   onSelect,
+  paginatorRef,
 }: {
   items: Photo[]
   index: number
@@ -1082,6 +1083,7 @@ export function DetailView({
   className?: string
   selectedIds?: Set<string>
   onSelect?: (idx: number, options?: GridSelectOptions) => void
+  paginatorRef?: React.Ref<HTMLDivElement>
 }) {
   const cur = items[index]
   const canPrev = index > 0
@@ -1105,10 +1107,37 @@ export function DetailView({
                 <RawPlaceholder ratio={cur.placeholderRatio} title={cur.name || 'Placeholder image'} fit="contain" />
               )}
             </div>
-            <div className="absolute left-1/2 -translate-x-1/2 bottom-4 bg-[var(--charcoal-800,#1F1E1B)] text-white text-xs px-3 py-1.5 rounded shadow flex items-center gap-2">
-              <button disabled={!canPrev} onClick={() => setIndex(Math.max(0, index - 1))} className="px-2 py-0.5 rounded border border-white/30 disabled:opacity-40">←</button>
-              <span className="opacity-80">{index + 1}/{items.length}</span>
-              <button disabled={!canNext} onClick={() => setIndex(Math.min(items.length - 1, index + 1))} className="px-2 py-0.5 rounded border border-white/30 disabled:opacity-40">→</button>
+            <div
+              ref={paginatorRef}
+              tabIndex={-1}
+              aria-label="Image paginator"
+              className="absolute left-1/2 bottom-4 z-10 flex items-center gap-3 overflow-visible rounded-full bg-[rgba(31,30,27,0.55)] px-4 py-2 text-[13px] font-medium text-white shadow-[0_12px_30px_rgba(0,0,0,0.35)]"
+            >
+              <button
+                type="button"
+                disabled={!canPrev}
+                aria-label="Previous asset"
+                onClick={() => setIndex(Math.max(0, index - 1))}
+                className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full border border-white/30 bg-white/10 px-3 py-2 text-white transition hover:bg-white/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)] disabled:border-white/20 disabled:bg-white/5"
+              >
+                <span aria-hidden className="text-[16px] leading-none">
+                  ←
+                </span>
+              </button>
+              <span className="text-[13px] font-semibold tracking-wide">
+                {index + 1}/{items.length}
+              </span>
+              <button
+                type="button"
+                disabled={!canNext}
+                aria-label="Next asset"
+                onClick={() => setIndex(Math.min(items.length - 1, index + 1))}
+                className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full border border-white/30 bg-white/10 px-3 py-2 text-white transition hover:bg-white/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)] disabled:border-white/20 disabled:bg-white/5"
+              >
+                <span aria-hidden className="text-[16px] leading-none">
+                  →
+                </span>
+              </button>
             </div>
           </>
         ) : (

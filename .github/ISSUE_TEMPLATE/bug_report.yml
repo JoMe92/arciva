@@ -1,0 +1,36 @@
+name: "🐞 Bug"
+description: "Report a defect"
+title: "bug: <summary>"
+labels: ["bug"]
+body:
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1) …
+        2) …
+        3) …
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected
+      placeholder: What should happen?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual
+      placeholder: What actually happens? (errors, UI, etc.)
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: Environment
+      placeholder: OS/Browser/App version (e.g., macOS, Chrome 130, v1.2.3)
+    validations:
+      required: false

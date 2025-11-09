@@ -231,9 +231,14 @@ export function TopBar({
       view === mode ? 'bg-[var(--sand-100,#F3EBDD)] text-[var(--text,#1F1E1B)]' : 'text-[var(--text-muted,#6B645B)]'
     }`
 
+  const photoCountText = `${visibleCount} photos${selectedDayLabel ? ` • ${selectedDayLabel}` : ''}`
+
   return (
     <header className="sticky top-0 z-40 border-b border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]/95 backdrop-blur">
-      <div className="mx-auto flex h-16 max-w-7xl items-center gap-4 px-4 sm:px-6 lg:px-8">
+      <div
+        className="mx-auto grid h-16 max-w-7xl items-center gap-[var(--s-3)] px-4 sm:px-6 lg:px-8"
+        style={{ gridTemplateColumns: 'auto 1fr auto' }}
+      >
         <div className="flex min-w-0 items-center gap-3">
           <StoneTrailLogo className="hidden lg:inline-flex shrink-0" showLabel={false} />
           <button
@@ -310,85 +315,101 @@ export function TopBar({
           ) : null}
         </div>
 
-        <div className="flex min-w-[280px] flex-1 items-center justify-end gap-2 text-[12px]">
-          <button
-            type="button"
-            onClick={onImport}
-            className="inline-flex h-9 items-center rounded-full border border-transparent bg-[var(--charcoal-800,#1F1E1B)] px-4 text-[12px] font-semibold text-white shadow-sm transition hover:bg-[var(--charcoal-700,#2B2824)]"
-          >
-            Import
-          </button>
-          <div className="inline-flex items-center rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]">
-            <button type="button" className={`${viewButtonClasses('grid')} rounded-l-full`} onClick={() => onChangeView('grid')}>
-              Grid
-            </button>
-            <button type="button" className={`${viewButtonClasses('detail')} rounded-r-full`} onClick={() => onChangeView('detail')}>
-              Detail
-            </button>
-          </div>
-          {view === 'grid' ? (
-            <label className="hidden items-center gap-2 whitespace-nowrap text-[11px] text-[var(--text-muted,#6B645B)] lg:flex">
-              Size
-              <input
-                type="range"
-                min={minGridSize}
-                max={240}
-                value={gridSize}
-                onChange={(event) => onGridSizeChange(Number(event.target.value))}
-                aria-label="Thumbnail size"
-              />
-            </label>
-          ) : null}
-          <div className="relative">
+        <div className="flex items-center justify-end gap-[var(--s-3)] text-[12px]">
+          <div className="flex items-center gap-2">
             <button
               type="button"
-              ref={filtersButtonRef}
-              onClick={() => setFiltersOpen((open) => !open)}
-              className={`inline-flex h-9 items-center rounded-full border px-4 text-[12px] font-medium ${
-                filterCount ? 'border-[var(--text,#1F1E1B)] text-[var(--text,#1F1E1B)]' : 'border-[var(--border,#E1D3B9)] text-[var(--text-muted,#6B645B)]'
-              }`}
-              aria-haspopup="dialog"
-              aria-expanded={filtersOpen}
+              onClick={onImport}
+              className="inline-flex h-9 items-center rounded-full border border-transparent bg-[var(--charcoal-800,#1F1E1B)] px-4 text-[12px] font-semibold text-white shadow-sm transition hover:bg-[var(--charcoal-700,#2B2824)]"
             >
-              {filterLabel}
+              Import
             </button>
-            {filtersOpen ? (
-              <FiltersPopover
-                ref={filtersRef}
-                controls={filters}
-                onReset={() => {
-                  onResetFilters()
-                  setFiltersOpen(false)
-                }}
-                onClose={() => setFiltersOpen(false)}
-              />
+            <div className="inline-flex items-center rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]">
+              <button type="button" className={`${viewButtonClasses('grid')} rounded-l-full`} onClick={() => onChangeView('grid')}>
+                Grid
+              </button>
+              <button type="button" className={`${viewButtonClasses('detail')} rounded-r-full`} onClick={() => onChangeView('detail')}>
+                Detail
+              </button>
+            </div>
+            {view === 'grid' ? (
+              <label className="hidden items-center gap-2 whitespace-nowrap text-[11px] text-[var(--text-muted,#6B645B)] lg:flex">
+                Size
+                <input
+                  type="range"
+                  min={minGridSize}
+                  max={240}
+                  value={gridSize}
+                  onChange={(event) => onGridSizeChange(Number(event.target.value))}
+                  aria-label="Thumbnail size"
+                />
+              </label>
             ) : null}
+            <div className="relative">
+              <button
+                type="button"
+                ref={filtersButtonRef}
+                onClick={() => setFiltersOpen((open) => !open)}
+                className={`inline-flex h-9 items-center rounded-full border px-4 text-[12px] font-medium ${
+                  filterCount ? 'border-[var(--text,#1F1E1B)] text-[var(--text,#1F1E1B)]' : 'border-[var(--border,#E1D3B9)] text-[var(--text-muted,#6B645B)]'
+                }`}
+                aria-haspopup="dialog"
+                aria-expanded={filtersOpen}
+              >
+                {filterLabel}
+              </button>
+              {filtersOpen ? (
+                <FiltersPopover
+                  ref={filtersRef}
+                  controls={filters}
+                  onReset={() => {
+                    onResetFilters()
+                    setFiltersOpen(false)
+                  }}
+                  onClose={() => setFiltersOpen(false)}
+                />
+              ) : null}
+            </div>
+            <button
+              type="button"
+              ref={shortcutsButtonRef}
+              onClick={() => setShortcutsOpen((open) => !open)}
+              className={`inline-flex h-9 items-center rounded-full border px-4 text-[12px] font-medium ${
+                shortcutsOpen ? 'border-[var(--text,#1F1E1B)] text-[var(--text,#1F1E1B)]' : 'border-[var(--border,#E1D3B9)] text-[var(--text-muted,#6B645B)]'
+              }`}
+              aria-expanded={shortcutsOpen}
+              aria-controls={SHORTCUTS_LEGEND_ID}
+            >
+              ⌨ Shortcuts
+            </button>
+            <button
+              type="button"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border,#E1D3B9)] text-lg text-[var(--text-muted,#6B645B)]"
+              aria-label="More actions"
+            >
+              …
+            </button>
           </div>
-          <button
-            type="button"
-            ref={shortcutsButtonRef}
-            onClick={() => setShortcutsOpen((open) => !open)}
-            className={`inline-flex h-9 items-center rounded-full border px-4 text-[12px] font-medium ${
-              shortcutsOpen ? 'border-[var(--text,#1F1E1B)] text-[var(--text,#1F1E1B)]' : 'border-[var(--border,#E1D3B9)] text-[var(--text-muted,#6B645B)]'
-            }`}
-            aria-expanded={shortcutsOpen}
-            aria-controls={SHORTCUTS_LEGEND_ID}
+          <div
+            data-testid="top-bar-status-slot"
+            className="flex flex-col items-end justify-center text-[11px] text-[var(--text-muted,#6B645B)]"
+            style={{ minWidth: 200, maxWidth: 220 }}
           >
-            ⌨ Shortcuts
-          </button>
-          <button
-            type="button"
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border,#E1D3B9)] text-lg text-[var(--text-muted,#6B645B)]"
-            aria-label="More actions"
-          >
-            …
-          </button>
-          <div className="flex flex-col items-end text-[11px] text-[var(--text-muted,#6B645B)]">
-            <div className="flex items-center gap-2">
-              {loadingAssets ? <span>Syncing…</span> : null}
-              {loadError ? <span className="text-[#B42318]">{loadError}</span> : null}
-              <span className="text-[var(--text,#1F1E1B)]">
-                {visibleCount} photos{selectedDayLabel ? ` • ${selectedDayLabel}` : ''}
+            <div className="flex items-center gap-2 text-right">
+              <span
+                className={`transition-opacity duration-200 ${loadingAssets ? 'opacity-100 visible' : 'opacity-0 invisible'}`}
+                aria-live="polite"
+              >
+                Syncing…
+              </span>
+              <span
+                className={`transition-opacity duration-200 ${loadError ? 'opacity-100 visible text-[#B42318]' : 'opacity-0 invisible'}`}
+                aria-live="polite"
+              >
+                {loadError}
+              </span>
+              <span className="transition-opacity duration-200 opacity-100 visible text-[var(--text,#1F1E1B)]" aria-live="polite" title={photoCountText}>
+                {photoCountText}
               </span>
             </div>
           </div>

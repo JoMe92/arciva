@@ -702,7 +702,13 @@ export default function ProjectWorkspace() {
       if (!visible.length) return
       const cur = visible[current]; if (!cur) return
       if (e.key === 'p' || e.key === 'P') {
-        togglePick(cur)
+        const targets = resolveActionTargetIds(cur.id)
+        targets.forEach((id) => {
+          const photo = photos.find((x) => x.id === id)
+          if (photo) {
+            void togglePick(photo)
+          }
+        })
       }
       if (e.key === 'x' || e.key === 'X') {
         const targets = resolveActionTargetIds(cur.id)
@@ -747,8 +753,14 @@ export default function ProjectWorkspace() {
       setPhotos((arr) => arr.map((x) => (targets.has(x.id) ? { ...x, rating } : x)))
     }
     const onPick = (e: any) => {
-      const photo = photos.find((x) => x.id === e.detail.id)
-      if (photo) togglePick(photo)
+      const targets = resolveActionTargetIds(e.detail.id as string | null)
+      if (!targets.size) return
+      targets.forEach((id) => {
+        const photo = photos.find((x) => x.id === id)
+        if (photo) {
+          void togglePick(photo)
+        }
+      })
     }
     const onReject = (e: any) => {
       const targets = resolveActionTargetIds(e.detail.id as string | null)

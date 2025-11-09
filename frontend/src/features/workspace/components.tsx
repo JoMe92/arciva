@@ -50,6 +50,15 @@ function setsAreEqual<T>(a: Set<T>, b: Set<T>): boolean {
   return true
 }
 
+export function computeCols(containerWidth: number, size: number, gap: number): number {
+  if (!Number.isFinite(containerWidth) || containerWidth <= 0) return 1
+  if (!Number.isFinite(size) || size <= 0) return 1
+  const divisor = size + gap
+  if (divisor <= 0) return 1
+  const possible = Math.floor((containerWidth + gap) / divisor)
+  return Math.max(1, possible)
+}
+
 export type WorkspaceFilterControls = {
   minStars: 0 | 1 | 2 | 3 | 4 | 5
   setMinStars: (value: 0 | 1 | 2 | 3 | 4 | 5) => void

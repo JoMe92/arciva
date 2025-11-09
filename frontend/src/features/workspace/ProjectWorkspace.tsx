@@ -317,6 +317,35 @@ function mapAssetToPhoto(item: AssetListItem, existing?: Photo): Photo {
   }
 }
 
+function isPhotoDirty(base: Photo, next: Photo) {
+  return (
+    base.rating !== next.rating ||
+    base.tag !== next.tag ||
+    base.picked !== next.picked ||
+    base.rejected !== next.rejected
+  )
+}
+
+function computeDirtyPhotos(current: Photo[], baseline: Photo[]): Photo[] {
+  if (!baseline.length) return []
+  const map = new Map<string, Photo>()
+  baseline.forEach((photo) => map.set(photo.id, photo))
+  return current.filter((photo) => {
+    const prev = map.get(photo.id)
+    return prev ? isPhotoDirty(prev, photo) : false
+  })
+}
+
+function fireTelemetryEvent(event: string, payload?: Record<string, unknown>) {
+  if (typeof window === 'undefined') return
+  try {
+    const detail = payload ? { event, ...payload } : { event }
+    window.dispatchEvent(new CustomEvent('arciva.telemetry', { detail }))
+  } catch {
+    // best-effort telemetry
+  }
+}
+
 export default function ProjectWorkspace() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -347,6 +376,7 @@ export default function ProjectWorkspace() {
   const [searchParams, setSearchParams] = useSearchParams()
 
   const [photos, setPhotos] = useState<Photo[]>([])
+  const [lastAppliedSnapshot, setLastAppliedSnapshot] = useState<Photo[]>([])
   const [loadingAssets, setLoadingAssets] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [pickError, setPickError] = useState<string | null>(null)
@@ -387,6 +417,7 @@ export default function ProjectWorkspace() {
 
       prevPhotosRef.current = mapped
       setPhotos(mapped)
+      setLastAppliedSnapshot(mapped)
 
       let nextIndex = currentIndexRef.current
       if (focusNewest && newItems.length) {
@@ -422,6 +453,20 @@ export default function ProjectWorkspace() {
       setLoadingAssets(false)
     }
   }, [id])
+
+  const dirtyPhotos = useMemo(() => computeDirtyPhotos(photos, lastAppliedSnapshot), [photos, lastAppliedSnapshot])
+  const hasDirtyChanges = dirtyPhotos.length > 0
+
+  const applyChanges = useCallback(() => {
+    if (!hasDirtyChanges) return
+    setLastAppliedSnapshot(photos)
+    fireTelemetryEvent('apply_changes_clicked')
+  }, [hasDirtyChanges, photos])
+
+  useEffect(() => {
+    if (!hasDirtyChanges) return
+    applyChanges()
+  }, [hasDirtyChanges, applyChanges])
 
   const pickMutation = useMutation({
     mutationFn: async ({ assetId, pick, makePrimary }: { assetId: string; pick: boolean; makePrimary?: boolean }) => {
@@ -696,12 +741,20 @@ export default function ProjectWorkspace() {
   // Shortcuts (gleich wie Monolith)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement)?.tagName === 'INPUT') return
-      if (e.key === 'g' || e.key === 'G') setView('grid')
-      if (e.key === 'd' || e.key === 'D') setView('detail')
+      const target = e.target as HTMLElement | null
+      const lowerKey = e.key.toLowerCase()
+      if ((e.metaKey || e.ctrlKey) && lowerKey === 's') {
+        e.preventDefault()
+        applyChanges()
+        return
+      }
+      if (target?.tagName === 'INPUT') return
+      if (lowerKey === 'g') setView('grid')
+      if (lowerKey === 'd') setView('detail')
       if (!visible.length) return
-      const cur = visible[current]; if (!cur) return
-      if (e.key === 'p' || e.key === 'P') {
+      const cur = visible[current]
+      if (!cur) return
+      if (lowerKey === 'p') {
         const targets = resolveActionTargetIds(cur.id)
         targets.forEach((id) => {
           const photo = photos.find((x) => x.id === id)
@@ -710,7 +763,7 @@ export default function ProjectWorkspace() {
           }
         })
       }
-      if (e.key === 'x' || e.key === 'X') {
+      if (lowerKey === 'x') {
         const targets = resolveActionTargetIds(cur.id)
         if (targets.size) {
           photos.forEach((photo) => {
@@ -741,8 +794,9 @@ export default function ProjectWorkspace() {
       if (e.key === 'ArrowRight') setCurrent((i) => Math.min(i + 1, visible.length - 1))
       if (e.key === 'ArrowLeft') setCurrent((i) => Math.max(i - 1, 0))
     }
-    window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey)
-  }, [visible, current, togglePick, resolveActionTargetIds, photos])
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [visible, current, togglePick, resolveActionTargetIds, photos, applyChanges])
 
   // Custom events vom Grid
   useEffect(() => {

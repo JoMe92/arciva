@@ -82,3 +82,6 @@ backend/tests/__pycache__/*
 backend/app/adapters/__pycache__/*
 
 backend/app/services/__pycache__/*
+frontend/src/features/workspace/*
+google-chrome-stable_current_amd64.deb.1
+google-chrome-stable_current_amd64.deb

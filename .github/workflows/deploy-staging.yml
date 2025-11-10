@@ -17,7 +17,6 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: staging
-      url: ${{ secrets.STAGING_URL }}
     timeout-minutes: 30
     env:
       IMAGE_NAME_BASE: ghcr.io/${{ github.repository_owner }}/arciva-frontend

@@ -52,18 +52,18 @@ jobs:
       - name: Generate Dockerfile
         run: |
           cat <<'DOCKER' > Dockerfile
-FROM node:20-alpine AS builder
-WORKDIR /app
-ARG FRONTEND_DIR=frontend
-COPY ${FRONTEND_DIR}/package*.json ./
-RUN npm ci
-COPY ${FRONTEND_DIR} .
-RUN npm run build
-FROM nginx:1.25-alpine
-COPY --from=builder /app/dist /usr/share/nginx/html
-EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
-DOCKER
+          FROM node:20-alpine AS builder
+          WORKDIR /app
+          ARG FRONTEND_DIR=frontend
+          COPY ${FRONTEND_DIR}/package*.json ./
+          RUN npm ci
+          COPY ${FRONTEND_DIR} .
+          RUN npm run build
+          FROM nginx:1.25-alpine
+          COPY --from=builder /app/dist /usr/share/nginx/html
+          EXPOSE 80
+          CMD ["nginx", "-g", "daemon off;"]
+          DOCKER
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3

@@ -249,10 +249,10 @@ export function TopBar({
   return (
     <header className="sticky top-0 z-40 border-b border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]/95 backdrop-blur">
       <div
-        className="mx-auto grid h-16 max-w-9xl items-center gap-[var(--s-3)] px-3 sm:px-4 lg:px-6"
+        className="mx-auto grid h-16 max-w-7xl items-center gap-[var(--s-3)] px-4 sm:px-6 lg:px-8"
         style={{ gridTemplateColumns: 'auto 1fr auto' }}
       >
-        <div className="flex min-w-0 items-center gap-2 justify-self-start">
+        <div className="flex min-w-0 items-center gap-3">
           <StoneTrailLogo className="hidden lg:inline-flex shrink-0" showLabel={false} mode={mode} onToggleTheme={toggle} />
           <button
             type="button"
@@ -273,7 +273,7 @@ export function TopBar({
           </nav>
         </div>
 
-        <div className="flex min-w-0 flex-col items-center text-center justify-self-center">
+        <div className="flex flex-1 flex-col items-center text-center">
           {editing ? (
             <div className="flex items-center gap-2">
               <input

@@ -2,7 +2,7 @@ import React, { useMemo, useRef, useEffect, useState, useCallback } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { TOKENS } from './utils'
-import { listProjectAssets, assetThumbUrl, assetPreviewUrl, updateAssetPreview, getAsset, type AssetListItem, type AssetDetail } from '../../shared/api/assets'
+import { listProjectAssets, assetThumbUrl, assetPreviewUrl, updateAssetInteractions, getAsset, type AssetListItem, type AssetDetail } from '../../shared/api/assets'
 import { getProject, updateProject, type ProjectApiResponse } from '../../shared/api/projects'
 import { initUpload, putUpload, completeUpload } from '../../shared/api/uploads'
 import { placeholderRatioForAspect } from '../../shared/placeholder'
@@ -292,6 +292,19 @@ function mapAssetToPhoto(item: AssetListItem, existing?: Photo): Photo {
   const placeholderRatio = existing?.placeholderRatio ?? placeholderRatioForAspect(aspect)
 
   const isPreview = typeof item.is_preview === 'boolean' ? item.is_preview : existing?.isPreview ?? false
+  const ratingValue = typeof item.rating === 'number' ? item.rating : existing?.rating ?? 0
+  const rating = Math.max(0, Math.min(5, ratingValue)) as Photo['rating']
+  const picked = typeof item.picked === 'boolean' ? item.picked : existing?.picked ?? false
+  const rejected = typeof item.rejected === 'boolean' ? item.rejected : existing?.rejected ?? false
+  const colorFromApi = item.color_label ?? existing?.tag ?? 'None'
+  const colorLabel = (['None', 'Red', 'Green', 'Blue', 'Yellow', 'Purple'] as ColorTag[]).includes(colorFromApi as ColorTag)
+    ? (colorFromApi as ColorTag)
+    : existing?.tag ?? 'None'
+  const stackPrimaryAssetId = item.stack_primary_asset_id ?? existing?.stackPrimaryAssetId ?? item.id
+  const pairId = item.pair_id ?? existing?.pairId ?? null
+  const pairedAssetId = item.paired_asset_id ?? existing?.pairedAssetId ?? null
+  const pairedAssetType = item.paired_asset_type ?? existing?.pairedAssetType ?? null
+  const basename = item.basename ?? existing?.basename ?? null
 
   return {
     id: item.id,
@@ -300,10 +313,10 @@ function mapAssetToPhoto(item: AssetListItem, existing?: Photo): Photo {
     date,
     capturedAt,
     uploadedAt,
-    rating: existing?.rating ?? 0,
-    picked: existing?.picked ?? isPreview,
-    rejected: existing?.rejected ?? false,
-    tag: existing?.tag ?? 'None',
+    rating,
+    picked,
+    rejected,
+    tag: colorLabel,
     thumbSrc,
     previewSrc,
     placeholderRatio,
@@ -311,36 +324,52 @@ function mapAssetToPhoto(item: AssetListItem, existing?: Photo): Photo {
     previewOrder: typeof item.preview_order === 'number' ? item.preview_order : existing?.previewOrder ?? null,
     metadataWarnings: Array.isArray(item.metadata_warnings) ? item.metadata_warnings : existing?.metadataWarnings ?? [],
     status: item.status,
+    basename,
+    pairId,
+    pairedAssetId,
+    pairedAssetType,
+    stackPrimaryAssetId,
   }
 }
 
-function isPhotoDirty(base: Photo, next: Photo) {
-  return (
-    base.rating !== next.rating ||
-    base.tag !== next.tag ||
-    base.picked !== next.picked ||
-    base.rejected !== next.rejected
-  )
-}
-
-function computeDirtyPhotos(current: Photo[], baseline: Photo[]): Photo[] {
-  if (!baseline.length) return []
-  const map = new Map<string, Photo>()
-  baseline.forEach((photo) => map.set(photo.id, photo))
-  return current.filter((photo) => {
-    const prev = map.get(photo.id)
-    return prev ? isPhotoDirty(prev, photo) : false
+function mergePhotosFromItems(current: Photo[], items: AssetListItem[]): Photo[] {
+  if (!items.length) return current
+  const nextMap = new Map<string, Photo>()
+  items.forEach((item) => {
+    const existing = current.find((photo) => photo.id === item.id)
+    nextMap.set(item.id, mapAssetToPhoto(item, existing))
   })
+  return current.map((photo) => nextMap.get(photo.id) ?? photo)
 }
 
-function fireTelemetryEvent(event: string, payload?: Record<string, unknown>) {
-  if (typeof window === 'undefined') return
-  try {
-    const detail = payload ? { event, ...payload } : { event }
-    window.dispatchEvent(new CustomEvent('arciva.telemetry', { detail }))
-  } catch {
-    // best-effort telemetry
+type InteractionPatch = {
+  rating?: Photo['rating']
+  tag?: ColorTag
+  picked?: boolean
+  rejected?: boolean
+}
+
+function patchPhotoInteractions(photo: Photo, patch: InteractionPatch): Photo {
+  let next = photo
+  if (patch.rating !== undefined && patch.rating !== photo.rating) {
+    next = next === photo ? { ...next, rating: patch.rating } : { ...next, rating: patch.rating }
   }
+  if (patch.tag && patch.tag !== photo.tag) {
+    next = next === photo ? { ...next, tag: patch.tag } : { ...next, tag: patch.tag }
+  }
+  if (patch.picked !== undefined && patch.picked !== photo.picked) {
+    next =
+      next === photo
+        ? { ...next, picked: patch.picked, rejected: patch.picked ? false : next.rejected }
+        : { ...next, picked: patch.picked, rejected: patch.picked ? false : next.rejected }
+  }
+  if (patch.rejected !== undefined && patch.rejected !== photo.rejected) {
+    next =
+      next === photo
+        ? { ...next, rejected: patch.rejected, picked: patch.rejected ? false : next.picked }
+        : { ...next, rejected: patch.rejected, picked: patch.rejected ? false : next.picked }
+  }
+  return next
 }
 
 export default function ProjectWorkspace() {
@@ -356,27 +385,45 @@ export default function ProjectWorkspace() {
     initialData: cachedProject,
   })
   const projectName = projectDetail?.title?.trim() || `Project ${id || '—'}`
+  const [stackPairsEnabled, setStackPairsEnabled] = useState(projectDetail?.stack_pairs_enabled ?? false)
+  useEffect(() => {
+    if (typeof projectDetail?.stack_pairs_enabled === 'boolean') {
+      setStackPairsEnabled(projectDetail.stack_pairs_enabled)
+    }
+  }, [projectDetail?.stack_pairs_enabled])
+  const applyProjectUpdate = useCallback((updated: ProjectApiResponse) => {
+    if (!id) return
+    setStackPairsEnabled(updated.stack_pairs_enabled ?? false)
+    queryClient.setQueryData(['project', id], updated)
+    queryClient.setQueryData<ProjectApiResponse[] | undefined>(['projects'], (prev) => {
+      if (!prev) return prev
+      return prev.map((proj) => (proj.id === updated.id ? { ...proj, title: updated.title, updated_at: updated.updated_at, stack_pairs_enabled: updated.stack_pairs_enabled } : proj))
+    })
+  }, [id, queryClient])
+
   const renameMutation = useMutation({
     mutationFn: ({ title }: { title: string }) => {
       if (!id) throw new Error('Project id missing')
       return updateProject(id, { title })
     },
     onSuccess: (updated) => {
-      if (!id) return
-      queryClient.setQueryData(['project', id], updated)
-      queryClient.setQueryData<ProjectApiResponse[] | undefined>(['projects'], (prev) => {
-        if (!prev) return prev
-        return prev.map((proj) => (proj.id === updated.id ? { ...proj, title: updated.title, updated_at: updated.updated_at } : proj))
-      })
+      applyProjectUpdate(updated)
+    },
+  })
+  const stackToggleMutation = useMutation({
+    mutationFn: (nextEnabled: boolean) => {
+      if (!id) throw new Error('Project id missing')
+      return updateProject(id, { stack_pairs_enabled: nextEnabled })
+    },
+    onSuccess: (updated) => {
+      applyProjectUpdate(updated)
     },
   })
   const [searchParams, setSearchParams] = useSearchParams()
 
   const [photos, setPhotos] = useState<Photo[]>([])
-  const [lastAppliedSnapshot, setLastAppliedSnapshot] = useState<Photo[]>([])
   const [loadingAssets, setLoadingAssets] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
-  const [pickError, setPickError] = useState<string | null>(null)
   const prevPhotosRef = useRef<Photo[]>([])
   const currentIndexRef = useRef(0)
   const currentPhotoIdRef = useRef<string | null>(null)
@@ -399,6 +446,15 @@ export default function ProjectWorkspace() {
     if (trimmed === projectName.trim()) return
     await renameMutation.mutateAsync({ title: trimmed })
   }, [id, projectName, renameMutation])
+  const handleStackToggle = useCallback((next: boolean) => {
+    const previous = stackPairsEnabled
+    setStackPairsEnabled(next)
+    stackToggleMutation.mutate(next, {
+      onError: () => {
+        setStackPairsEnabled(previous)
+      },
+    })
+  }, [stackPairsEnabled, stackToggleMutation])
 
   const refreshAssets = useCallback(async (focusNewest: boolean = false) => {
     if (!id) return
@@ -414,7 +470,6 @@ export default function ProjectWorkspace() {
 
       prevPhotosRef.current = mapped
       setPhotos(mapped)
-      setLastAppliedSnapshot(mapped)
 
       let nextIndex = currentIndexRef.current
       if (focusNewest && newItems.length) {
@@ -451,62 +506,38 @@ export default function ProjectWorkspace() {
     }
   }, [id])
 
-  const dirtyPhotos = useMemo(() => computeDirtyPhotos(photos, lastAppliedSnapshot), [photos, lastAppliedSnapshot])
-  const hasDirtyChanges = dirtyPhotos.length > 0
-
-  const applyChanges = useCallback(() => {
-    if (!hasDirtyChanges) return
-    setLastAppliedSnapshot(photos)
-    fireTelemetryEvent('apply_changes_clicked')
-  }, [hasDirtyChanges, photos])
-
-  useEffect(() => {
-    if (!hasDirtyChanges) return
-    applyChanges()
-  }, [hasDirtyChanges, applyChanges])
-
-  const pickMutation = useMutation({
-    mutationFn: async ({ assetId, pick, makePrimary }: { assetId: string; pick: boolean; makePrimary?: boolean }) => {
+  const interactionMutation = useMutation({
+    mutationFn: async ({ assetIds, changes }: { assetIds: string[]; changes: InteractionPatch }) => {
       if (!id) {
         throw new Error('Missing project identifier')
       }
-      return updateAssetPreview(id, assetId, pick, { makePrimary })
+      return updateAssetInteractions(id, {
+        assetIds,
+        rating: changes.rating,
+        colorLabel: changes.tag,
+        picked: changes.picked,
+        rejected: changes.rejected,
+      })
     },
-    onSuccess: () => {
-      setPickError(null)
+    onSuccess: (response) => {
+      setPhotos((prev) => mergePhotosFromItems(prev, response.items))
+      prevPhotosRef.current = mergePhotosFromItems(prevPhotosRef.current, response.items)
+    },
+    onError: (error) => {
+      console.error('Failed to update interactions', error)
       refreshAssets()
-      queryClient.invalidateQueries({ queryKey: ['projects'] })
-    },
-    onError: (err: unknown) => {
-      const message = err instanceof Error ? err.message : 'Failed to update preview state'
-      setPickError(message)
     },
   })
 
-  const togglePick = useCallback(async (photo: Photo) => {
-    if (pickMutation.isPending) return
-    const hadOtherPicked = photos.some((p) => p.picked && p.id !== photo.id)
-    const nextPicked = !photo.picked
-    setPhotos((arr) =>
-      arr.map((p) =>
-        p.id === photo.id
-          ? {
-              ...p,
-              picked: nextPicked,
-              isPreview: nextPicked,
-              previewOrder: nextPicked ? p.previewOrder : null,
-              rejected: nextPicked ? false : p.rejected,
-            }
-          : p,
-      ),
-    )
-    setPickError(null)
-    try {
-      await pickMutation.mutateAsync({ assetId: photo.id, pick: nextPicked, makePrimary: nextPicked && !hadOtherPicked })
-    } catch (err) {
-      refreshAssets()
-    }
-  }, [pickMutation, photos, refreshAssets])
+  const pairLookup = useMemo(() => {
+    const map = new Map<string, string>()
+    photos.forEach((photo) => {
+      if (photo.pairedAssetId) {
+        map.set(photo.id, photo.pairedAssetId)
+      }
+    })
+    return map
+  }, [photos])
 
   const [showJPEG, setShowJPEG] = useState(true)
   const [showRAW, setShowRAW] = useState(true)
@@ -514,6 +545,21 @@ export default function ProjectWorkspace() {
   const [onlyPicked, setOnlyPicked] = useState(false)
   const [hideRejected, setHideRejected] = useState(true)
   const [filterColor, setFilterColor] = useState<'Any' | ColorTag>('Any')
+
+  const applyInteraction = useCallback((targetIds: Set<string>, patch: InteractionPatch) => {
+    if (!targetIds.size) return
+    const expanded = new Set<string>()
+    targetIds.forEach((assetId) => {
+      expanded.add(assetId)
+      const partner = pairLookup.get(assetId)
+      if (partner) {
+        expanded.add(partner)
+      }
+    })
+    setPhotos((arr) => arr.map((photo) => (expanded.has(photo.id) ? patchPhotoInteractions(photo, patch) : photo)))
+    interactionMutation.mutate({ assetIds: Array.from(expanded), changes: patch })
+  }, [pairLookup, interactionMutation])
+
   const storageScope = useMemo(() => (id ? `workspace:${id}` : 'workspace'), [id])
   const leftWidthKey = `${storageScope}:left-width`
   const leftCollapsedKey = `${storageScope}:left-collapsed`
@@ -592,11 +638,6 @@ export default function ProjectWorkspace() {
   useEffect(() => {
     prevPhotosRef.current = photos
   }, [photos])
-
-  useEffect(() => {
-    currentIndexRef.current = current
-    currentPhotoIdRef.current = photos[current]?.id ?? null
-  }, [photos, current])
 
   const contentRef = useRef<HTMLDivElement | null>(null)
   const [contentW, setContentW] = useState(1200)
@@ -770,15 +811,45 @@ export default function ProjectWorkspace() {
     clearDateFilter()
   }, [clearDateFilter])
 
-  const visible: Photo[] = useMemo(() => photos.filter((p) => {
+  const displayPhotos: Photo[] = useMemo(() => {
+    if (!stackPairsEnabled) return photos
+    return photos.reduce<Photo[]>((acc, photo) => {
+      if (photo.pairId && photo.type === 'JPEG' && photo.pairedAssetId) {
+        return acc
+      }
+      if (photo.pairId && photo.pairedAssetId) {
+        acc.push({ ...photo, displayType: 'JPEG + RAW', isStacked: true })
+        return acc
+      }
+      acc.push({ ...photo, displayType: photo.displayType ?? photo.type, isStacked: false })
+      return acc
+    }, [])
+  }, [photos, stackPairsEnabled])
+
+  const visible: Photo[] = useMemo(() => displayPhotos.filter((p) => {
     const dateMatch = !selectedDayKey || photoKeyMap.get(p.id) === selectedDayKey
-    const typeOk = (p.type === 'JPEG' && showJPEG) || (p.type === 'RAW' && showRAW)
+    const typeOk =
+      (stackPairsEnabled && p.pairId && p.pairedAssetId ? showJPEG || showRAW : (p.type === 'JPEG' && showJPEG) || (p.type === 'RAW' && showRAW))
     const ratingOk = p.rating >= minStars
     const pickOk = !onlyPicked || p.picked
     const rejectOk = !hideRejected || !p.rejected
     const colorOk = filterColor === 'Any' || p.tag === filterColor
     return dateMatch && typeOk && ratingOk && pickOk && rejectOk && colorOk
-  }), [photos, selectedDayKey, photoKeyMap, showJPEG, showRAW, minStars, onlyPicked, hideRejected, filterColor])
+  }), [displayPhotos, selectedDayKey, photoKeyMap, showJPEG, showRAW, minStars, onlyPicked, hideRejected, filterColor, stackPairsEnabled])
+
+  useEffect(() => {
+    currentIndexRef.current = current
+    currentPhotoIdRef.current = visible[current]?.id ?? null
+  }, [visible, current])
+
+  useEffect(() => {
+    const targetId = currentPhotoIdRef.current
+    if (!targetId) return
+    const idx = visible.findIndex((photo) => photo.id === targetId)
+    if (idx >= 0 && idx !== current) {
+      setCurrent(idx)
+    }
+  }, [visible, current])
 
   useEffect(() => {
     setSelectedPhotoIds((prev) => {
@@ -882,36 +953,24 @@ export default function ProjectWorkspace() {
         targets.forEach((id) => {
           const photo = photos.find((x) => x.id === id)
           if (photo) {
-            void togglePick(photo)
+            applyInteraction(new Set([id]), { picked: !photo.picked })
           }
         })
       }
       if (lowerKey === 'x') {
         const targets = resolveActionTargetIds(cur.id)
-        if (targets.size) {
-          photos.forEach((photo) => {
-            if (targets.has(photo.id) && photo.picked) {
-              void togglePick(photo)
-            }
-          })
-          setPhotos((arr) =>
-            arr.map((x) =>
-              targets.has(x.id)
-                ? {
-                    ...x,
-                    rejected: !x.rejected,
-                    picked: x.picked ? false : x.picked,
-                  }
-                : x,
-            ),
-          )
-        }
+        targets.forEach((id) => {
+          const photo = photos.find((x) => x.id === id)
+          if (photo) {
+            applyInteraction(new Set([id]), { rejected: !photo.rejected })
+          }
+        })
       }
       if (/^[1-5]$/.test(e.key)) {
         const targets = resolveActionTargetIds(cur.id)
         if (targets.size) {
           const rating = Number(e.key) as 1 | 2 | 3 | 4 | 5
-          setPhotos((arr) => arr.map((x) => (targets.has(x.id) ? { ...x, rating } : x)))
+          applyInteraction(targets, { rating })
         }
       }
       if (e.key === 'ArrowRight') setCurrent((i) => Math.min(i + 1, visible.length - 1))
@@ -927,7 +986,7 @@ export default function ProjectWorkspace() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [visible, current, togglePick, resolveActionTargetIds, photos, applyChanges])
+  }, [visible, current, applyInteraction, resolveActionTargetIds, photos])
 
   // Custom events vom Grid
   useEffect(() => {
@@ -935,7 +994,7 @@ export default function ProjectWorkspace() {
       const targets = resolveActionTargetIds(e.detail.id as string | null)
       if (!targets.size) return
       const rating = e.detail.r as 1 | 2 | 3 | 4 | 5
-      setPhotos((arr) => arr.map((x) => (targets.has(x.id) ? { ...x, rating } : x)))
+      applyInteraction(targets, { rating })
     }
     const onPick = (e: any) => {
       const targets = resolveActionTargetIds(e.detail.id as string | null)
@@ -943,35 +1002,25 @@ export default function ProjectWorkspace() {
       targets.forEach((id) => {
         const photo = photos.find((x) => x.id === id)
         if (photo) {
-          void togglePick(photo)
+          applyInteraction(new Set([id]), { picked: !photo.picked })
         }
       })
     }
     const onReject = (e: any) => {
       const targets = resolveActionTargetIds(e.detail.id as string | null)
       if (!targets.size) return
-      photos.forEach((photo) => {
-        if (targets.has(photo.id) && photo.picked) {
-          void togglePick(photo)
+      targets.forEach((id) => {
+        const photo = photos.find((x) => x.id === id)
+        if (photo) {
+          applyInteraction(new Set([id]), { rejected: !photo.rejected })
         }
       })
-      setPhotos((arr) =>
-        arr.map((x) =>
-          targets.has(x.id)
-            ? {
-                ...x,
-                rejected: !x.rejected,
-                picked: x.picked ? false : x.picked,
-              }
-            : x,
-        ),
-      )
     }
     const onColor = (e: any) => {
       const targets = resolveActionTargetIds(e.detail.id as string | null)
       if (!targets.size) return
       const color = e.detail.t as ColorTag
-      setPhotos((arr) => arr.map((x) => (targets.has(x.id) ? { ...x, tag: color } : x)))
+      applyInteraction(targets, { tag: color })
     }
     window.addEventListener('rate', onRate as any)
     window.addEventListener('pick', onPick as any)
@@ -983,7 +1032,7 @@ export default function ProjectWorkspace() {
       window.removeEventListener('reject', onReject as any)
       window.removeEventListener('color', onColor as any)
     }
-  }, [photos, togglePick, resolveActionTargetIds])
+  }, [photos, resolveActionTargetIds, applyInteraction])
 
   useEffect(() => {
     if (!id) return
@@ -1160,7 +1209,7 @@ export default function ProjectWorkspace() {
     const dimensionsLabel = formatDimensions(currentAssetDetail?.width, currentAssetDetail?.height)
     return [
       { label: 'Name', value: currentPhoto.name || '—' },
-      { label: 'Type', value: currentPhoto.type },
+      { label: 'Type', value: currentPhoto.displayType ?? currentPhoto.type },
       { label: 'Date', value: detailDateLabel },
       { label: 'Size', value: sizeLabel },
       { label: 'Dimensions', value: dimensionsLabel },
@@ -1179,10 +1228,6 @@ export default function ProjectWorkspace() {
   }, [assetDetailError])
 
   const hasAny = photos.length > 0
-
-  useEffect(() => {
-    setPickError(null)
-  }, [currentPhoto?.id])
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[var(--surface-subtle,#FBF7EF)] text-[var(--text,#1F1E1B)]">
@@ -1217,6 +1262,9 @@ export default function ProjectWorkspace() {
         filterCount={activeFilterCount}
         onResetFilters={resetFilters}
         visibleCount={visible.length}
+        stackPairsEnabled={stackPairsEnabled}
+        onToggleStackPairs={handleStackToggle}
+        stackTogglePending={stackToggleMutation.isPending}
         selectedDayLabel={selectedDayNode ? selectedDayNode.label : null}
         loadingAssets={loadingAssets}
         loadError={loadError}

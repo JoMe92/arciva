@@ -7,6 +7,7 @@ export type ColorTag = 'None' | 'Red' | 'Green' | 'Blue' | 'Yellow' | 'Purple'
 export type Photo = {
   id: string
   name: string
+  basename?: string | null
   type: ImgType
   date: string | null // Effective date used for grouping
   capturedAt?: string | null
@@ -22,4 +23,10 @@ export type Photo = {
   isPreview: boolean
   previewOrder: number | null
   metadataWarnings: string[]
+  pairId?: string | null
+  pairedAssetId?: string | null
+  pairedAssetType?: ImgType | null
+  stackPrimaryAssetId?: string | null
+  displayType?: string
+  isStacked?: boolean
 }

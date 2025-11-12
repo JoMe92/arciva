@@ -145,7 +145,13 @@ curl -s "$API/v1/projects/$PROJECT/assets"
 
 ---
 
-## 9) Migrations (later)
+## 9) Migrations
+￼
+￼
+￼
+￼
+￼
+ (later)
 Add Alembic for schema evolution:
 - Init Alembic in `backend/migrations/`
 - Generate migration: `alembic revision --autogenerate -m "add foo"`

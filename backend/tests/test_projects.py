@@ -39,6 +39,7 @@ async def test_create_and_fetch_project(client):
     assert created["client"] == payload["client"]
     assert created["note"] == payload["note"]
     assert created["asset_count"] == 0
+    assert created["stack_pairs_enabled"] is False
 
     proj_id = created["id"]
 
@@ -54,6 +55,7 @@ async def test_create_and_fetch_project(client):
     got = r.json()
     assert got["id"] == proj_id
     assert got["asset_count"] == 0
+    assert got["stack_pairs_enabled"] is False
 
 
 @pytest.mark.asyncio
@@ -70,12 +72,32 @@ async def test_update_project_fields(client):
     assert updated["title"] == "Renamed"
     assert updated["client"] == "Globex"
     assert updated["note"] is None
+    assert updated["stack_pairs_enabled"] is False
 
     r = await client.get(f"/v1/projects/{proj_id}")
     assert r.status_code == 200
     fetched = r.json()
     assert fetched["title"] == "Renamed"
     assert fetched["client"] == "Globex"
+    assert fetched["stack_pairs_enabled"] is False
+
+
+@pytest.mark.asyncio
+async def test_update_stack_pairs_toggle(client):
+    payload = {"title": "Toggle Stack", "client": "ACME", "note": "stack"}
+    r = await client.post("/v1/projects", json=payload)
+    assert r.status_code == 201
+    proj_id = r.json()["id"]
+
+    r = await client.patch(f"/v1/projects/{proj_id}", json={"stack_pairs_enabled": True})
+    assert r.status_code == 200
+    updated = r.json()
+    assert updated["stack_pairs_enabled"] is True
+
+    r = await client.get(f"/v1/projects/{proj_id}")
+    assert r.status_code == 200
+    fetched = r.json()
+    assert fetched["stack_pairs_enabled"] is True
 
 @pytest.mark.asyncio
 async def test_delete_project_requires_confirmation(client):

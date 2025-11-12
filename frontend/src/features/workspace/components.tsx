@@ -101,6 +101,9 @@ export function TopBar({
   filterCount,
   onResetFilters,
   visibleCount,
+  stackPairsEnabled,
+  onToggleStackPairs,
+  stackTogglePending,
   selectedDayLabel,
   loadingAssets,
   loadError,
@@ -119,6 +122,9 @@ export function TopBar({
   filterCount: number
   onResetFilters: () => void
   visibleCount: number
+  stackPairsEnabled: boolean
+  onToggleStackPairs: (next: boolean) => void
+  stackTogglePending?: boolean
   selectedDayLabel: string | null
   loadingAssets: boolean
   loadError: string | null
@@ -351,6 +357,29 @@ export function TopBar({
                 />
               </label>
             ) : null}
+            <button
+              type="button"
+              className={`inline-flex h-9 items-center gap-2 rounded-full border px-4 text-[11px] font-medium ${
+                stackPairsEnabled ? 'border-[var(--text,#1F1E1B)] text-[var(--text,#1F1E1B)]' : 'border-[var(--border,#E1D3B9)] text-[var(--text-muted,#6B645B)]'
+              }`}
+              aria-pressed={stackPairsEnabled}
+              onClick={() => onToggleStackPairs(!stackPairsEnabled)}
+              disabled={stackTogglePending}
+            >
+              <span>Stack JPEG+RAW Pairs</span>
+              <span
+                className={`inline-flex h-5 w-9 items-center rounded-full border px-1 ${
+                  stackPairsEnabled ? 'border-[var(--text,#1F1E1B)] bg-[var(--text,#1F1E1B)]' : 'border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]'
+                }`}
+                aria-hidden="true"
+              >
+                <span
+                  className={`h-3 w-3 rounded-full bg-[var(--surface,#FFFFFF)] transition-transform duration-150 ${
+                    stackPairsEnabled ? 'translate-x-4' : ''
+                  }`}
+                />
+              </span>
+            </button>
             <div className="relative">
               <button
                 type="button"
@@ -1601,7 +1630,7 @@ export function DetailView({
 export function ThumbContent({ p }: { p: Photo }) {
   return (
     <div className="pointer-events-none absolute top-1 left-1 flex items-center gap-1 text-[10px]">
-      <span className="px-1 py-0.5 rounded border border-[var(--border,#E1D3B9)] bg-[var(--surface-frosted,#F8F0E4)]">{p.type}</span>
+      <span className="px-1 py-0.5 rounded border border-[var(--border,#E1D3B9)] bg-[var(--surface-frosted,#F8F0E4)]">{p.displayType ?? p.type}</span>
       <span className="w-2.5 h-2.5 rounded-full border border-[var(--border,#E1D3B9)]" style={{ backgroundColor: COLOR_MAP[p.tag] }} aria-hidden />
     </div>
   )

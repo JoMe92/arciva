@@ -82,7 +82,12 @@ async def create_project(
 ):
     logger.info("create_project: title=%r client=%r", body.title, body.client)
     # insert
-    p = models.Project(title=body.title, client=body.client, note=body.note)
+    p = models.Project(
+        title=body.title,
+        client=body.client,
+        note=body.note,
+        stack_pairs_enabled=body.stack_pairs_enabled,
+    )
     db.add(p)
     await db.flush()
 
@@ -101,6 +106,7 @@ async def create_project(
         updated_at=p.updated_at,
         asset_count=0,
         preview_images=[],
+        stack_pairs_enabled=p.stack_pairs_enabled,
     )
     logger.info("create_project: success id=%s", p.id)
     return result
@@ -140,6 +146,7 @@ async def list_projects(
             updated_at=proj.updated_at,
             asset_count=asset_count,
             preview_images=preview_map.get(proj.id, []),
+            stack_pairs_enabled=proj.stack_pairs_enabled,
         )
         for proj, asset_count in rows
     ]
@@ -182,6 +189,7 @@ async def get_project(
         updated_at=proj.updated_at,
         asset_count=count,
         preview_images=preview_map.get(proj.id, []),
+        stack_pairs_enabled=proj.stack_pairs_enabled,
     )
     logger.info("get_project: id=%s asset_count=%s", proj.id, count)
     return result
@@ -214,6 +222,9 @@ async def update_project(
     if body.note is not None:
         proj.note = body.note.strip() or None
         updated = True
+    if body.stack_pairs_enabled is not None:
+        proj.stack_pairs_enabled = body.stack_pairs_enabled
+        updated = True
 
     if updated:
         await db.flush()
@@ -241,6 +252,7 @@ async def update_project(
         updated_at=proj.updated_at,
         asset_count=count,
         preview_images=preview_map.get(proj.id, []),
+        stack_pairs_enabled=proj.stack_pairs_enabled,
     )
     logger.info("update_project: id=%s success", project_id)
     return result

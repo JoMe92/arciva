@@ -18,7 +18,6 @@ jobs:
     timeout-minutes: 45
     environment:
       name: production
-      url: ${{ secrets.PROD_URL }}
     env:
       IMAGE_NAME_BASE: ghcr.io/${{ github.repository_owner }}/arciva-frontend
       PROD_URL: ${{ secrets.PROD_URL }}

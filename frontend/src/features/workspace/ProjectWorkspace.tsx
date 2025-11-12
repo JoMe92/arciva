@@ -2,7 +2,7 @@ import React, { useMemo, useRef, useEffect, useState, useCallback } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { TOKENS } from './utils'
-import { listProjectAssets, assetThumbUrl, assetPreviewUrl, updateAssetPreview, getAsset, type AssetListItem, type AssetDetail } from '../../shared/api/assets'
+import { listProjectAssets, assetThumbUrl, assetPreviewUrl, updateAssetInteractions, getAsset, type AssetListItem, type AssetDetail } from '../../shared/api/assets'
 import { getProject, updateProject, type ProjectApiResponse } from '../../shared/api/projects'
 import { initUpload, putUpload, completeUpload } from '../../shared/api/uploads'
 import { placeholderRatioForAspect } from '../../shared/placeholder'
@@ -10,6 +10,7 @@ import type { Photo, ImgType, ColorTag } from './types'
 import {
   TopBar,
   Sidebar,
+  InspectorPanel,
   GridView,
   DetailView,
   EmptyState,
@@ -19,33 +20,30 @@ import {
   type DateTreeYearNode,
   type DateTreeMonthNode,
   type DateTreeDayNode,
-  type SidebarMode,
   type GridSelectOptions,
 } from './components'
 
-const SIDEBAR_WIDTHS: Record<SidebarMode, number> = {
-  expanded: 304,
-  slim: 60,
-  hidden: 0,
-}
-const INSPECTOR_WIDTH = 260
+const LEFT_MIN_WIDTH = 280
+const LEFT_MAX_WIDTH = 420
+const LEFT_DEFAULT_WIDTH = 320
+const LEFT_COLLAPSED_WIDTH = 64
+const RIGHT_MIN_WIDTH = 320
+const RIGHT_MAX_WIDTH = 480
+const RIGHT_DEFAULT_WIDTH = 360
+const RIGHT_COLLAPSED_WIDTH = 64
+const HANDLE_WIDTH = 12
+const RESIZE_STEP = 16
 const IGNORED_METADATA_WARNINGS = new Set(['EXIFTOOL_ERROR', 'EXIFTOOL_NOT_INSTALLED', 'EXIFTOOL_JSON_ERROR'])
 const DATE_KEY_DELIM = '__'
 const UNKNOWN_VALUE = 'unknown'
-const MONTH_NAMES = [
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
-]
+const MONTH_FORMATTER = new Intl.DateTimeFormat(undefined, { month: 'long' })
+
+function localizedMonthLabel(monthValue: string) {
+  if (monthValue === UNKNOWN_VALUE) return 'Unknown month'
+  const monthNumber = Number(monthValue)
+  if (!Number.isFinite(monthNumber) || monthNumber < 1 || monthNumber > 12) return 'Unknown month'
+  return MONTH_FORMATTER.format(new Date(Date.UTC(2000, monthNumber - 1, 1)))
+}
 
 type DateParts = {
   yearValue: string
@@ -119,8 +117,7 @@ function computeDateParts(photo: Photo): DateParts {
   const daySort = dayValue === UNKNOWN_VALUE ? Number.NEGATIVE_INFINITY : (parsed ?? new Date(0)).getTime()
 
   const yearLabel = yearValue === UNKNOWN_VALUE ? 'Unknown date' : yearValue
-  const monthLabel =
-    monthValue === UNKNOWN_VALUE ? 'Unknown month' : MONTH_NAMES[Math.min(Math.max(Number(monthValue) - 1, 0), MONTH_NAMES.length - 1)]
+  const monthLabel = localizedMonthLabel(monthValue)
   const dayLabel =
     yearValue === UNKNOWN_VALUE || monthValue === UNKNOWN_VALUE || dayValue === UNKNOWN_VALUE
       ? 'Unknown day'
@@ -295,6 +292,19 @@ function mapAssetToPhoto(item: AssetListItem, existing?: Photo): Photo {
   const placeholderRatio = existing?.placeholderRatio ?? placeholderRatioForAspect(aspect)
 
   const isPreview = typeof item.is_preview === 'boolean' ? item.is_preview : existing?.isPreview ?? false
+  const ratingValue = typeof item.rating === 'number' ? item.rating : existing?.rating ?? 0
+  const rating = Math.max(0, Math.min(5, ratingValue)) as Photo['rating']
+  const picked = typeof item.picked === 'boolean' ? item.picked : existing?.picked ?? false
+  const rejected = typeof item.rejected === 'boolean' ? item.rejected : existing?.rejected ?? false
+  const colorFromApi = item.color_label ?? existing?.tag ?? 'None'
+  const colorLabel = (['None', 'Red', 'Green', 'Blue', 'Yellow', 'Purple'] as ColorTag[]).includes(colorFromApi as ColorTag)
+    ? (colorFromApi as ColorTag)
+    : existing?.tag ?? 'None'
+  const stackPrimaryAssetId = item.stack_primary_asset_id ?? existing?.stackPrimaryAssetId ?? item.id
+  const pairId = item.pair_id ?? existing?.pairId ?? null
+  const pairedAssetId = item.paired_asset_id ?? existing?.pairedAssetId ?? null
+  const pairedAssetType = item.paired_asset_type ?? existing?.pairedAssetType ?? null
+  const basename = item.basename ?? existing?.basename ?? null
 
   return {
     id: item.id,
@@ -303,17 +313,63 @@ function mapAssetToPhoto(item: AssetListItem, existing?: Photo): Photo {
     date,
     capturedAt,
     uploadedAt,
-    rating: existing?.rating ?? 0,
-    picked: existing?.picked ?? isPreview,
-    rejected: existing?.rejected ?? false,
-    tag: existing?.tag ?? 'None',
+    rating,
+    picked,
+    rejected,
+    tag: colorLabel,
     thumbSrc,
     previewSrc,
     placeholderRatio,
     isPreview,
     previewOrder: typeof item.preview_order === 'number' ? item.preview_order : existing?.previewOrder ?? null,
     metadataWarnings: Array.isArray(item.metadata_warnings) ? item.metadata_warnings : existing?.metadataWarnings ?? [],
+    status: item.status,
+    basename,
+    pairId,
+    pairedAssetId,
+    pairedAssetType,
+    stackPrimaryAssetId,
   }
+}
+
+function mergePhotosFromItems(current: Photo[], items: AssetListItem[]): Photo[] {
+  if (!items.length) return current
+  const nextMap = new Map<string, Photo>()
+  items.forEach((item) => {
+    const existing = current.find((photo) => photo.id === item.id)
+    nextMap.set(item.id, mapAssetToPhoto(item, existing))
+  })
+  return current.map((photo) => nextMap.get(photo.id) ?? photo)
+}
+
+type InteractionPatch = {
+  rating?: Photo['rating']
+  tag?: ColorTag
+  picked?: boolean
+  rejected?: boolean
+}
+
+function patchPhotoInteractions(photo: Photo, patch: InteractionPatch): Photo {
+  let next = photo
+  if (patch.rating !== undefined && patch.rating !== photo.rating) {
+    next = next === photo ? { ...next, rating: patch.rating } : { ...next, rating: patch.rating }
+  }
+  if (patch.tag && patch.tag !== photo.tag) {
+    next = next === photo ? { ...next, tag: patch.tag } : { ...next, tag: patch.tag }
+  }
+  if (patch.picked !== undefined && patch.picked !== photo.picked) {
+    next =
+      next === photo
+        ? { ...next, picked: patch.picked, rejected: patch.picked ? false : next.rejected }
+        : { ...next, picked: patch.picked, rejected: patch.picked ? false : next.rejected }
+  }
+  if (patch.rejected !== undefined && patch.rejected !== photo.rejected) {
+    next =
+      next === photo
+        ? { ...next, rejected: patch.rejected, picked: patch.rejected ? false : next.picked }
+        : { ...next, rejected: patch.rejected, picked: patch.rejected ? false : next.picked }
+  }
+  return next
 }
 
 export default function ProjectWorkspace() {
@@ -329,18 +385,38 @@ export default function ProjectWorkspace() {
     initialData: cachedProject,
   })
   const projectName = projectDetail?.title?.trim() || `Project ${id || '—'}`
+  const [stackPairsEnabled, setStackPairsEnabled] = useState(projectDetail?.stack_pairs_enabled ?? false)
+  useEffect(() => {
+    if (typeof projectDetail?.stack_pairs_enabled === 'boolean') {
+      setStackPairsEnabled(projectDetail.stack_pairs_enabled)
+    }
+  }, [projectDetail?.stack_pairs_enabled])
+  const applyProjectUpdate = useCallback((updated: ProjectApiResponse) => {
+    if (!id) return
+    setStackPairsEnabled(updated.stack_pairs_enabled ?? false)
+    queryClient.setQueryData(['project', id], updated)
+    queryClient.setQueryData<ProjectApiResponse[] | undefined>(['projects'], (prev) => {
+      if (!prev) return prev
+      return prev.map((proj) => (proj.id === updated.id ? { ...proj, title: updated.title, updated_at: updated.updated_at, stack_pairs_enabled: updated.stack_pairs_enabled } : proj))
+    })
+  }, [id, queryClient])
+
   const renameMutation = useMutation({
     mutationFn: ({ title }: { title: string }) => {
       if (!id) throw new Error('Project id missing')
       return updateProject(id, { title })
     },
     onSuccess: (updated) => {
-      if (!id) return
-      queryClient.setQueryData(['project', id], updated)
-      queryClient.setQueryData<ProjectApiResponse[] | undefined>(['projects'], (prev) => {
-        if (!prev) return prev
-        return prev.map((proj) => (proj.id === updated.id ? { ...proj, title: updated.title, updated_at: updated.updated_at } : proj))
-      })
+      applyProjectUpdate(updated)
+    },
+  })
+  const stackToggleMutation = useMutation({
+    mutationFn: (nextEnabled: boolean) => {
+      if (!id) throw new Error('Project id missing')
+      return updateProject(id, { stack_pairs_enabled: nextEnabled })
+    },
+    onSuccess: (updated) => {
+      applyProjectUpdate(updated)
     },
   })
   const [searchParams, setSearchParams] = useSearchParams()
@@ -348,7 +424,6 @@ export default function ProjectWorkspace() {
   const [photos, setPhotos] = useState<Photo[]>([])
   const [loadingAssets, setLoadingAssets] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
-  const [pickError, setPickError] = useState<string | null>(null)
   const prevPhotosRef = useRef<Photo[]>([])
   const currentIndexRef = useRef(0)
   const currentPhotoIdRef = useRef<string | null>(null)
@@ -371,6 +446,15 @@ export default function ProjectWorkspace() {
     if (trimmed === projectName.trim()) return
     await renameMutation.mutateAsync({ title: trimmed })
   }, [id, projectName, renameMutation])
+  const handleStackToggle = useCallback((next: boolean) => {
+    const previous = stackPairsEnabled
+    setStackPairsEnabled(next)
+    stackToggleMutation.mutate(next, {
+      onError: () => {
+        setStackPairsEnabled(previous)
+      },
+    })
+  }, [stackPairsEnabled, stackToggleMutation])
 
   const refreshAssets = useCallback(async (focusNewest: boolean = false) => {
     if (!id) return
@@ -422,48 +506,38 @@ export default function ProjectWorkspace() {
     }
   }, [id])
 
-  const pickMutation = useMutation({
-    mutationFn: async ({ assetId, pick, makePrimary }: { assetId: string; pick: boolean; makePrimary?: boolean }) => {
+  const interactionMutation = useMutation({
+    mutationFn: async ({ assetIds, changes }: { assetIds: string[]; changes: InteractionPatch }) => {
       if (!id) {
         throw new Error('Missing project identifier')
       }
-      return updateAssetPreview(id, assetId, pick, { makePrimary })
+      return updateAssetInteractions(id, {
+        assetIds,
+        rating: changes.rating,
+        colorLabel: changes.tag,
+        picked: changes.picked,
+        rejected: changes.rejected,
+      })
     },
-    onSuccess: () => {
-      setPickError(null)
+    onSuccess: (response) => {
+      setPhotos((prev) => mergePhotosFromItems(prev, response.items))
+      prevPhotosRef.current = mergePhotosFromItems(prevPhotosRef.current, response.items)
+    },
+    onError: (error) => {
+      console.error('Failed to update interactions', error)
       refreshAssets()
-      queryClient.invalidateQueries({ queryKey: ['projects'] })
-    },
-    onError: (err: unknown) => {
-      const message = err instanceof Error ? err.message : 'Failed to update preview state'
-      setPickError(message)
     },
   })
 
-  const togglePick = useCallback(async (photo: Photo) => {
-    if (pickMutation.isPending) return
-    const hadOtherPicked = photos.some((p) => p.picked && p.id !== photo.id)
-    const nextPicked = !photo.picked
-    setPhotos((arr) =>
-      arr.map((p) =>
-        p.id === photo.id
-          ? {
-              ...p,
-              picked: nextPicked,
-              isPreview: nextPicked,
-              previewOrder: nextPicked ? p.previewOrder : null,
-              rejected: nextPicked ? false : p.rejected,
-            }
-          : p,
-      ),
-    )
-    setPickError(null)
-    try {
-      await pickMutation.mutateAsync({ assetId: photo.id, pick: nextPicked, makePrimary: nextPicked && !hadOtherPicked })
-    } catch (err) {
-      refreshAssets()
-    }
-  }, [pickMutation, photos, refreshAssets])
+  const pairLookup = useMemo(() => {
+    const map = new Map<string, string>()
+    photos.forEach((photo) => {
+      if (photo.pairedAssetId) {
+        map.set(photo.id, photo.pairedAssetId)
+      }
+    })
+    return map
+  }, [photos])
 
   const [showJPEG, setShowJPEG] = useState(true)
   const [showRAW, setShowRAW] = useState(true)
@@ -471,61 +545,103 @@ export default function ProjectWorkspace() {
   const [onlyPicked, setOnlyPicked] = useState(false)
   const [hideRejected, setHideRejected] = useState(true)
   const [filterColor, setFilterColor] = useState<'Any' | ColorTag>('Any')
-  const [sidebarMode, setSidebarMode] = useState<SidebarMode>('expanded')
-  const [lastVisibleSidebarMode, setLastVisibleSidebarMode] = useState<SidebarMode>('expanded')
+
+  const applyInteraction = useCallback((targetIds: Set<string>, patch: InteractionPatch) => {
+    if (!targetIds.size) return
+    const expanded = new Set<string>()
+    targetIds.forEach((assetId) => {
+      expanded.add(assetId)
+      const partner = pairLookup.get(assetId)
+      if (partner) {
+        expanded.add(partner)
+      }
+    })
+    setPhotos((arr) => arr.map((photo) => (expanded.has(photo.id) ? patchPhotoInteractions(photo, patch) : photo)))
+    interactionMutation.mutate({ assetIds: Array.from(expanded), changes: patch })
+  }, [pairLookup, interactionMutation])
+
+  const storageScope = useMemo(() => (id ? `workspace:${id}` : 'workspace'), [id])
+  const leftWidthKey = `${storageScope}:left-width`
+  const leftCollapsedKey = `${storageScope}:left-collapsed`
+  const rightWidthKey = `${storageScope}:right-width`
+  const rightCollapsedKey = `${storageScope}:right-collapsed`
+  const [leftPanelWidth, setLeftPanelWidth] = useState(LEFT_DEFAULT_WIDTH)
+  const [rightPanelWidth, setRightPanelWidth] = useState(RIGHT_DEFAULT_WIDTH)
+  const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(false)
+  const [rightPanelCollapsed, setRightPanelCollapsed] = useState(false)
 
   useEffect(() => {
-    if (sidebarMode !== 'hidden') {
-      setLastVisibleSidebarMode(sidebarMode)
+    if (typeof window === 'undefined') return
+    const storedWidth = window.localStorage.getItem(leftWidthKey)
+    if (storedWidth) {
+      const parsed = Number(storedWidth)
+      if (Number.isFinite(parsed)) {
+        setLeftPanelWidth(clampNumber(parsed, LEFT_MIN_WIDTH, LEFT_MAX_WIDTH))
+      }
     }
-  }, [sidebarMode])
+    const storedCollapsed = window.localStorage.getItem(leftCollapsedKey)
+    if (storedCollapsed !== null) {
+      setLeftPanelCollapsed(storedCollapsed === '1')
+    }
+  }, [leftWidthKey, leftCollapsedKey])
 
-  const collapseSidebar = useCallback(() => {
-    setSidebarMode((prev) => {
-      if (prev === 'expanded') return 'slim'
-      if (prev === 'slim') return 'hidden'
-      return prev
-    })
-  }, [])
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const storedWidth = window.localStorage.getItem(rightWidthKey)
+    if (storedWidth) {
+      const parsed = Number(storedWidth)
+      if (Number.isFinite(parsed)) {
+        setRightPanelWidth(clampNumber(parsed, RIGHT_MIN_WIDTH, RIGHT_MAX_WIDTH))
+      }
+    }
+    const storedCollapsed = window.localStorage.getItem(rightCollapsedKey)
+    if (storedCollapsed !== null) {
+      setRightPanelCollapsed(storedCollapsed === '1')
+    }
+  }, [rightWidthKey, rightCollapsedKey])
 
-  const expandSidebar = useCallback(() => {
-    setSidebarMode((prev) => {
-      if (prev === 'hidden') return lastVisibleSidebarMode
-      if (prev === 'slim') return 'expanded'
-      return prev
-    })
-  }, [lastVisibleSidebarMode])
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem(leftWidthKey, String(leftPanelWidth))
+  }, [leftPanelWidth, leftWidthKey])
 
-  const handleSidebarModeChange = useCallback((next: SidebarMode) => {
-    setSidebarMode(next)
-  }, [])
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem(rightWidthKey, String(rightPanelWidth))
+  }, [rightPanelWidth, rightWidthKey])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem(leftCollapsedKey, leftPanelCollapsed ? '1' : '0')
+  }, [leftCollapsedKey, leftPanelCollapsed])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem(rightCollapsedKey, rightPanelCollapsed ? '1' : '0')
+  }, [rightCollapsedKey, rightPanelCollapsed])
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (!event.altKey) return
       if (event.key === '[') {
         event.preventDefault()
-        collapseSidebar()
+        setLeftPanelCollapsed(true)
       } else if (event.key === ']') {
         event.preventDefault()
-        expandSidebar()
+        setLeftPanelCollapsed(false)
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [collapseSidebar, expandSidebar])
+  }, [])
 
   useEffect(() => {
     prevPhotosRef.current = photos
   }, [photos])
 
-  useEffect(() => {
-    currentIndexRef.current = current
-    currentPhotoIdRef.current = photos[current]?.id ?? null
-  }, [photos, current])
-
   const contentRef = useRef<HTMLDivElement | null>(null)
   const [contentW, setContentW] = useState(1200)
+  const paginatorRef = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
     if (!contentRef.current) return
     const ro = new ResizeObserver((entries) => setContentW(entries[0].contentRect.width))
@@ -538,7 +654,98 @@ export default function ProjectWorkspace() {
   const [gridSize, setGridSizeState] = useState(Math.max(140, minThumbForSix))
   useEffect(() => setGridSizeState((s) => Math.max(s, minThumbForSix)), [minThumbForSix])
   const setGridSize = (n: number) => setGridSizeState(Math.max(n, minThumbForSix))
-  const sidebarWidth = SIDEBAR_WIDTHS[sidebarMode]
+  const effectiveLeftWidth = leftPanelCollapsed ? LEFT_COLLAPSED_WIDTH : leftPanelWidth
+  const effectiveRightWidth = rightPanelCollapsed ? RIGHT_COLLAPSED_WIDTH : rightPanelWidth
+
+  const handleLeftHandlePointerDown = useCallback(
+    (event: React.PointerEvent<HTMLButtonElement>) => {
+      if (event.pointerType === 'mouse' && event.button !== 0) return
+      event.preventDefault()
+      const pointerId = event.pointerId
+      const target = event.currentTarget
+      const startX = event.clientX
+      const startWidth = leftPanelWidth
+      if (leftPanelCollapsed) {
+        setLeftPanelCollapsed(false)
+      }
+      const handlePointerMove = (moveEvent: PointerEvent) => {
+        const delta = moveEvent.clientX - startX
+        setLeftPanelWidth(clampNumber(startWidth + delta, LEFT_MIN_WIDTH, LEFT_MAX_WIDTH))
+      }
+      const handlePointerUp = () => {
+        window.removeEventListener('pointermove', handlePointerMove)
+        window.removeEventListener('pointerup', handlePointerUp)
+        target.releasePointerCapture?.(pointerId)
+      }
+      target.setPointerCapture?.(pointerId)
+      window.addEventListener('pointermove', handlePointerMove)
+      window.addEventListener('pointerup', handlePointerUp)
+    },
+    [leftPanelCollapsed, leftPanelWidth],
+  )
+
+  const handleRightHandlePointerDown = useCallback(
+    (event: React.PointerEvent<HTMLButtonElement>) => {
+      if (event.pointerType === 'mouse' && event.button !== 0) return
+      event.preventDefault()
+      const pointerId = event.pointerId
+      const target = event.currentTarget
+      const startX = event.clientX
+      const startWidth = rightPanelWidth
+      if (rightPanelCollapsed) {
+        setRightPanelCollapsed(false)
+      }
+      const handlePointerMove = (moveEvent: PointerEvent) => {
+        const delta = moveEvent.clientX - startX
+        setRightPanelWidth(clampNumber(startWidth - delta, RIGHT_MIN_WIDTH, RIGHT_MAX_WIDTH))
+      }
+      const handlePointerUp = () => {
+        window.removeEventListener('pointermove', handlePointerMove)
+        window.removeEventListener('pointerup', handlePointerUp)
+        target.releasePointerCapture?.(pointerId)
+      }
+      target.setPointerCapture?.(pointerId)
+      window.addEventListener('pointermove', handlePointerMove)
+      window.addEventListener('pointerup', handlePointerUp)
+    },
+    [rightPanelCollapsed, rightPanelWidth],
+  )
+
+  const handleLeftHandleKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLButtonElement>) => {
+      if (event.key === 'ArrowLeft') {
+        if (leftPanelCollapsed) return
+        event.preventDefault()
+        setLeftPanelWidth((prev) => clampNumber(prev - RESIZE_STEP, LEFT_MIN_WIDTH, LEFT_MAX_WIDTH))
+      } else if (event.key === 'ArrowRight') {
+        event.preventDefault()
+        setLeftPanelCollapsed(false)
+        setLeftPanelWidth((prev) => clampNumber(prev + RESIZE_STEP, LEFT_MIN_WIDTH, LEFT_MAX_WIDTH))
+      } else if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault()
+        setLeftPanelCollapsed((prev) => !prev)
+      }
+    },
+    [leftPanelCollapsed],
+  )
+
+  const handleRightHandleKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLButtonElement>) => {
+      if (event.key === 'ArrowLeft') {
+        if (rightPanelCollapsed) return
+        event.preventDefault()
+        setRightPanelWidth((prev) => clampNumber(prev - RESIZE_STEP, RIGHT_MIN_WIDTH, RIGHT_MAX_WIDTH))
+      } else if (event.key === 'ArrowRight') {
+        event.preventDefault()
+        setRightPanelCollapsed(false)
+        setRightPanelWidth((prev) => clampNumber(prev + RESIZE_STEP, RIGHT_MIN_WIDTH, RIGHT_MAX_WIDTH))
+      } else if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault()
+        setRightPanelCollapsed((prev) => !prev)
+      }
+    },
+    [rightPanelCollapsed],
+  )
 
   const [folderMode, setFolderMode] = useState<'date' | 'custom'>('date')
   const [customFolder, setCustomFolder] = useState('My Folder')
@@ -604,15 +811,45 @@ export default function ProjectWorkspace() {
     clearDateFilter()
   }, [clearDateFilter])
 
-  const visible: Photo[] = useMemo(() => photos.filter((p) => {
+  const displayPhotos: Photo[] = useMemo(() => {
+    if (!stackPairsEnabled) return photos
+    return photos.reduce<Photo[]>((acc, photo) => {
+      if (photo.pairId && photo.type === 'JPEG' && photo.pairedAssetId) {
+        return acc
+      }
+      if (photo.pairId && photo.pairedAssetId) {
+        acc.push({ ...photo, displayType: 'JPEG + RAW', isStacked: true })
+        return acc
+      }
+      acc.push({ ...photo, displayType: photo.displayType ?? photo.type, isStacked: false })
+      return acc
+    }, [])
+  }, [photos, stackPairsEnabled])
+
+  const visible: Photo[] = useMemo(() => displayPhotos.filter((p) => {
     const dateMatch = !selectedDayKey || photoKeyMap.get(p.id) === selectedDayKey
-    const typeOk = (p.type === 'JPEG' && showJPEG) || (p.type === 'RAW' && showRAW)
+    const typeOk =
+      (stackPairsEnabled && p.pairId && p.pairedAssetId ? showJPEG || showRAW : (p.type === 'JPEG' && showJPEG) || (p.type === 'RAW' && showRAW))
     const ratingOk = p.rating >= minStars
     const pickOk = !onlyPicked || p.picked
     const rejectOk = !hideRejected || !p.rejected
     const colorOk = filterColor === 'Any' || p.tag === filterColor
     return dateMatch && typeOk && ratingOk && pickOk && rejectOk && colorOk
-  }), [photos, selectedDayKey, photoKeyMap, showJPEG, showRAW, minStars, onlyPicked, hideRejected, filterColor])
+  }), [displayPhotos, selectedDayKey, photoKeyMap, showJPEG, showRAW, minStars, onlyPicked, hideRejected, filterColor, stackPairsEnabled])
+
+  useEffect(() => {
+    currentIndexRef.current = current
+    currentPhotoIdRef.current = visible[current]?.id ?? null
+  }, [visible, current])
+
+  useEffect(() => {
+    const targetId = currentPhotoIdRef.current
+    if (!targetId) return
+    const idx = visible.findIndex((photo) => photo.id === targetId)
+    if (idx >= 0 && idx !== current) {
+      setCurrent(idx)
+    }
+  }, [visible, current])
 
   useEffect(() => {
     setSelectedPhotoIds((prev) => {
@@ -695,47 +932,61 @@ export default function ProjectWorkspace() {
   // Shortcuts (gleich wie Monolith)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement)?.tagName === 'INPUT') return
-      if (e.key === 'g' || e.key === 'G') setView('grid')
-      if (e.key === 'd' || e.key === 'D') setView('detail')
-      if (!visible.length) return
-      const cur = visible[current]; if (!cur) return
-      if (e.key === 'p' || e.key === 'P') {
-        togglePick(cur)
+      const target = e.target as HTMLElement | null
+      const lowerKey = e.key.toLowerCase()
+      if ((e.metaKey || e.ctrlKey) && lowerKey === 's') {
+        e.preventDefault()
+        applyChanges()
+        return
       }
-      if (e.key === 'x' || e.key === 'X') {
+      if (target?.tagName === 'INPUT') return
+      if (lowerKey === 'g') setView('grid')
+      if (lowerKey === 'd') setView('detail')
+      if (!visible.length) return
+      const cur = visible[current]
+      if (!cur) return
+      if (lowerKey === 'p' && !e.metaKey && !e.altKey && !e.ctrlKey) {
+        paginatorRef.current?.focus({ preventScroll: true })
+      }
+      if (lowerKey === 'p') {
         const targets = resolveActionTargetIds(cur.id)
-        if (targets.size) {
-          photos.forEach((photo) => {
-            if (targets.has(photo.id) && photo.picked) {
-              void togglePick(photo)
-            }
-          })
-          setPhotos((arr) =>
-            arr.map((x) =>
-              targets.has(x.id)
-                ? {
-                    ...x,
-                    rejected: !x.rejected,
-                    picked: x.picked ? false : x.picked,
-                  }
-                : x,
-            ),
-          )
-        }
+        targets.forEach((id) => {
+          const photo = photos.find((x) => x.id === id)
+          if (photo) {
+            applyInteraction(new Set([id]), { picked: !photo.picked })
+          }
+        })
+      }
+      if (lowerKey === 'x') {
+        const targets = resolveActionTargetIds(cur.id)
+        targets.forEach((id) => {
+          const photo = photos.find((x) => x.id === id)
+          if (photo) {
+            applyInteraction(new Set([id]), { rejected: !photo.rejected })
+          }
+        })
       }
       if (/^[1-5]$/.test(e.key)) {
         const targets = resolveActionTargetIds(cur.id)
         if (targets.size) {
           const rating = Number(e.key) as 1 | 2 | 3 | 4 | 5
-          setPhotos((arr) => arr.map((x) => (targets.has(x.id) ? { ...x, rating } : x)))
+          applyInteraction(targets, { rating })
         }
       }
       if (e.key === 'ArrowRight') setCurrent((i) => Math.min(i + 1, visible.length - 1))
       if (e.key === 'ArrowLeft') setCurrent((i) => Math.max(i - 1, 0))
+      if (e.key === 'Home') {
+        e.preventDefault()
+        setCurrent(0)
+      }
+      if (e.key === 'End') {
+        e.preventDefault()
+        setCurrent(Math.max(0, visible.length - 1))
+      }
     }
-    window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey)
-  }, [visible, current, togglePick, resolveActionTargetIds, photos])
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [visible, current, applyInteraction, resolveActionTargetIds, photos])
 
   // Custom events vom Grid
   useEffect(() => {
@@ -743,37 +994,33 @@ export default function ProjectWorkspace() {
       const targets = resolveActionTargetIds(e.detail.id as string | null)
       if (!targets.size) return
       const rating = e.detail.r as 1 | 2 | 3 | 4 | 5
-      setPhotos((arr) => arr.map((x) => (targets.has(x.id) ? { ...x, rating } : x)))
+      applyInteraction(targets, { rating })
     }
     const onPick = (e: any) => {
-      const photo = photos.find((x) => x.id === e.detail.id)
-      if (photo) togglePick(photo)
+      const targets = resolveActionTargetIds(e.detail.id as string | null)
+      if (!targets.size) return
+      targets.forEach((id) => {
+        const photo = photos.find((x) => x.id === id)
+        if (photo) {
+          applyInteraction(new Set([id]), { picked: !photo.picked })
+        }
+      })
     }
     const onReject = (e: any) => {
       const targets = resolveActionTargetIds(e.detail.id as string | null)
       if (!targets.size) return
-      photos.forEach((photo) => {
-        if (targets.has(photo.id) && photo.picked) {
-          void togglePick(photo)
+      targets.forEach((id) => {
+        const photo = photos.find((x) => x.id === id)
+        if (photo) {
+          applyInteraction(new Set([id]), { rejected: !photo.rejected })
         }
       })
-      setPhotos((arr) =>
-        arr.map((x) =>
-          targets.has(x.id)
-            ? {
-                ...x,
-                rejected: !x.rejected,
-                picked: x.picked ? false : x.picked,
-              }
-            : x,
-        ),
-      )
     }
     const onColor = (e: any) => {
       const targets = resolveActionTargetIds(e.detail.id as string | null)
       if (!targets.size) return
       const color = e.detail.t as ColorTag
-      setPhotos((arr) => arr.map((x) => (targets.has(x.id) ? { ...x, tag: color } : x)))
+      applyInteraction(targets, { tag: color })
     }
     window.addEventListener('rate', onRate as any)
     window.addEventListener('pick', onPick as any)
@@ -785,7 +1032,7 @@ export default function ProjectWorkspace() {
       window.removeEventListener('reject', onReject as any)
       window.removeEventListener('color', onColor as any)
     }
-  }, [photos, togglePick, resolveActionTargetIds])
+  }, [photos, resolveActionTargetIds, applyInteraction])
 
   useEffect(() => {
     if (!id) return
@@ -937,7 +1184,7 @@ export default function ProjectWorkspace() {
     if (!currentAssetDetail?.metadata) return []
     return Object.entries(currentAssetDetail.metadata)
       .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([key, value]) => ({ key, value }))
+      .map(([key, value]) => ({ key, value: formatMetadataValue(value) }))
   }, [currentAssetDetail?.metadata])
   const metadataWarnings = useMemo(() => {
     const warnings = currentAssetDetail?.metadata_warnings ?? currentPhoto?.metadataWarnings ?? []
@@ -951,12 +1198,36 @@ export default function ProjectWorkspace() {
     if (Number.isNaN(parsed.getTime())) return '—'
     return parsed.toLocaleDateString()
   }, [currentPhoto])
+  const inspectorRows = useMemo(() => {
+    if (!currentPhoto) return []
+    const sizeLabel =
+      assetDetailFetching && !currentAssetDetail
+        ? 'Loading…'
+        : currentAssetDetail
+          ? formatBytes(currentAssetDetail.size_bytes)
+          : '—'
+    const dimensionsLabel = formatDimensions(currentAssetDetail?.width, currentAssetDetail?.height)
+    return [
+      { label: 'Name', value: currentPhoto.name || '—' },
+      { label: 'Type', value: currentPhoto.displayType ?? currentPhoto.type },
+      { label: 'Date', value: detailDateLabel },
+      { label: 'Size', value: sizeLabel },
+      { label: 'Dimensions', value: dimensionsLabel },
+      { label: 'Rating', value: `${currentPhoto.rating}★` },
+      { label: 'Flag', value: currentPhoto.picked ? 'Picked' : '—' },
+      { label: 'Rejected', value: currentPhoto.rejected ? 'Yes' : 'No' },
+      { label: 'Color', value: currentPhoto.tag },
+    ]
+  }, [assetDetailFetching, currentAssetDetail, currentPhoto, detailDateLabel])
+  const metadataLoading = Boolean(currentAssetId) && assetDetailFetching
+  const metadataErrorMessage = useMemo(() => {
+    if (!assetDetailError) return null
+    if (assetDetailError instanceof Error) return assetDetailError.message
+    if (typeof assetDetailError === 'string') return assetDetailError
+    return 'Unable to load metadata'
+  }, [assetDetailError])
 
   const hasAny = photos.length > 0
-
-  useEffect(() => {
-    setPickError(null)
-  }, [currentPhoto?.id])
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[var(--surface-subtle,#FBF7EF)] text-[var(--text,#1F1E1B)]">
@@ -966,7 +1237,6 @@ export default function ProjectWorkspace() {
         onRename={handleRename}
         renamePending={renameMutation.isPending}
         renameError={renameMutation.isError ? (renameMutation.error as Error).message : null}
-        onImport={() => setImportOpen(true)}
         view={view}
         onChangeView={setView}
         gridSize={gridSize}
@@ -992,6 +1262,9 @@ export default function ProjectWorkspace() {
         filterCount={activeFilterCount}
         onResetFilters={resetFilters}
         visibleCount={visible.length}
+        stackPairsEnabled={stackPairsEnabled}
+        onToggleStackPairs={handleStackToggle}
+        stackTogglePending={stackToggleMutation.isPending}
         selectedDayLabel={selectedDayNode ? selectedDayNode.label : null}
         loadingAssets={loadingAssets}
         loadError={loadError}
@@ -1041,7 +1314,9 @@ export default function ProjectWorkspace() {
 
       <div
         className="flex-1 min-h-0 grid overflow-hidden"
-        style={{ gridTemplateColumns: `${sidebarWidth}px minmax(0,1fr) ${INSPECTOR_WIDTH}px` }}
+        style={{
+          gridTemplateColumns: `${effectiveLeftWidth}px ${HANDLE_WIDTH}px minmax(0,1fr) ${HANDLE_WIDTH}px ${effectiveRightWidth}px`,
+        }}
       >
         <Sidebar
           dateTree={dateTree}
@@ -1050,17 +1325,34 @@ export default function ProjectWorkspace() {
           selectedDayKey={selectedDayKey}
           selectedDay={selectedDayNode}
           onClearDateFilter={clearDateFilter}
-          mode={sidebarMode}
-          onModeChange={handleSidebarModeChange}
-          onCollapse={collapseSidebar}
-          onExpand={expandSidebar}
+          collapsed={leftPanelCollapsed}
+          onCollapse={() => setLeftPanelCollapsed(true)}
+          onExpand={() => setLeftPanelCollapsed(false)}
         />
 
-        <main ref={contentRef} className="relative flex min-h-0 flex-col bg-[var(--surface,#FFFFFF)] border-r border-[var(--border,#E1D3B9)]">
+        <button
+          type="button"
+          role="separator"
+          aria-orientation="vertical"
+          aria-valuemin={LEFT_COLLAPSED_WIDTH}
+          aria-valuemax={LEFT_MAX_WIDTH}
+          aria-valuenow={leftPanelCollapsed ? LEFT_COLLAPSED_WIDTH : leftPanelWidth}
+          aria-valuetext={leftPanelCollapsed ? 'Collapsed' : `${Math.round(leftPanelWidth)} pixels`}
+          aria-label="Resize Import panel"
+          tabIndex={0}
+          className="group flex h-full w-full cursor-col-resize items-center justify-center border-x border-[var(--border,#EDE1C6)] bg-[var(--sand-50,#FBF7EF)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)]"
+          onPointerDown={handleLeftHandlePointerDown}
+          onKeyDown={handleLeftHandleKeyDown}
+          onDoubleClick={() => setLeftPanelCollapsed((prev) => !prev)}
+        >
+          <span className="h-10 w-[2px] rounded-full bg-[var(--border,#EDE1C6)] transition-colors group-hover:bg-[var(--text-muted,#6B645B)]" aria-hidden="true" />
+        </button>
+
+        <main ref={contentRef} className="relative flex min-h-0 flex-col bg-[var(--surface,#FFFFFF)]">
           <div className="flex-1 min-h-0 overflow-hidden">
             {!hasAny ? (
               <div className="flex h-full items-center justify-center overflow-auto p-6">
-                <EmptyState onImport={() => setImportOpen(true)} />
+                <EmptyState />
               </div>
             ) : visible.length === 0 ? (
               <div className="flex h-full items-center justify-center overflow-auto p-6">
@@ -1079,51 +1371,48 @@ export default function ProjectWorkspace() {
                 />
               </div>
             ) : (
-              <DetailView
-                items={visible}
-                index={current}
-                setIndex={setCurrent}
-                className="h-full"
-                selectedIds={selectedPhotoIds}
-                onSelect={handlePhotoSelect}
-              />
+            <DetailView
+              items={visible}
+              index={current}
+              setIndex={setCurrent}
+              className="h-full"
+              selectedIds={selectedPhotoIds}
+              onSelect={handlePhotoSelect}
+              paginatorRef={paginatorRef}
+            />
             )}
           </div>
         </main>
 
-        <aside className="h-full overflow-y-auto bg-[var(--surface,#FFFFFF)] p-3 text-xs">
-          <h4 className="font-medium mb-2">Inspector</h4>
-          {currentPhoto ? (
-            <div className="space-y-2">
-              <Row label="Name" value={currentPhoto.name} />
-              <Row label="Type" value={currentPhoto.type} />
-              <Row label="Date" value={detailDateLabel} />
-              <Row
-                label="Size"
-                value={
-                  assetDetailFetching && !currentAssetDetail
-                    ? 'Loading…'
-                    : currentAssetDetail
-                      ? formatBytes(currentAssetDetail.size_bytes)
-                      : '—'
-                }
-              />
-              <Row label="Dimensions" value={formatDimensions(currentAssetDetail?.width, currentAssetDetail?.height)} />
-              <Row label="Rating" value={`${currentPhoto.rating}★`} />
-              <Row label="Flag" value={currentPhoto.picked ? 'Picked' : '—'} />
-              <Row label="Rejected" value={currentPhoto.rejected ? 'Yes' : 'No'} />
-              <Row label="Color" value={currentPhoto.tag} />
-              <MetadataSummary
-                entries={metadataEntries}
-                warnings={metadataWarnings}
-                loading={Boolean(currentAssetId) && assetDetailFetching}
-                error={assetDetailError}
-              />
-            </div>
-          ) : (
-            <div className="text-[var(--text-muted,#6B645B)]">No selection</div>
-          )}
-        </aside>
+        <button
+          type="button"
+          role="separator"
+          aria-orientation="vertical"
+          aria-valuemin={RIGHT_COLLAPSED_WIDTH}
+          aria-valuemax={RIGHT_MAX_WIDTH}
+          aria-valuenow={rightPanelCollapsed ? RIGHT_COLLAPSED_WIDTH : rightPanelWidth}
+          aria-valuetext={rightPanelCollapsed ? 'Collapsed' : `${Math.round(rightPanelWidth)} pixels`}
+          aria-label="Resize Inspector panel"
+          tabIndex={0}
+          className="group flex h-full w-full cursor-col-resize items-center justify-center border-x border-[var(--border,#EDE1C6)] bg-[var(--sand-50,#FBF7EF)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)]"
+          onPointerDown={handleRightHandlePointerDown}
+          onKeyDown={handleRightHandleKeyDown}
+          onDoubleClick={() => setRightPanelCollapsed((prev) => !prev)}
+        >
+          <span className="h-10 w-[2px] rounded-full bg-[var(--border,#EDE1C6)] transition-colors group-hover:bg-[var(--text-muted,#6B645B)]" aria-hidden="true" />
+        </button>
+
+        <InspectorPanel
+          collapsed={rightPanelCollapsed}
+          onCollapse={() => setRightPanelCollapsed(true)}
+          onExpand={() => setRightPanelCollapsed(false)}
+          summaryRows={inspectorRows}
+          hasSelection={Boolean(currentPhoto)}
+          metadataEntries={metadataEntries}
+          metadataWarnings={metadataWarnings}
+          metadataLoading={metadataLoading}
+          metadataError={metadataErrorMessage}
+        />
       </div>
 
       {importOpen && (
@@ -1136,65 +1425,6 @@ export default function ProjectWorkspace() {
           customFolder={customFolder}
         />
       )}
-    </div>
-  )
-}
-
-// Inline Kleinteile (nur diese Seite)
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between border-b border-[var(--border,#E1D3B9)] py-1">
-      <span className="text-[var(--text-muted,#6B645B)]">{label}</span>
-      <span className="font-mono text-[11px]">{value}</span>
-    </div>
-  )
-}
-
-function MetadataSummary({
-  entries,
-  warnings,
-  loading,
-  error,
-}: {
-  entries: { key: string; value: unknown }[]
-  warnings: string[]
-  loading: boolean
-  error: unknown
-}) {
-  const hasEntries = entries.length > 0
-  const errorMessage = error instanceof Error ? error.message : typeof error === 'string' ? error : null
-
-  return (
-    <div className="mt-4 space-y-2 rounded border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-3">
-      <div className="flex items-center justify-between text-[11px] uppercase tracking-wide text-[var(--text-muted,#6B645B)]">
-        <span>Metadata</span>
-        {loading ? <span className="text-[var(--text-muted,#6B645B)] normal-case">Loading…</span> : null}
-      </div>
-      {errorMessage ? <p className="text-[10px] text-[#B42318]">{errorMessage}</p> : null}
-      {warnings.length ? (
-        <ul className="space-y-1 text-[10px] text-[#B45309]">
-          {warnings.map((warning) => (
-            <li key={warning} className="flex items-center gap-2">
-              <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-[#F59E0B] text-[#B45309]">!</span>
-              <span className="truncate">{warning}</span>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      {hasEntries ? (
-        <div className="max-h-64 overflow-auto rounded border border-[var(--border,#E1D3B9)]">
-          <div className="divide-y divide-[var(--border,#E1D3B9)]">
-            {entries.map(({ key, value }) => (
-              <div key={key} className="grid grid-cols-[minmax(0,0.55fr)_minmax(0,1fr)] gap-3 px-3 py-1.5">
-                <div className="font-mono text-[10px] text-[var(--text-muted,#6B645B)] break-words">{key}</div>
-                <div className="text-[11px] text-[var(--text,#1F1E1B)] break-words">{formatMetadataValue(value)}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : !loading && !errorMessage ? (
-        <p className="text-[11px] text-[var(--text-muted,#6B645B)]">No metadata available for this asset.</p>
-      ) : null}
     </div>
   )
 }
@@ -1224,6 +1454,13 @@ function formatBytes(size: number): string {
 function formatDimensions(width?: number | null, height?: number | null): string {
   if (!width || !height) return '—'
   return `${width}×${height}`
+}
+
+function clampNumber(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) return min
+  if (value < min) return min
+  if (value > max) return max
+  return value
 }
 
 function formatMetadataValue(input: unknown): string {
@@ -2745,12 +2982,12 @@ function openLocalPicker(kind: 'files' | 'folder' = 'files') {
                   <div className="text-sm font-medium">Select photos or folders from your computer</div>
                   <div className="mt-1 text-xs text-[var(--text-muted,#6B645B)]">We support JPEG and RAW formats. Picking a folder pulls in everything inside.</div>
                   <div className="mt-4 flex justify-center gap-3 text-sm">
-                    <button type="button" onClick={() => openLocalPicker('files')} className="rounded-md bg-[var(--charcoal-800,#1F1E1B)] px-3 py-2 font-medium text-white">Choose files…</button>
+                    <button type="button" onClick={() => openLocalPicker('files')} className="rounded-md bg-[var(--primary,#A56A4A)] px-3 py-2 font-medium text-[var(--primary-contrast,#FFFFFF)]">Choose files…</button>
                     <button type="button" onClick={() => openLocalPicker('folder')} className="rounded-md border border-[var(--border,#E1D3B9)] px-3 py-2">Choose folder…</button>
                   </div>
                   <div className="mt-3 text-xs text-[var(--text-muted,#6B645B)]">Or just drag & drop files and folders here.</div>
                   {localQueueProgress.active && (
-                    <div role="status" aria-live="polite" className="mt-4 flex w-full max-w-[260px] flex-col items-center gap-2 rounded-md border border-[var(--border,#E1D3B9)] bg-white/90 px-3 py-2 text-center text-[11px] text-[var(--text,#1F1E1B)]">
+                    <div role="status" aria-live="polite" className="mt-4 flex w-full max-w-[260px] flex-col items-center gap-2 rounded-md border border-[var(--border,#E1D3B9)] bg-[var(--surface-frosted-strong,#FBF7EF)] px-3 py-2 text-center text-[11px] text-[var(--text,#1F1E1B)]">
                       <div className="flex items-center justify-center gap-2 font-medium">
                         <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border border-[var(--charcoal-800,#1F1E1B)] border-b-transparent" aria-hidden />
                         Preparing files…
@@ -2764,7 +3001,7 @@ function openLocalPicker(kind: 'files' | 'folder' = 'files') {
                     </div>
                   )}
                   {isDragging && (
-                    <div className="mt-4 rounded-md border border-dashed border-[var(--charcoal-800,#1F1E1B)] bg-white/80 px-3 py-2 text-xs font-medium text-[var(--charcoal-800,#1F1E1B)]">
+                    <div className="mt-4 rounded-md border border-dashed border-[var(--charcoal-800,#1F1E1B)] bg-[var(--surface-frosted,#F8F0E4)] px-3 py-2 text-xs font-medium text-[var(--charcoal-800,#1F1E1B)]">
                       Drop to add {mode === 'local' ? 'to your selection' : 'and review before importing'}.
                     </div>
                   )}
@@ -2977,7 +3214,7 @@ function openLocalPicker(kind: 'files' | 'folder' = 'files') {
             <button
               onClick={submit}
               disabled={!canSubmit}
-              className={`px-3 py-1.5 rounded text-white ${canSubmit ? 'bg-[var(--basalt-700,#4A463F)]' : 'bg-[var(--sand-300,#E1D3B9)] cursor-not-allowed'}`}
+              className={`px-3 py-1.5 rounded text-[var(--primary-contrast,#FFFFFF)] ${canSubmit ? 'bg-[var(--primary,#A56A4A)]' : 'bg-[var(--sand-300,#E1D3B9)] cursor-not-allowed'}`}
             >
               Start upload
             </button>

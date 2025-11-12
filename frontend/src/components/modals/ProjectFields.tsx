@@ -55,7 +55,7 @@ const ProjectFields: React.FC<ProjectFieldsProps> = ({
         <input
           value={title}
           onChange={e => setTitle(e.target.value)}
-          className="mt-1 w-full rounded-lg border border-[var(--border,#E1D3B9)] px-3 py-2 text-sm"
+          className="mt-1 w-full rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 py-2 text-sm"
           placeholder="Untitled project"
         />
       </label>
@@ -64,7 +64,7 @@ const ProjectFields: React.FC<ProjectFieldsProps> = ({
         <input
           value={desc}
           onChange={e => setDesc(e.target.value)}
-          className="mt-1 w-full rounded-lg border border-[var(--border,#E1D3B9)] px-3 py-2 text-sm"
+          className="mt-1 w-full rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 py-2 text-sm"
           placeholder="Short note"
         />
       </label>
@@ -73,7 +73,7 @@ const ProjectFields: React.FC<ProjectFieldsProps> = ({
         <input
           value={client}
           onChange={e => setClient(e.target.value)}
-          className="mt-1 w-full rounded-lg border border-[var(--border,#E1D3B9)] px-3 py-2 text-sm"
+          className="mt-1 w-full rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 py-2 text-sm"
           placeholder="Client name"
         />
       </label>
@@ -87,7 +87,7 @@ const ProjectFields: React.FC<ProjectFieldsProps> = ({
                 onClick={() => toggleTag(t)}
                 className={`px-2 py-1 rounded-full text-[11px] border ${
                   selTags.includes(t)
-                    ? 'bg-[var(--basalt-700,#4A463F)] text-white border-transparent'
+                    ? 'bg-[var(--primary,#A56A4A)] text-[var(--primary-contrast,#FFFFFF)] border-[var(--primary,#A56A4A)]'
                     : 'border-[var(--border,#E1D3B9)] text-[var(--text-muted,#6B645B)] hover:border-[var(--text-muted,#6B645B)]'
                 }`}
               >
@@ -107,7 +107,7 @@ const ProjectFields: React.FC<ProjectFieldsProps> = ({
               }
             }}
             placeholder="Add new tag"
-            className="h-8 flex-1 rounded-full border border-[var(--border,#E1D3B9)] bg-white px-3 text-[12px] outline-none"
+            className="h-8 flex-1 rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 text-[12px] outline-none"
           />
           <button onClick={addTag} className="h-8 px-3 rounded-full border border-[var(--border,#E1D3B9)] text-[12px]">
             Add

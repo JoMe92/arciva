@@ -17,7 +17,7 @@ const Tag: React.FC<TagProps> = ({ label, selected, onClick }) => {
       onClick={onClick}
       className={`px-2 py-1 rounded-full text-[11px] border ${
         selected
-          ? 'bg-[var(--basalt-700,#4A463F)] text-white border-transparent'
+          ? 'bg-[var(--primary,#A56A4A)] text-[var(--primary-contrast,#FFFFFF)] border-[var(--primary,#A56A4A)]'
           : 'border-[var(--border,#E1D3B9)] text-[var(--text-muted,#6B645B)] hover:border-[var(--text-muted,#6B645B)]'
       }`}
     >

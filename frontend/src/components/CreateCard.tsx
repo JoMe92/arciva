@@ -33,7 +33,7 @@ const CreateCard: React.FC<{
         </div>
         <div className="rounded-b-xl border border-[var(--border,#E1D3B9)] border-t-0 bg-[var(--surface,#FFFFFF)] px-1.5 sm:px-2 md:px-3 pt-2 pb-3">
           <div className="flex items-center gap-3">
-            <span aria-hidden className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--border,#E1D3B9)] bg-white">
+            <span aria-hidden className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]">
               <span className="text-lg leading-none">＋</span>
             </span>
             <div className="text-left">

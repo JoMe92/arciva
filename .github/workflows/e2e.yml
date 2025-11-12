@@ -31,13 +31,13 @@ jobs:
           if [ "${GITHUB_EVENT_NAME}" = "pull_request" ]; then
             if [ -n "${PREVIEW_URL_TEMPLATE:-}" ]; then
               target=$(python - <<'PY'
-import os
-template = os.environ["PREVIEW_URL_TEMPLATE"]
-template = template.replace("{{PR_NUMBER}}", os.environ.get("PR_NUMBER", ""))
-template = template.replace("{{BRANCH}}", os.environ.get("BRANCH", ""))
-print(template)
-PY
-)
+          import os
+          template = os.environ["PREVIEW_URL_TEMPLATE"]
+          template = template.replace("{{PR_NUMBER}}", os.environ.get("PR_NUMBER", ""))
+          template = template.replace("{{BRANCH}}", os.environ.get("BRANCH", ""))
+          print(template)
+          PY
+          )
             elif [ -n "${PREVIEW_URL:-}" ]; then
               target="${PREVIEW_URL}"
             else

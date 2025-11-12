@@ -60,11 +60,11 @@ jobs:
             changelog="- No new commits detected."
           fi
           cat <<'EOF' > release-notes.md
-## Changes since $range
+          ## Changes since $range
 
-$changelog
+          $changelog
 
-EOF
+          EOF
           echo "release_notes<<'EOF'" >> "$GITHUB_OUTPUT"
           cat release-notes.md >> "$GITHUB_OUTPUT"
           echo "EOF" >> "$GITHUB_OUTPUT"

@@ -1,8 +1,19 @@
 import { withBase } from './base'
 
+export type AssetStatus =
+  | 'UPLOADING'
+  | 'QUEUED'
+  | 'PROCESSING'
+  | 'READY'
+  | 'DUPLICATE'
+  | 'MISSING_SOURCE'
+  | 'ERROR'
+
+export type ColorLabelValue = 'None' | 'Red' | 'Green' | 'Blue' | 'Yellow' | 'Purple'
+
 export type AssetListItem = {
   id: string
-  status: string
+  status: AssetStatus
   thumb_url?: string | null
   preview_url?: string | null
   original_filename?: string | null
@@ -17,6 +28,16 @@ export type AssetListItem = {
   height?: number | null
   is_preview?: boolean
   preview_order?: number | null
+  basename?: string | null
+  pair_id?: string | null
+  pair_role?: 'JPEG' | 'RAW' | null
+  paired_asset_id?: string | null
+  paired_asset_type?: 'JPEG' | 'RAW' | null
+  stack_primary_asset_id?: string | null
+  rating?: number
+  color_label?: ColorLabelValue
+  picked?: boolean
+  rejected?: boolean
 }
 
 export type AssetDerivative = {
@@ -28,7 +49,7 @@ export type AssetDerivative = {
 
 export type AssetDetail = {
   id: string
-  status: string
+  status: AssetStatus
   original_filename: string
   mime: string
   size_bytes: number
@@ -47,11 +68,19 @@ export type AssetDetail = {
   preview_url?: string | null
   derivatives: AssetDerivative[]
   metadata?: Record<string, unknown> | null
+  rating?: number
+  color_label?: ColorLabelValue
+  picked?: boolean
+  rejected?: boolean
 }
 
 type LinkResponse = {
   linked: number
   duplicates: number
+  items: AssetListItem[]
+}
+
+export type AssetInteractionUpdateResponse = {
   items: AssetListItem[]
 }
 
@@ -113,4 +142,31 @@ export async function updateAssetPreview(
     throw new Error(await res.text())
   }
   return (await res.json()) as AssetListItem
+}
+
+export async function updateAssetInteractions(
+  projectId: string,
+  payload: { assetIds: string[]; rating?: number; colorLabel?: ColorLabelValue; picked?: boolean; rejected?: boolean },
+): Promise<AssetInteractionUpdateResponse> {
+  if (!payload.assetIds.length) {
+    throw new Error('At least one asset id is required')
+  }
+  const body: Record<string, unknown> = {
+    asset_ids: payload.assetIds,
+  }
+  if (typeof payload.rating === 'number') body.rating = payload.rating
+  if (typeof payload.colorLabel === 'string') body.color_label = payload.colorLabel
+  if (typeof payload.picked === 'boolean') body.picked = payload.picked
+  if (typeof payload.rejected === 'boolean') body.rejected = payload.rejected
+
+  const res = await fetch(withBase(`/v1/projects/${projectId}/assets/interactions:apply`)!, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    throw new Error(await res.text())
+  }
+  return (await res.json()) as AssetInteractionUpdateResponse
 }

@@ -15,7 +15,7 @@ export interface StateHintProps {
  */
 const StateHint: React.FC<StateHintProps> = ({ message, actionLabel, onAction }) => {
   return (
-    <div className="my-6 rounded-xl border border-[var(--border,#E1D3B9)] bg-white px-4 py-3 text-sm flex items-center gap-3">
+    <div className="my-6 rounded-xl border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-4 py-3 text-sm flex items-center gap-3">
       <StoneTrailIcon />
       <div className="flex-1 text-[var(--text,#1F1E1B)]">{message}</div>
       {actionLabel && (

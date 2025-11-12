@@ -7,10 +7,10 @@ export function cssVar(name: string, fallback: string) {
 export const TOKENS = {
   clay500: cssVar('--clay-500', '#A56A4A'),
   sand50: cssVar('--sand-50', '#FBF7EF'),
-  sand100: cssVar('--sand-100', '#F3EBDD'),
-  sand300: cssVar('--sand-300', '#E1D3B9'),
-  sand500: cssVar('--sand-500', '#D7C5A6'),
-  basalt700: cssVar('--basalt-700', '#4A463F'),
+  sand100: cssVar('--sand-100', '#F6EEDD'),
+  sand300: cssVar('--sand-300', '#E3D4B1'),
+  sand500: cssVar('--sand-500', '#CBB58F'),
+  basalt700: cssVar('--basalt-700', '#332F2B'),
   charcoal800: cssVar('--charcoal-800', '#1F1E1B'),
   river500: cssVar('--river-500', '#6B7C7A'),
 }
@@ -41,6 +41,7 @@ export function makeDemo(n = 24) {
       placeholderRatio: ratio,
       isPreview: false,
       previewOrder: null,
+      status: 'READY',
       metadataWarnings: [],
     })
   }

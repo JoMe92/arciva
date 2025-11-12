@@ -12,7 +12,7 @@ if _REPO_ROOT not in sys.path:
 
 import pytest
 import pytest_asyncio
-from httpx import AsyncClient
+from httpx import AsyncClient, ASGITransport
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 
 """Pytest fixtures for backend tests with isolated settings and DB."""
@@ -110,5 +110,6 @@ def app(test_settings, TestSessionLocal):
 
 @pytest_asyncio.fixture
 async def client(app):
-    async with AsyncClient(app=app, base_url="http://testserver") as ac:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as ac:
         yield ac

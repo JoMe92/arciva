@@ -82,3 +82,10 @@ backend/tests/__pycache__/*
 backend/app/adapters/__pycache__/*
 
 backend/app/services/__pycache__/*
+backend/app/utils/__pycache__/image_formats.cpython-311.pyc
+backend/app/utils/__pycache__/*
+backend/app/utils/__pycache__/image_formats.cpython-313.pyc
+backend/logs/backend.log.1
+backend/logs/backend.log.2
+backend/logs/backend.log.1
+backend/logs/backend.log.2

@@ -20,10 +20,10 @@ export interface ModalShellProps {
 const ModalShell: React.FC<ModalShellProps> = ({ title, onClose, onPrimary, primaryLabel, primaryDisabled, headerRight, footerLeft, children }) => {
   return (
     <div className="fixed inset-0 z-[60] grid place-items-center bg-black/20">
-      <div className="w-full max-w-lg rounded-2xl bg-white p-4 shadow-lg border border-[var(--border,#E1D3B9)]">
+      <div className="w-full max-w-lg rounded-2xl border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-4 shadow-lg">
         <div className="mb-3 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--border,#E1D3B9)]">
+            <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--border,#E1D3B9)] bg-[var(--surface-subtle,#FBF7EF)]">
               <StoneTrailIcon />
             </span>
             <div className="text-sm font-semibold">{title}</div>
@@ -43,7 +43,7 @@ const ModalShell: React.FC<ModalShellProps> = ({ title, onClose, onPrimary, prim
               className={`h-8 rounded-full px-3 text-[12px] ${
                 primaryDisabled
                   ? 'bg-[var(--border,#E1D3B9)] text-[var(--text-muted,#6B645B)] cursor-not-allowed'
-                  : 'bg-[var(--basalt-700,#4A463F)] text-white'
+                  : 'bg-[var(--primary,#A56A4A)] text-[var(--primary-contrast,#FFFFFF)]'
               }`}
             >
               {primaryLabel}

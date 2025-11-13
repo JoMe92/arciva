@@ -7,6 +7,7 @@ import { getProject, updateProject, type ProjectApiResponse } from '../../shared
 import { initUpload, putUpload, completeUpload } from '../../shared/api/uploads'
 import { placeholderRatioForAspect } from '../../shared/placeholder'
 import type { Photo, ImgType, ColorTag } from './types'
+import type { PendingItem } from './importTypes'
 import {
   TopBar,
   Sidebar,
@@ -22,6 +23,7 @@ import {
   type DateTreeDayNode,
   type GridSelectOptions,
 } from './components'
+import ImageHubImportPane from './ImageHubImportPane'
 
 const LEFT_MIN_WIDTH = 280
 const LEFT_MAX_WIDTH = 420
@@ -1498,22 +1500,6 @@ type LocalQueueProgress = {
   processedBytes: number
 }
 
-type PendingItem = {
-  id: string
-  name: string
-  type: ImgType
-  previewUrl?: string | null
-  source: 'local' | 'hub'
-  selected: boolean
-  size: number
-  file?: File | null
-  meta?: {
-    folder?: string
-    relativePath?: string
-  }
-  ready?: boolean
-}
-
 type ToggleOptions = {
   shiftKey?: boolean
 }
@@ -1678,167 +1664,6 @@ type UploadProgressSnapshot = {
 
 type UploadBannerState = UploadProgressSnapshot & { status: 'running' | 'success' | 'error' }
 
-type HubNode = {
-  id: string
-  name: string
-  assetCount?: number
-  types?: ImgType[]
-  children?: HubNode[]
-}
-
-const IMAGE_HUB_TREE: HubNode[] = [
-  {
-    id: 'proj-northern-lights',
-    name: 'Northern Lights',
-    children: [
-      {
-        id: 'proj-northern-lights/basecamp-2024',
-        name: '2024 - Basecamp Diaries',
-        assetCount: 64,
-        types: ['RAW', 'JPEG'],
-      },
-      {
-        id: 'proj-northern-lights/night-shift',
-        name: 'Night Shift Selects',
-        assetCount: 28,
-        types: ['RAW'],
-      },
-    ],
-  },
-  {
-    id: 'proj-editorial',
-    name: 'Editorial Campaigns',
-    children: [
-      {
-        id: 'proj-editorial/wild-coast',
-        name: 'Wild Coast',
-        children: [
-          {
-            id: 'proj-editorial/wild-coast/lookbook',
-            name: 'Lookbook Deliverables',
-            assetCount: 35,
-            types: ['JPEG'],
-          },
-          {
-            id: 'proj-editorial/wild-coast/bts',
-            name: 'Behind the Scenes',
-            assetCount: 12,
-            types: ['RAW', 'JPEG'],
-          },
-        ],
-      },
-      {
-        id: 'proj-editorial/urban-shapes',
-        name: 'Urban Shapes',
-        assetCount: 52,
-        types: ['RAW', 'JPEG'],
-      },
-    ],
-  },
-  {
-    id: 'proj-archive',
-    name: 'Archive',
-    children: [
-      {
-        id: 'proj-archive/35mm',
-        name: '35mm Film',
-        assetCount: 120,
-        types: ['JPEG'],
-      },
-      {
-        id: 'proj-archive/medium-format',
-        name: 'Medium Format Scans',
-        assetCount: 76,
-        types: ['RAW', 'JPEG'],
-      },
-    ],
-  },
-]
-
-type HubAggregate = { count: number; types: ImgType[] }
-
-function buildHubData(nodes: HubNode[]) {
-  const nodeMap = new Map<string, HubNode>()
-  const parentMap = new Map<string, string | null>()
-  const aggregateMap = new Map<string, HubAggregate>()
-
-  const visit = (node: HubNode, parent: string | null) => {
-    nodeMap.set(node.id, node)
-    parentMap.set(node.id, parent)
-    let count = node.assetCount ?? 0
-    const typeSet = new Set<ImgType>(node.types ?? [])
-    node.children?.forEach((child) => {
-      visit(child, node.id)
-      const agg = aggregateMap.get(child.id)
-      if (agg) {
-        count += agg.count
-        agg.types.forEach((t) => typeSet.add(t))
-      }
-    })
-    aggregateMap.set(node.id, { count, types: Array.from(typeSet) as ImgType[] })
-  }
-
-  nodes.forEach((node) => visit(node, null))
-
-  return { nodeMap, parentMap, aggregateMap }
-}
-
-const HUB_DATA = buildHubData(IMAGE_HUB_TREE)
-
-type HubAsset = { id: string; name: string; type: ImgType; folderPath: string }
-
-const HUB_LEAF_ASSET_CACHE = new Map<string, HubAsset[]>()
-const HUB_ALL_ASSET_CACHE = new Map<string, HubAsset[]>()
-
-function getHubNodePath(id: string): string[] {
-  const path: string[] = []
-  let current: string | null = id
-  while (current) {
-    const node = HUB_DATA.nodeMap.get(current)
-    if (!node) break
-    path.unshift(node.name)
-    current = HUB_DATA.parentMap.get(current) ?? null
-  }
-  return path
-}
-
-function ensureLeafAssets(node: HubNode): HubAsset[] {
-  if (!node.assetCount) return []
-  if (!HUB_LEAF_ASSET_CACHE.has(node.id)) {
-    const path = getHubNodePath(node.id)
-    const baseName = path[path.length - 1] || node.name
-    const types = node.types && node.types.length ? node.types : (['JPEG'] as ImgType[])
-    const assets: HubAsset[] = []
-    for (let i = 0; i < node.assetCount; i++) {
-      const type = types[i % types.length]
-      const suffix = type === 'RAW' ? 'ARW' : 'JPG'
-      const index = String(i + 1).padStart(4, '0')
-      assets.push({
-        id: `${node.id}::${index}`,
-        name: `${baseName.replace(/\s+/g, '_')}_${index}.${suffix}`,
-        type,
-        folderPath: path.join(' / ') || baseName,
-      })
-    }
-    HUB_LEAF_ASSET_CACHE.set(node.id, assets)
-  }
-  return HUB_LEAF_ASSET_CACHE.get(node.id)!
-}
-
-function getAssetsForNode(node: HubNode): HubAsset[] {
-  if (HUB_ALL_ASSET_CACHE.has(node.id)) return HUB_ALL_ASSET_CACHE.get(node.id)!
-  let assets: HubAsset[] = []
-  if (node.assetCount) {
-    assets = ensureLeafAssets(node)
-  } else {
-    node.children?.forEach((child) => {
-      assets = assets.concat(getAssetsForNode(child))
-    })
-  }
-  HUB_ALL_ASSET_CACHE.set(node.id, assets)
-  return assets
-}
-
 function PendingMiniGrid({ items, onToggle, className }: { items: PendingItem[]; onToggle: (id: string, opts?: ToggleOptions) => void; className?: string }) {
   const extra = className ? ` ${className}` : ''
   if (!items.length) {
@@ -1962,23 +1787,6 @@ function PendingMiniGrid({ items, onToggle, className }: { items: PendingItem[];
   )
 }
 
-function collectDescendantIds(node: HubNode, acc: string[] = []) {
-  node.children?.forEach((child) => {
-    acc.push(child.id)
-    collectDescendantIds(child, acc)
-  })
-  return acc
-}
-
-function hasAncestorSelected(id: string, selection: Set<string>, parentMap: Map<string, string | null>) {
-  let parent = parentMap.get(id) ?? null
-  while (parent) {
-    if (selection.has(parent)) return true
-    parent = parentMap.get(parent) ?? null
-  }
-  return false
-}
-
 export function ImportSheet({
   projectId,
   onClose,
@@ -1996,14 +1804,11 @@ export function ImportSheet({
 }) {
   const [mode, setMode] = useState<'choose' | 'local' | 'hub' | 'upload'>('choose')
   const [localItems, setLocalItems] = useState<PendingItem[]>([])
-  const [hubSelected, setHubSelected] = useState<Set<string>>(() => new Set())
-  const [expandedHub, setExpandedHub] = useState<Set<string>>(() => new Set(IMAGE_HUB_TREE.map((node) => node.id)))
+  const [hubSelection, setHubSelection] = useState<PendingItem[]>([])
   const [ignoreDup, setIgnoreDup] = useState(true)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const folderInputRef = useRef<HTMLInputElement | null>(null)
-  const [hubItems, setHubItems] = useState<PendingItem[]>([])
   const lastLocalToggleIdRef = useRef<string | null>(null)
-  const lastHubToggleIdRef = useRef<string | null>(null)
   const localPreviewUrlsRef = useRef<string[]>([])
   const dragDepthRef = useRef(0)
   const [isDragging, setIsDragging] = useState(false)
@@ -2060,34 +1865,6 @@ export function ImportSheet({
     localPreviewUrlsRef.current = []
   }, [])
 
-  useEffect(() => {
-    setHubItems((prev) => {
-      const prevSelectionMap = new Map(prev.map((item) => [item.id, item.selected]))
-      const rootIds = Array.from(hubSelected).filter((id) => !hasAncestorSelected(id, hubSelected, HUB_DATA.parentMap))
-      const items: PendingItem[] = []
-      rootIds.forEach((id) => {
-        const node = HUB_DATA.nodeMap.get(id)
-        if (!node) return
-        const assets = getAssetsForNode(node)
-        assets.forEach((asset) => {
-          const itemId = `hub-${asset.id}`
-          const size = asset.type === 'RAW' ? 48 * 1024 * 1024 : 12 * 1024 * 1024
-          items.push({
-            id: itemId,
-            name: asset.name,
-            type: asset.type,
-            previewUrl: null,
-            source: 'hub',
-            selected: prevSelectionMap.get(itemId) ?? true,
-            size,
-            meta: { folder: asset.folderPath },
-          })
-        })
-      })
-      return items
-    })
-  }, [hubSelected])
-
   const isUploadMode = mode === 'upload'
   const isHubMode = mode === 'hub'
   const isLocalMode = mode === 'local'
@@ -2095,7 +1872,6 @@ export function ImportSheet({
   const effectiveDest = isUploadMode ? uploadDestination : derivedDest
 
   const localSelectedItems = useMemo(() => localItems.filter((item) => item.selected), [localItems])
-  const hubSelectedItems = useMemo(() => hubItems.filter((item) => item.selected), [hubItems])
   const selectedItems = useMemo<PendingItem[]>(() => {
     if (isUploadMode) {
       return uploadTasks.map((task) => ({
@@ -2110,8 +1886,8 @@ export function ImportSheet({
         meta: task.meta,
       }))
     }
-    return isHubMode ? hubSelectedItems : localSelectedItems
-  }, [isUploadMode, uploadTasks, isHubMode, hubSelectedItems, localSelectedItems])
+    return isHubMode ? hubSelection : localSelectedItems
+  }, [isUploadMode, uploadTasks, isHubMode, hubSelection, localSelectedItems])
   const selectedTypes = useMemo(() => Array.from(new Set(selectedItems.map((item) => item.type))) as ImgType[], [selectedItems])
   const totalSelectedBytes = useMemo(() => selectedItems.reduce((acc, item) => acc + (item.size || 0), 0), [selectedItems])
   const selectedFolders = useMemo(() => {
@@ -2177,14 +1953,12 @@ export function ImportSheet({
   const localSelectedFolderCount = useMemo(() => (
     localSelectedItems.length ? new Set(localSelectedItems.map((item) => item.meta?.folder ?? 'Selection')).size : 0
   ), [localSelectedItems])
-  const hubSelectedFolderCount = useMemo(() => (
-    hubSelectedItems.length ? new Set(hubSelectedItems.map((item) => item.meta?.folder ?? 'Selection')).size : 0
-  ), [hubSelectedItems])
   const hubSelectionList = useMemo(() => {
-    if (!hubSelected.size) return []
-    const ids = Array.from(hubSelected).filter((id) => !hasAncestorSelected(id, hubSelected, HUB_DATA.parentMap))
-    return ids.map((id) => HUB_DATA.nodeMap.get(id)?.name).filter(Boolean) as string[]
-  }, [hubSelected])
+    if (!hubSelection.length) return []
+    const folders = new Set<string>()
+    hubSelection.forEach((item) => folders.add(item.meta?.folder ?? 'Selection'))
+    return Array.from(folders)
+  }, [hubSelection])
 
   const localQueuePercent = useMemo(() => {
     if (localQueueProgress.totalBytes > 0) {
@@ -2522,99 +2296,6 @@ function openLocalPicker(kind: 'files' | 'folder' = 'files') {
       }
       lastLocalToggleIdRef.current = id
       return prev.map((item, index) => (index === targetIndex ? { ...item, selected: nextSelected } : item))
-    })
-  }
-
-  function toggleHubItem(id: string, opts: ToggleOptions = {}) {
-    const anchorId = opts.shiftKey ? lastHubToggleIdRef.current : null
-    setHubItems((prev) => {
-      const targetIndex = prev.findIndex((item) => item.id === id)
-      if (targetIndex === -1) return prev
-      const nextSelected = !prev[targetIndex].selected
-      if (opts.shiftKey && anchorId) {
-        const anchorIndex = prev.findIndex((item) => item.id === anchorId)
-        if (anchorIndex !== -1 && anchorIndex !== targetIndex) {
-          const start = Math.min(anchorIndex, targetIndex)
-          const end = Math.max(anchorIndex, targetIndex)
-          let changed = false
-          const next = prev.map((item, index) => {
-            if (index >= start && index <= end) {
-              if (item.selected === nextSelected) return item
-              changed = true
-              return { ...item, selected: nextSelected }
-            }
-            return item
-          })
-          lastHubToggleIdRef.current = id
-          return changed ? next : prev
-        }
-      }
-      lastHubToggleIdRef.current = id
-      return prev.map((item, index) => (index === targetIndex ? { ...item, selected: nextSelected } : item))
-    })
-  }
-
-  function toggleExpand(id: string) {
-    setExpandedHub((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
-
-  function toggleHubNode(id: string) {
-    const node = HUB_DATA.nodeMap.get(id)
-    if (!node) return
-    setHubSelected((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) {
-        next.delete(id)
-      } else {
-        next.add(id)
-        collectDescendantIds(node).forEach((childId) => next.delete(childId))
-        let parent = HUB_DATA.parentMap.get(id) ?? null
-        while (parent) {
-          next.delete(parent)
-          parent = HUB_DATA.parentMap.get(parent) ?? null
-        }
-      }
-      return next
-    })
-  }
-
-  function renderHubNodes(nodes: HubNode[], depth = 0): React.ReactNode {
-    return nodes.map((node) => {
-      const hasChildren = !!node.children?.length
-      const expanded = expandedHub.has(node.id)
-      const selected = hubSelected.has(node.id)
-      const aggregate = HUB_DATA.aggregateMap.get(node.id) ?? { count: node.assetCount ?? 0, types: node.types ?? [] }
-      const typeLabel = aggregate.types.length ? aggregate.types.join(' / ') : 'JPEG'
-      return (
-        <li key={node.id}>
-          <div className="flex items-start gap-2 py-1" style={{ paddingLeft: depth * 16 }}>
-            {hasChildren ? (
-              <button type="button" onClick={() => toggleExpand(node.id)} className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded border border-[var(--border,#E1D3B9)] bg-[var(--sand-50,#FBF7EF)] text-xs font-medium">
-                {expanded ? '-' : '+'}
-              </button>
-            ) : (
-              <span className="inline-flex h-6 w-6 items-center justify-center text-xs text-[var(--text-muted,#6B645B)]">-</span>
-            )}
-            <label className="flex flex-1 cursor-pointer items-start gap-2">
-              <input type="checkbox" checked={selected} onChange={() => toggleHubNode(node.id)} className="mt-1 accent-[var(--text,#1F1E1B)]" />
-              <span className="flex-1">
-                <div className="text-sm font-medium text-[var(--text,#1F1E1B)]">{node.name}</div>
-                <div className="text-xs text-[var(--text-muted,#6B645B)]">{aggregate.count} assets / {typeLabel}</div>
-              </span>
-            </label>
-          </div>
-          {hasChildren && expanded && (
-            <ul className="ml-8">
-              {renderHubNodes(node.children!, depth + 1)}
-            </ul>
-          )}
-        </li>
-      )
     })
   }
 
@@ -3109,30 +2790,7 @@ function openLocalPicker(kind: 'files' | 'folder' = 'files') {
 
           {isHubMode && (
             <div className="flex h-full min-h-0 gap-5 overflow-hidden">
-              <div className="flex w-64 flex-shrink-0 flex-col overflow-hidden rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]">
-                <div className="px-4 py-3 text-sm font-semibold">ImageHub projects</div>
-                <div className="flex-1 overflow-y-auto px-3 pb-4">
-                  <ul className="space-y-1">
-                    {renderHubNodes(IMAGE_HUB_TREE)}
-                  </ul>
-                </div>
-              </div>
-              <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
-                <div className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="text-sm font-semibold">Ready to import</div>
-                    <div className="text-xs text-[var(--text-muted,#6B645B)]">{hubSelectedItems.length} selected / {hubItems.length} total</div>
-                  </div>
-                  <div className="mt-1 text-xs text-[var(--text-muted,#6B645B)]">
-                    {hubSelectedItems.length
-                      ? `${hubSelectedItems.length} asset${hubSelectedItems.length === 1 ? '' : 's'} across ${Math.max(1, hubSelectedFolderCount)} folder${Math.max(1, hubSelectedFolderCount) === 1 ? '' : 's'} • ${formatBytes(totalSelectedBytes)} pending`
-                      : 'No assets selected yet. Check thumbnails to include them.'}
-                  </div>
-                  <div className="mt-3 flex-1 min-h-0">
-                    <PendingMiniGrid items={hubItems} onToggle={toggleHubItem} className="h-full" />
-                  </div>
-                </div>
-              </div>
+              <ImageHubImportPane currentProjectId={projectId ?? null} onSelectionChange={setHubSelection} />
               {renderSummaryCard('w-56 flex-shrink-0', true, effectiveDest)}
             </div>
           )}

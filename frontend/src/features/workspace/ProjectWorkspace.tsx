@@ -374,6 +374,7 @@ function patchPhotoInteractions(photo: Photo, patch: InteractionPatch): Photo {
 
 export default function ProjectWorkspace() {
   const { id } = useParams()
+  const projectId = id ?? undefined
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const cachedProjects = queryClient.getQueryData<ProjectApiResponse[]>(['projects'])
@@ -1175,9 +1176,9 @@ export default function ProjectWorkspace() {
     isFetching: assetDetailFetching,
     error: assetDetailError,
   } = useQuery<AssetDetail>({
-    queryKey: ['asset-detail', currentAssetId],
-    queryFn: () => getAsset(currentAssetId as string),
-    enabled: Boolean(currentAssetId),
+    queryKey: ['asset-detail', currentAssetId, projectId],
+    queryFn: () => getAsset(currentAssetId as string, { projectId }),
+    enabled: Boolean(currentAssetId && projectId),
     staleTime: 1000 * 60 * 5,
   })
   const metadataEntries = useMemo(() => {

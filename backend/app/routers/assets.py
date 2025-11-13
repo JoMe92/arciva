@@ -16,6 +16,8 @@ from ..deps import get_settings
 from ..schema_utils import ensure_preview_columns, ensure_asset_metadata_column
 from ..services.pairing import sync_project_pairs
 from ..services.annotations import write_annotations_for_assets
+from ..services.metadata_states import ensure_state_for_link
+from ..services.links import link_asset_to_project
 
 
 def _warnings_from_text(data: str | None) -> list[str]:
@@ -87,6 +89,7 @@ def _serialize_asset_item(
     project_asset: models.ProjectAsset,
     pair: models.ProjectAssetPair | None,
     storage: PosixStorage,
+    metadata: models.MetadataState | None,
 ) -> schemas.AssetListItem:
     thumb_url = _thumb_url(asset, storage)
     preview_url = _preview_url(asset, storage)
@@ -104,8 +107,16 @@ def _serialize_asset_item(
             pair_role = schemas.ImgType.RAW
             paired_asset_id = pair.jpeg_asset_id
             paired_asset_type = schemas.ImgType.JPEG
+    rating = int(metadata.rating) if metadata else 0
+    color_label = _color_label_to_schema(metadata.color_label if metadata else None)
+    picked = bool(metadata.picked) if metadata else False
+    rejected = bool(metadata.rejected) if metadata else False
+    metadata_state_id = metadata.id if metadata else None
+    metadata_source_project_id = metadata.source_project_id if metadata else None
+
     return schemas.AssetListItem(
         id=asset.id,
+        link_id=project_asset.id,
         status=schemas.AssetStatus(asset.status.value),
         taken_at=asset.taken_at,
         thumb_url=thumb_url,
@@ -127,10 +138,12 @@ def _serialize_asset_item(
         paired_asset_id=paired_asset_id,
         paired_asset_type=paired_asset_type,
         stack_primary_asset_id=stack_primary_id,
-        rating=int(asset.rating or 0),
-        color_label=_color_label_to_schema(asset.color_label),
-        picked=bool(asset.picked),
-        rejected=bool(asset.rejected),
+        rating=rating,
+        color_label=color_label,
+        picked=picked,
+        rejected=rejected,
+        metadata_state_id=metadata_state_id,
+        metadata_source_project_id=metadata_source_project_id,
     )
 
 
@@ -140,9 +153,10 @@ async def _load_asset_items(
     asset_ids: Sequence[UUID] | None = None,
 ) -> list[schemas.AssetListItem]:
     query = (
-        select(models.Asset, models.ProjectAsset, models.ProjectAssetPair)
+        select(models.Asset, models.ProjectAsset, models.ProjectAssetPair, models.MetadataState)
         .join(models.ProjectAsset, models.ProjectAsset.asset_id == models.Asset.id)
         .outerjoin(models.ProjectAssetPair, models.ProjectAssetPair.id == models.ProjectAsset.pair_id)
+        .outerjoin(models.MetadataState, models.MetadataState.link_id == models.ProjectAsset.id)
         .where(models.ProjectAsset.project_id == project_id)
         .order_by(desc(models.ProjectAsset.added_at))
     )
@@ -150,20 +164,61 @@ async def _load_asset_items(
         query = query.where(models.ProjectAsset.asset_id.in_(asset_ids))
     rows = (await db.execute(query)).all()
     storage = PosixStorage.from_env()
-    items = [_serialize_asset_item(asset, project_asset, pair, storage) for asset, project_asset, pair in rows]
+    items = [_serialize_asset_item(asset, project_asset, pair, storage, metadata) for asset, project_asset, pair, metadata in rows]
     if asset_ids:
         order_map = {asset_id: idx for idx, asset_id in enumerate(asset_ids)}
         items.sort(key=lambda item: order_map.get(item.id, len(order_map)))
     return items
 
+
+async def _load_metadata_template(
+    db: AsyncSession,
+    *,
+    asset_id: UUID,
+    project_id: UUID,
+) -> models.MetadataState | None:
+    return (
+        await db.execute(
+            select(models.MetadataState)
+            .join(models.ProjectAsset, models.ProjectAsset.id == models.MetadataState.link_id)
+            .where(
+                models.ProjectAsset.project_id == project_id,
+                models.ProjectAsset.asset_id == asset_id,
+            )
+            .order_by(models.MetadataState.updated_at.desc())
+        )
+    ).scalar_one_or_none()
+
 async def _asset_detail(
     asset: models.Asset,
     db: AsyncSession,
     storage: PosixStorage,
+    link: models.ProjectAsset | None = None,
+    metadata: models.MetadataState | None = None,
 ) -> schemas.AssetDetail:
     thumb_url = _thumb_url(asset, storage)
     preview_url = _preview_url(asset, storage)
     derivatives = await _collect_derivatives(asset, db)
+    rating = int(metadata.rating) if metadata else 0
+    color_label = _color_label_to_schema(metadata.color_label if metadata else None)
+    picked = bool(metadata.picked) if metadata else False
+    rejected = bool(metadata.rejected) if metadata else False
+
+    metadata_state_out: schemas.MetadataStateOut | None = None
+    if metadata and link:
+        metadata_state_out = schemas.MetadataStateOut(
+            id=metadata.id,
+            link_id=link.id,
+            project_id=link.project_id,
+            rating=rating,
+            color_label=color_label,
+            picked=picked,
+            rejected=rejected,
+            edits=metadata.edits,
+            source_project_id=metadata.source_project_id,
+            created_at=metadata.created_at,
+            updated_at=metadata.updated_at,
+        )
     return schemas.AssetDetail(
         id=asset.id,
         status=schemas.AssetStatus(asset.status.value),
@@ -173,7 +228,7 @@ async def _asset_detail(
         width=asset.width,
         height=asset.height,
         taken_at=asset.taken_at,
-        storage_key=asset.storage_key,
+        storage_uri=asset.storage_uri,
         sha256=asset.sha256,
         reference_count=asset.reference_count,
         queued_at=asset.queued_at,
@@ -185,10 +240,14 @@ async def _asset_detail(
         preview_url=preview_url,
         derivatives=derivatives,
         metadata=getattr(asset, "metadata_json", None),
-        rating=int(asset.rating or 0),
-        color_label=_color_label_to_schema(asset.color_label),
-        picked=bool(asset.picked),
-        rejected=bool(asset.rejected),
+        rating=rating,
+        color_label=color_label,
+        picked=picked,
+        rejected=rejected,
+        metadata_state=metadata_state_out,
+        format=asset.format,
+        pixel_format=asset.pixel_format,
+        pixel_hash=asset.pixel_hash,
     )
 
 
@@ -198,8 +257,8 @@ async def _ensure_asset_metadata_populated(
     storage: PosixStorage,
 ) -> None:
     source_path: Path | None = None
-    if asset.storage_key:
-        candidate = Path(asset.storage_key)
+    if asset.storage_uri:
+        candidate = Path(asset.storage_uri)
         if candidate.exists():
             source_path = candidate
 
@@ -274,28 +333,50 @@ async def list_assets(project_id: UUID, limit: int = 1000, db: AsyncSession = De
     await ensure_preview_columns(db)
     await sync_project_pairs(db, project_id)
     q = (
-        select(models.Asset, models.ProjectAsset, models.ProjectAssetPair)
+        select(models.Asset, models.ProjectAsset, models.ProjectAssetPair, models.MetadataState)
         .join(models.ProjectAsset, models.ProjectAsset.asset_id == models.Asset.id)
         .outerjoin(models.ProjectAssetPair, models.ProjectAssetPair.id == models.ProjectAsset.pair_id)
+        .outerjoin(models.MetadataState, models.MetadataState.link_id == models.ProjectAsset.id)
         .where(models.ProjectAsset.project_id == project_id)
         .order_by(desc(models.ProjectAsset.added_at))
         .limit(limit)
     )
     rows = (await db.execute(q)).all()
     storage = PosixStorage.from_env()
-    return [_serialize_asset_item(asset, project_asset, pair, storage) for asset, project_asset, pair in rows]
+    return [_serialize_asset_item(asset, project_asset, pair, storage, metadata) for asset, project_asset, pair, metadata in rows]
 
 @router.get("/assets/{asset_id}", response_model=schemas.AssetDetail)
-async def get_asset(asset_id: UUID, db: AsyncSession = Depends(get_db)):
+async def get_asset(asset_id: UUID, project_id: UUID | None = None, db: AsyncSession = Depends(get_db)):
     await ensure_asset_metadata_column(db)
     asset = (
         await db.execute(select(models.Asset).where(models.Asset.id == asset_id))
     ).scalar_one_or_none()
     if not asset:
         raise HTTPException(404, "asset not found")
+    link = None
+    metadata = None
+    if project_id:
+        link = (
+            await db.execute(
+                select(models.ProjectAsset)
+                .where(
+                    models.ProjectAsset.project_id == project_id,
+                    models.ProjectAsset.asset_id == asset.id,
+                )
+            )
+        ).scalar_one_or_none()
+        if not link:
+            raise HTTPException(404, "asset not linked to project")
+        metadata = (
+            await db.execute(
+                select(models.MetadataState).where(models.MetadataState.link_id == link.id)
+            )
+        ).scalar_one_or_none()
+        if metadata is None:
+            metadata = await ensure_state_for_link(db, link)
     storage = PosixStorage.from_env()
     await _ensure_asset_metadata_populated(asset, db, storage)
-    return await _asset_detail(asset, db, storage)
+    return await _asset_detail(asset, db, storage, link=link, metadata=metadata)
 
 
 @router.post("/assets/{asset_id}/reprocess", response_model=schemas.AssetDetail)
@@ -410,22 +491,32 @@ async def link_existing_assets(
     # link, ignoring duplicates
     linked = 0
     duplicates = 0
+    inherit_map = body.inheritance or {}
+
     for a in assets:
-        exists = (
-            await db.execute(
-                select(models.ProjectAsset).where(
-                    models.ProjectAsset.project_id == project_id,
-                    models.ProjectAsset.asset_id == a.id,
+        inherit_source = inherit_map.get(a.id)
+        template = None
+        if inherit_source:
+            template = await _load_metadata_template(db, asset_id=a.id, project_id=inherit_source)
+            if not template:
+                logger.warning(
+                    "link_existing_assets: inheritance template missing asset=%s source_project=%s",
+                    a.id,
+                    inherit_source,
                 )
-            )
-        ).scalar_one_or_none()
-        if exists:
+        link, created = await link_asset_to_project(
+            db,
+            project_id=project_id,
+            asset=a,
+            metadata_template=template,
+            source_project_id=inherit_source,
+        )
+        if not created:
             duplicates += 1
             logger.info(
                 "link_existing_assets: project=%s asset=%s already linked", project_id, a.id
             )
             continue
-        db.add(models.ProjectAsset(project_id=project_id, asset_id=a.id))
         linked += 1
         logger.info(
             "link_existing_assets: project=%s linked asset=%s", project_id, a.id
@@ -477,24 +568,25 @@ async def apply_asset_interactions(
 
     base_ids = list(dict.fromkeys(body.asset_ids))
     query = (
-        select(models.Asset, models.ProjectAsset, models.ProjectAssetPair)
+        select(models.Asset, models.ProjectAsset, models.ProjectAssetPair, models.MetadataState)
         .join(models.ProjectAsset, models.ProjectAsset.asset_id == models.Asset.id)
         .outerjoin(models.ProjectAssetPair, models.ProjectAssetPair.id == models.ProjectAsset.pair_id)
+        .outerjoin(models.MetadataState, models.MetadataState.link_id == models.ProjectAsset.id)
         .where(
             models.ProjectAsset.project_id == project_id,
             models.ProjectAsset.asset_id.in_(base_ids),
         )
     )
     rows = (await db.execute(query)).all()
-    found_ids = {asset.id for asset, _, _ in rows}
+    found_ids = {asset.id for asset, _, _, _ in rows}
     missing = [str(aid) for aid in base_ids if aid not in found_ids]
     if missing:
         raise HTTPException(404, f"assets not linked to project: {missing}")
 
-    assets_map: dict[UUID, tuple[models.Asset, models.ProjectAsset, models.ProjectAssetPair | None]] = {
-        asset.id: (asset, project_asset, pair) for asset, project_asset, pair in rows
+    assets_map: dict[UUID, tuple[models.Asset, models.ProjectAsset, models.ProjectAssetPair | None, models.MetadataState | None]] = {
+        asset.id: (asset, project_asset, pair, metadata) for asset, project_asset, pair, metadata in rows
     }
-    for asset, _, pair in rows:
+    for asset, _, pair, _ in rows:
         if pair:
             counterpart_id = pair.raw_asset_id if asset.id == pair.jpeg_asset_id else pair.jpeg_asset_id
             assets_map.setdefault(counterpart_id, tuple())
@@ -503,17 +595,18 @@ async def apply_asset_interactions(
     if missing_pairs:
         extra_rows = (
             await db.execute(
-                select(models.Asset, models.ProjectAsset, models.ProjectAssetPair)
+                select(models.Asset, models.ProjectAsset, models.ProjectAssetPair, models.MetadataState)
                 .join(models.ProjectAsset, models.ProjectAsset.asset_id == models.Asset.id)
                 .outerjoin(models.ProjectAssetPair, models.ProjectAssetPair.id == models.ProjectAsset.pair_id)
+                .outerjoin(models.MetadataState, models.MetadataState.link_id == models.ProjectAsset.id)
                 .where(
                     models.ProjectAsset.project_id == project_id,
                     models.ProjectAsset.asset_id.in_(missing_pairs),
                 )
             )
         ).all()
-        for asset, project_asset, pair in extra_rows:
-            assets_map[asset.id] = (asset, project_asset, pair)
+        for asset, project_asset, pair, metadata in extra_rows:
+            assets_map[asset.id] = (asset, project_asset, pair, metadata)
 
     rating_value = None if body.rating is None else max(0, min(body.rating, 5))
     color_value = None
@@ -529,26 +622,31 @@ async def apply_asset_interactions(
     if rating_value is None and color_value is None and picked_value is None and rejected_value is None:
         return schemas.AssetInteractionUpdateOut(items=[])
 
-    touched_assets: list[models.Asset] = []
+    touched_pairs: list[tuple[models.Asset, models.MetadataState]] = []
     for asset_id, data in assets_map.items():
         if not data:
             continue
-        asset = data[0]
+        asset, link, _, metadata = data
+        state = metadata or await ensure_state_for_link(db, link)
         if rating_value is not None:
-            asset.rating = rating_value
+            state.rating = rating_value
         if color_value is not None:
-            asset.color_label = color_value
+            state.color_label = color_value
         if picked_value is not None:
-            asset.picked = bool(picked_value)
+            state.picked = bool(picked_value)
         if rejected_value is not None:
-            asset.rejected = bool(rejected_value)
-        touched_assets.append(asset)
+            state.rejected = bool(rejected_value)
+        touched_pairs.append((asset, state))
 
     await db.commit()
     try:
-        await write_annotations_for_assets(touched_assets)
+        await write_annotations_for_assets(touched_pairs)
     except Exception:  # pragma: no cover - best effort metadata write
-        logger.exception("apply_asset_interactions: metadata write failed project=%s assets=%s", project_id, [a.id for a in touched_assets])
+        logger.exception(
+            "apply_asset_interactions: metadata write failed project=%s assets=%s",
+            project_id,
+            [a.id for a, _ in touched_pairs],
+        )
 
     ordered_ids: list[UUID] = []
     seen: set[UUID] = set()

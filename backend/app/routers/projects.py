@@ -341,7 +341,7 @@ async def delete_project(
                     ).scalar_one()
                 )
             if duplicates == 0:
-                storage.remove_original(asset.storage_key)
+                storage.remove_original(asset.storage_uri)
                 storage.remove_derivatives(asset.sha256)
             await db.delete(asset)
             removed_assets += 1

@@ -20,13 +20,16 @@ async def _seed_asset(session, project_id: uuid.UUID, filename: str, mime: str) 
         mime=mime,
         size_bytes=123,
         status=models.AssetStatus.READY,
-        storage_key=str(original_path),
+        storage_uri=str(original_path),
         sha256=sha,
         reference_count=1,
     )
     session.add(asset)
     await session.flush()
-    session.add(models.ProjectAsset(project_id=project_id, asset_id=asset.id))
+    link = models.ProjectAsset(project_id=project_id, asset_id=asset.id)
+    session.add(link)
+    await session.flush()
+    session.add(models.MetadataState(link_id=link.id))
     await session.commit()
     return asset.id
 
@@ -91,7 +94,9 @@ async def test_interactions_mirror_pair(client, TestSessionLocal):
     async with TestSessionLocal() as session:
         rows = (
             await session.execute(
-                select(models.Asset).where(models.Asset.id.in_([jpeg_id, raw_id]))
+                select(models.MetadataState)
+                .join(models.ProjectAsset, models.ProjectAsset.id == models.MetadataState.link_id)
+                .where(models.ProjectAsset.asset_id.in_([jpeg_id, raw_id]))
             )
         ).scalars().all()
         assert len(rows) == 2

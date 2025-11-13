@@ -208,3 +208,40 @@ def make_thumb(path: Optional[Path], size: int, *, image_bytes: Optional[bytes] 
     finally:
         if buffer is not None:
             buffer.close()
+
+
+def compute_pixel_hash(path: Optional[Path], *, image_bytes: Optional[bytes] = None, hash_size: int = 8) -> str:
+    """
+    Compute a deterministic perceptual hash for the provided image input.
+
+    The source image is orientation-normalised, converted to RGB, scaled to
+    256px square, then sampled down to ``hash_size`` square for an average-hash
+    calculation. The resulting signature is returned as a hex string.
+    """
+
+    if path is None and image_bytes is None:
+        raise ValueError("Either 'path' or 'image_bytes' must be provided")
+
+    buffer: Optional[BytesIO] = BytesIO(image_bytes) if image_bytes is not None else None
+    source = buffer if buffer is not None else path
+    resampling = getattr(Image, "Resampling", Image)
+
+    pixels: list[int] = []
+    try:
+        with Image.open(source) as im:
+            im = ImageOps.exif_transpose(im).convert("RGB")
+            im = ImageOps.fit(im, (256, 256), resampling.LANCZOS)
+            gray = im.convert("L").resize((hash_size, hash_size), resampling.LANCZOS)
+            pixels = list(gray.getdata())
+    finally:
+        if buffer is not None:
+            buffer.close()
+
+    if not pixels:
+        return "0" * max(1, (hash_size * hash_size) // 4)
+    avg = sum(pixels) / len(pixels)
+    bits = 0
+    for value in pixels:
+        bits = (bits << 1) | (1 if value >= avg else 0)
+    total_bits = hash_size * hash_size
+    return f"{bits:0{max(1, total_bits // 4)}x}"

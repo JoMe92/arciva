@@ -13,6 +13,7 @@ export type ColorLabelValue = 'None' | 'Red' | 'Green' | 'Blue' | 'Yellow' | 'Pu
 
 export type AssetListItem = {
   id: string
+  link_id: string
   status: AssetStatus
   thumb_url?: string | null
   preview_url?: string | null
@@ -38,6 +39,8 @@ export type AssetListItem = {
   color_label?: ColorLabelValue
   picked?: boolean
   rejected?: boolean
+  metadata_state_id?: string | null
+  metadata_source_project_id?: string | null
 }
 
 export type AssetDerivative = {
@@ -56,7 +59,7 @@ export type AssetDetail = {
   width?: number | null
   height?: number | null
   taken_at?: string | null
-  storage_key?: string | null
+  storage_uri?: string | null
   sha256?: string | null
   reference_count: number
   queued_at?: string | null
@@ -72,6 +75,24 @@ export type AssetDetail = {
   color_label?: ColorLabelValue
   picked?: boolean
   rejected?: boolean
+  metadata_state?: MetadataState | null
+  format?: string | null
+  pixel_format?: string | null
+  pixel_hash?: string | null
+}
+
+export type MetadataState = {
+  id: string
+  link_id: string
+  project_id: string
+  rating: number
+  color_label: ColorLabelValue
+  picked: boolean
+  rejected: boolean
+  edits?: Record<string, unknown> | null
+  source_project_id?: string | null
+  created_at: string
+  updated_at: string
 }
 
 type LinkResponse = {
@@ -116,8 +137,9 @@ export async function linkAssetsToProject(projectId: string, assetIds: string[])
   return (await res.json()) as LinkResponse
 }
 
-export async function getAsset(assetId: string): Promise<AssetDetail> {
-  const res = await fetch(withBase(`/v1/assets/${assetId}`)!, {
+export async function getAsset(assetId: string, options: { projectId?: string } = {}): Promise<AssetDetail> {
+  const query = options.projectId ? `?project_id=${encodeURIComponent(options.projectId)}` : ''
+  const res = await fetch(withBase(`/v1/assets/${assetId}${query}`)!, {
     credentials: 'include',
   })
   if (!res.ok) {

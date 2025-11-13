@@ -27,6 +27,12 @@ class ColorLabel(str, Enum):
     YELLOW = "Yellow"
     PURPLE = "Purple"
 
+
+class MetadataInheritanceMode(str, Enum):
+    ALWAYS = "always"
+    ASK = "ask"
+    NEVER = "never"
+
 # Projects
 class ProjectCreate(BaseModel):
     title: str = Field(..., min_length=1)
@@ -79,6 +85,7 @@ class UploadCompleteIn(BaseModel):
 
 class AssetListItem(BaseModel):
     id: UUID
+    link_id: UUID
     status: AssetStatus
     taken_at: Optional[datetime] = None
     thumb_url: Optional[str] = None
@@ -104,6 +111,8 @@ class AssetListItem(BaseModel):
     color_label: ColorLabel = ColorLabel.NONE
     picked: bool = False
     rejected: bool = False
+    metadata_state_id: Optional[UUID] = None
+    metadata_source_project_id: Optional[UUID] = None
 
 class AssetDerivativeOut(BaseModel):
     variant: str
@@ -120,7 +129,7 @@ class AssetDetail(BaseModel):
     width: Optional[int]
     height: Optional[int]
     taken_at: Optional[datetime]
-    storage_key: Optional[str]
+    storage_uri: Optional[str]
     sha256: Optional[str]
     reference_count: int
     queued_at: Optional[datetime]
@@ -136,10 +145,29 @@ class AssetDetail(BaseModel):
     color_label: ColorLabel = ColorLabel.NONE
     picked: bool = False
     rejected: bool = False
+    metadata_state: Optional["MetadataStateOut"] = None
+    format: Optional[str] = None
+    pixel_format: Optional[str] = None
+    pixel_hash: Optional[str] = None
+
+
+class MetadataStateOut(BaseModel):
+    id: UUID
+    link_id: UUID
+    project_id: UUID
+    rating: int
+    color_label: ColorLabel
+    picked: bool
+    rejected: bool
+    edits: Optional[Dict[str, Any]] = None
+    source_project_id: Optional[UUID] = None
+    created_at: datetime
+    updated_at: datetime
 
 # Project-asset linking
 class ProjectAssetsLinkIn(BaseModel):
     asset_ids: List[UUID]
+    inheritance: Dict[UUID, Optional[UUID]] = Field(default_factory=dict)
 
 class ProjectAssetsLinkOut(BaseModel):
     linked: int
@@ -161,3 +189,49 @@ class AssetInteractionUpdate(BaseModel):
 
 class AssetInteractionUpdateOut(BaseModel):
     items: List[AssetListItem]
+
+
+AssetDetail.model_rebuild()
+
+
+class ImageHubSettings(BaseModel):
+    metadata_inheritance: MetadataInheritanceMode = MetadataInheritanceMode.ASK
+
+
+class HubAssetProjectRef(BaseModel):
+    project_id: UUID
+    title: str
+    linked_at: datetime
+    metadata_state: Optional[MetadataStateOut] = None
+
+
+class HubAsset(BaseModel):
+    asset_id: UUID
+    format: Optional[str]
+    mime: str
+    width: Optional[int]
+    height: Optional[int]
+    taken_at: Optional[datetime]
+    created_at: datetime
+    thumb_url: Optional[str] = None
+    preview_url: Optional[str] = None
+    projects: List[HubAssetProjectRef] = Field(default_factory=list)
+    pair_asset_id: Optional[UUID] = None
+
+
+class HubProjectSummary(BaseModel):
+    project_id: UUID
+    title: str
+    asset_count: int
+    last_linked_at: Optional[datetime] = None
+
+
+class HubDateSummary(BaseModel):
+    date: str
+    asset_count: int
+
+
+class ImageHubAssetsResponse(BaseModel):
+    assets: List[HubAsset]
+    projects: List[HubProjectSummary]
+    dates: List[HubDateSummary]

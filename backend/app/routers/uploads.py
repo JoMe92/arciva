@@ -21,6 +21,7 @@ from ..storage import PosixStorage
 from ..schema_utils import ensure_preview_columns
 from ..services.metadata_states import ensure_state_for_link
 from ..services.dedup import adopt_duplicate_asset
+from ..utils.assets import detect_asset_format
 
 logger = logging.getLogger("arciva.uploads")
 
@@ -44,11 +45,13 @@ async def upload_init(project_id: UUID, body: schemas.UploadInitIn, db: AsyncSes
     if not proj:
         raise HTTPException(404, "Project not found")
 
+    asset_format = detect_asset_format(body.filename, body.mime)
     asset = models.Asset(
         original_filename=body.filename,
         mime=body.mime,
         size_bytes=body.size_bytes,
-        status=models.AssetStatus.UPLOADING
+        status=models.AssetStatus.UPLOADING,
+        format=asset_format or "UNKNOWN",
     )
     db.add(asset)
     await db.flush()  # get asset.id

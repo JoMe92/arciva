@@ -54,7 +54,12 @@ class Asset(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     sha256: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, unique=True)
-    format: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    format: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="UNKNOWN",
+        server_default=text("'UNKNOWN'"),
+    )
     original_filename: Mapped[str] = mapped_column(Text, nullable=False)
     mime: Mapped[str] = mapped_column(String(255), nullable=False)
     size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
@@ -86,13 +91,15 @@ class ProjectAssetPair(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
     basename: Mapped[str] = mapped_column(Text, nullable=False)
-    jpeg_asset_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("assets.id", ondelete="CASCADE"), nullable=False, unique=True)
-    raw_asset_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("assets.id", ondelete="CASCADE"), nullable=False, unique=True)
+    jpeg_asset_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("assets.id", ondelete="CASCADE"), nullable=False)
+    raw_asset_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("assets.id", ondelete="CASCADE"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     __table_args__ = (
         UniqueConstraint("project_id", "basename", name="uq_project_asset_pairs_project_basename"),
+        UniqueConstraint("project_id", "jpeg_asset_id", name="uq_project_asset_pairs_project_jpeg"),
+        UniqueConstraint("project_id", "raw_asset_id", name="uq_project_asset_pairs_project_raw"),
     )
 
 

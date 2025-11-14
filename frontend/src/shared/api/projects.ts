@@ -13,6 +13,7 @@ export type ProjectApiResponse = {
   created_at: string
   updated_at: string
   preview_images: ProjectPreviewImageApi[]
+  stack_pairs_enabled?: boolean
 }
 
 export type ProjectPreviewImageApi = {
@@ -27,6 +28,7 @@ export type ProjectUpdatePayload = {
   title?: string
   client?: string | null
   note?: string | null
+  stack_pairs_enabled?: boolean
 }
 
 function getBaseUrl() {

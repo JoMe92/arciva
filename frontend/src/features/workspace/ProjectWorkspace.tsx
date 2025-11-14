@@ -1,8 +1,21 @@
 import React, { useMemo, useRef, useEffect, useState, useCallback } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient, type UseMutationResult } from '@tanstack/react-query'
 import { TOKENS } from './utils'
-import { listProjectAssets, assetThumbUrl, assetPreviewUrl, updateAssetInteractions, getAsset, linkAssetsToProject, type AssetListItem, type AssetDetail } from '../../shared/api/assets'
+import {
+  listProjectAssets,
+  assetThumbUrl,
+  assetPreviewUrl,
+  updateAssetInteractions,
+  getAsset,
+  linkAssetsToProject,
+  listAssetProjects,
+  loadMetadataFromProject,
+  type AssetListItem,
+  type AssetDetail,
+  type AssetProjectUsage,
+  type LoadMetadataFromProjectResponse,
+} from '../../shared/api/assets'
 import { getProject, updateProject, type ProjectApiResponse } from '../../shared/api/projects'
 import { initUpload, putUpload, completeUpload } from '../../shared/api/uploads'
 import { placeholderRatioForAspect } from '../../shared/placeholder'
@@ -27,6 +40,7 @@ import ImageHubImportPane from './ImageHubImportPane'
 import ErrorBoundary from '../../components/ErrorBoundary'
 import { fetchImageHubAssetStatus, type ImageHubAssetStatus } from '../../shared/api/hub'
 import { getImageHubSettings } from '../../shared/api/settings'
+import ModalShell from '../../components/modals/ModalShell'
 
 const LEFT_MIN_WIDTH = 280
 const LEFT_MAX_WIDTH = 420
@@ -310,6 +324,7 @@ function mapAssetToPhoto(item: AssetListItem, existing?: Photo): Photo {
   const pairedAssetId = item.paired_asset_id ?? existing?.pairedAssetId ?? null
   const pairedAssetType = item.paired_asset_type ?? existing?.pairedAssetType ?? null
   const basename = item.basename ?? existing?.basename ?? null
+  const metadataSourceProjectId = item.metadata_source_project_id ?? existing?.metadataSourceProjectId ?? null
 
   return {
     id: item.id,
@@ -334,6 +349,7 @@ function mapAssetToPhoto(item: AssetListItem, existing?: Photo): Photo {
     pairedAssetId,
     pairedAssetType,
     stackPrimaryAssetId,
+    metadataSourceProjectId,
   }
 }
 
@@ -439,6 +455,7 @@ export default function ProjectWorkspace() {
   const lastSelectedPhotoIdRef = useRef<string | null>(null)
   const selectionAnchorRef = useRef<string | null>(null)
   const suppressSelectionSyncRef = useRef(false)
+  const [metadataSourceCandidate, setMetadataSourceCandidate] = useState<{ id: string; name: string } | null>(null)
   const resolveActionTargetIds = useCallback((primaryId: string | null) => {
     if (primaryId && selectedPhotoIds.has(primaryId)) {
       return new Set(selectedPhotoIds)
@@ -535,6 +552,39 @@ export default function ProjectWorkspace() {
     },
   })
 
+  const metadataSyncMutation: UseMutationResult<
+    LoadMetadataFromProjectResponse,
+    Error,
+    { assetId: string; sourceProjectId: string },
+    unknown
+  > = useMutation<
+    LoadMetadataFromProjectResponse,
+    Error,
+    { assetId: string; sourceProjectId: string },
+    unknown
+  >({
+    mutationFn: async ({ assetId, sourceProjectId }) => {
+      if (!projectId) {
+        throw new Error('Missing project identifier')
+      }
+      return loadMetadataFromProject({ assetId, sourceProjectId, targetProjectId: projectId })
+    },
+    onSuccess: (response, variables) => {
+      if (response?.asset) {
+        setPhotos((prev) => mergePhotosFromItems(prev, [response.asset]))
+        prevPhotosRef.current = mergePhotosFromItems(prevPhotosRef.current, [response.asset])
+      } else {
+        refreshAssets()
+      }
+      queryClient.invalidateQueries({ queryKey: ['asset-detail', variables.assetId, projectId] })
+      queryClient.invalidateQueries({ queryKey: ['asset-projects', variables.assetId] })
+      setMetadataSourceCandidate(null)
+    },
+    onError: (error) => {
+      console.error('Failed to adopt metadata from source project', error)
+    },
+  })
+
   const pairLookup = useMemo(() => {
     const map = new Map<string, string>()
     photos.forEach((photo) => {
@@ -544,7 +594,6 @@ export default function ProjectWorkspace() {
     })
     return map
   }, [photos])
-
   const [showJPEG, setShowJPEG] = useState(true)
   const [showRAW, setShowRAW] = useState(true)
   const [minStars, setMinStars] = useState<0 | 1 | 2 | 3 | 4 | 5>(0)
@@ -933,6 +982,10 @@ export default function ProjectWorkspace() {
     return count
   }, [minStars, filterColor, showJPEG, showRAW, onlyPicked, hideRejected, selectedDayKey])
 
+  const applyChanges = useCallback(() => {
+    // Placeholder for future non-destructive edit syncing.
+  }, [])
+
   useEffect(() => { if (current >= visible.length) setCurrent(Math.max(0, visible.length - 1)) }, [visible, current])
 
   // Shortcuts (gleich wie Monolith)
@@ -1213,45 +1266,107 @@ export default function ProjectWorkspace() {
     enabled: Boolean(currentAssetId && projectId),
     staleTime: 1000 * 60 * 5,
   })
+  const {
+    data: assetProjects,
+    isFetching: assetProjectsLoading,
+    error: assetProjectsError,
+  } = useQuery<AssetProjectUsage[]>({
+    queryKey: ['asset-projects', currentAssetId],
+    queryFn: () => listAssetProjects(currentAssetId as string),
+    enabled: Boolean(currentAssetId),
+    staleTime: 1000 * 60 * 5,
+  })
+  const metadataSyncPending = metadataSyncMutation.isPending
+  const handleMetadataSourceRequest = useCallback((sourceProjectId: string, sourceProjectName: string) => {
+    metadataSyncMutation.reset()
+    setMetadataSourceCandidate({ id: sourceProjectId, name: sourceProjectName })
+  }, [metadataSyncMutation])
+  const handleConfirmMetadataCopy = useCallback(() => {
+    if (!metadataSourceCandidate || !currentAssetId) return
+    metadataSyncMutation.mutate({ assetId: currentAssetId, sourceProjectId: metadataSourceCandidate.id })
+  }, [metadataSourceCandidate, currentAssetId, metadataSyncMutation])
+  const handleCancelMetadataCopy = useCallback(() => {
+    if (metadataSyncPending) return
+    metadataSyncMutation.reset()
+    setMetadataSourceCandidate(null)
+  }, [metadataSyncPending, metadataSyncMutation])
   const metadataEntries = useMemo(() => {
     if (!currentAssetDetail?.metadata) return []
     return Object.entries(currentAssetDetail.metadata)
       .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([key, value]) => ({ key, value: formatMetadataValue(value) }))
+      .map(([key, value]) => ({ key, value }))
   }, [currentAssetDetail?.metadata])
   const metadataWarnings = useMemo(() => {
     const warnings = currentAssetDetail?.metadata_warnings ?? currentPhoto?.metadataWarnings ?? []
     return warnings.filter((warning) => !IGNORED_METADATA_WARNINGS.has(warning))
   }, [currentAssetDetail?.metadata_warnings, currentPhoto?.metadataWarnings])
-  const detailDateLabel = useMemo(() => {
-    if (!currentPhoto) return '—'
-    const source = currentPhoto.capturedAt ?? currentPhoto.uploadedAt ?? currentPhoto.date
-    if (!source) return '—'
-    const parsed = new Date(source)
-    if (Number.isNaN(parsed.getTime())) return '—'
-    return parsed.toLocaleDateString()
-  }, [currentPhoto])
-  const inspectorRows = useMemo(() => {
+  const generalInspectorFields = useMemo(() => {
     if (!currentPhoto) return []
-    const sizeLabel =
-      assetDetailFetching && !currentAssetDetail
-        ? 'Loading…'
-        : currentAssetDetail
-          ? formatBytes(currentAssetDetail.size_bytes)
-          : '—'
-    const dimensionsLabel = formatDimensions(currentAssetDetail?.width, currentAssetDetail?.height)
     return [
-      { label: 'Name', value: currentPhoto.name || '—' },
-      { label: 'Type', value: currentPhoto.displayType ?? currentPhoto.type },
-      { label: 'Date', value: detailDateLabel },
-      { label: 'Size', value: sizeLabel },
-      { label: 'Dimensions', value: dimensionsLabel },
-      { label: 'Rating', value: `${currentPhoto.rating}★` },
-      { label: 'Flag', value: currentPhoto.picked ? 'Picked' : '—' },
-      { label: 'Rejected', value: currentPhoto.rejected ? 'Yes' : 'No' },
-      { label: 'Color', value: currentPhoto.tag },
+      { label: 'File Name', value: currentAssetDetail?.original_filename ?? currentPhoto.name ?? '—' },
+      { label: 'File Type', value: currentPhoto.displayType ?? currentPhoto.type },
+      { label: 'Dimensions', value: formatDimensions(currentAssetDetail?.width, currentAssetDetail?.height) },
+      { label: 'Import Date', value: formatImportDateLabel(currentPhoto.uploadedAt ?? currentPhoto.date) },
+      { label: 'Storage Origin', value: formatStorageOriginLabel(currentAssetDetail?.storage_uri) },
     ]
-  }, [assetDetailFetching, currentAssetDetail, currentPhoto, detailDateLabel])
+  }, [currentAssetDetail, currentPhoto])
+  const captureInspectorFields = useMemo(() => {
+    if (!currentPhoto) return []
+    const metadata = currentAssetDetail?.metadata ?? null
+    return [
+      { label: 'Camera', value: formatCameraModel(metadata) },
+      { label: 'Lens', value: formatLensModel(metadata) },
+      { label: 'Aperture', value: formatApertureValue(metadata) },
+      { label: 'Shutter', value: formatShutterValue(metadata) },
+      { label: 'ISO', value: formatIsoValue(metadata) },
+      { label: 'Focal Length', value: formatFocalLengthValue(metadata) },
+    ]
+  }, [currentPhoto, currentAssetDetail?.metadata])
+  const metadataSummary = useMemo(() => {
+    if (!currentPhoto) return null
+    const edits = currentAssetDetail?.metadata_state?.edits
+    const hasEdits = Boolean(edits && typeof edits === 'object' && Object.keys(edits).length)
+    return {
+      rating: currentPhoto.rating,
+      colorLabel: currentPhoto.tag,
+      pickRejectLabel: currentPhoto.picked ? 'Picked' : currentPhoto.rejected ? 'Rejected' : '—',
+      picked: currentPhoto.picked,
+      rejected: currentPhoto.rejected,
+      hasEdits,
+    }
+  }, [currentPhoto, currentAssetDetail?.metadata_state?.edits])
+  const metadataSourceProjectId = currentPhoto?.metadataSourceProjectId ?? currentAssetDetail?.metadata_state?.source_project_id ?? null
+  const usedProjects = useMemo(() => {
+    const source = assetProjects ?? currentAssetDetail?.projects ?? []
+    if (!Array.isArray(source)) return []
+    return source
+      .map((proj) => ({
+        id: proj.project_id,
+        name: proj.name,
+        coverThumb: proj.cover_thumb ?? null,
+        lastModified: proj.last_modified ?? null,
+        isCurrent: Boolean(projectId && proj.project_id === projectId),
+      }))
+      .sort((a, b) => {
+        if (a.isCurrent !== b.isCurrent) return a.isCurrent ? -1 : 1
+        const aTs = a.lastModified ? new Date(a.lastModified).getTime() : 0
+        const bTs = b.lastModified ? new Date(b.lastModified).getTime() : 0
+        return bTs - aTs
+      })
+  }, [assetProjects, currentAssetDetail?.projects, projectId])
+  const usedProjectsErrorMessage = useMemo(() => {
+    if (!assetProjectsError) return null
+    if (assetProjectsError instanceof Error) return assetProjectsError.message
+    if (typeof assetProjectsError === 'string') return assetProjectsError
+    return 'Unable to load project usage'
+  }, [assetProjectsError])
+  const metadataSyncError = (metadataSyncMutation as { error?: unknown }).error
+  const metadataCopyErrorMessage = useMemo(() => {
+    if (!metadataSyncError) return null
+    if (metadataSyncError instanceof Error) return metadataSyncError.message
+    if (typeof metadataSyncError === 'string') return metadataSyncError
+    return 'Unable to replace metadata'
+  }, [metadataSyncError])
   const metadataLoading = Boolean(currentAssetId) && assetDetailFetching
   const metadataErrorMessage = useMemo(() => {
     if (!assetDetailError) return null
@@ -1453,14 +1568,31 @@ export default function ProjectWorkspace() {
           collapsed={rightPanelCollapsed}
           onCollapse={() => setRightPanelCollapsed(true)}
           onExpand={() => setRightPanelCollapsed(false)}
-          summaryRows={inspectorRows}
           hasSelection={Boolean(currentPhoto)}
+          usedProjects={usedProjects}
+          usedProjectsLoading={assetProjectsLoading}
+          usedProjectsError={usedProjectsErrorMessage}
+          metadataSourceProjectId={metadataSourceProjectId}
+          onSelectMetadataSource={handleMetadataSourceRequest}
+          metadataCopyBusy={metadataSyncPending}
+          keyMetadataSections={{ general: generalInspectorFields, capture: captureInspectorFields }}
+          metadataSummary={metadataSummary}
           metadataEntries={metadataEntries}
           metadataWarnings={metadataWarnings}
           metadataLoading={metadataLoading}
           metadataError={metadataErrorMessage}
         />
       </div>
+
+      {metadataSourceCandidate ? (
+        <MetadataCopyConfirmModal
+          projectName={metadataSourceCandidate.name}
+          pending={metadataSyncPending}
+          error={metadataCopyErrorMessage}
+          onCancel={handleCancelMetadataCopy}
+          onConfirm={handleConfirmMetadataCopy}
+        />
+      ) : null}
 
       {importOpen && (
         <ErrorBoundary fallback={(
@@ -1488,6 +1620,29 @@ export default function ProjectWorkspace() {
         </ErrorBoundary>
       )}
     </div>
+  )
+}
+
+type MetadataCopyConfirmModalProps = {
+  projectName: string
+  pending: boolean
+  error: string | null
+  onCancel: () => void
+  onConfirm: () => void
+}
+
+function MetadataCopyConfirmModal({ projectName, pending, error, onCancel, onConfirm }: MetadataCopyConfirmModalProps) {
+  return (
+    <ModalShell title="Replace metadata?" onClose={onCancel} onPrimary={onConfirm} primaryLabel="Replace" primaryDisabled={pending}>
+      <p className="text-sm text-[var(--text,#1F1E1B)]">
+        Replace current metadata with values from project <span className="font-semibold">{projectName}</span>?
+      </p>
+      <p className="mt-2 text-xs text-[var(--text-muted,#6B645B)]">Rating, color label, pick/reject, and edits will be overwritten in this project.</p>
+      {error ? (
+        <p className="mt-3 rounded-md border border-[#F97066] bg-[#FEF3F2] px-3 py-2 text-[12px] text-[#B42318]">{error}</p>
+      ) : null}
+      {pending ? <p className="mt-3 text-[11px] text-[var(--text-muted,#6B645B)]">Replacing metadata…</p> : null}
+    </ModalShell>
   )
 }
 
@@ -1541,7 +1696,156 @@ function formatMetadataValue(input: unknown): string {
   if (typeof input === 'boolean') {
     return input ? 'true' : 'false'
   }
+  if (typeof input === 'number') {
+    const magnitude = Math.abs(input)
+    const decimals = magnitude >= 1 ? 4 : 6
+    return trimNumber(input, decimals)
+  }
+  if (typeof input === 'string') {
+    const trimmed = input.trim()
+    const decimalMatch = trimmed.match(/^-?\d+\.(\d{4,})/)
+    if (decimalMatch) {
+      const fraction = decimalMatch[1]
+      return `${trimmed.split('.')[0]}.${fraction.slice(0, 4)}`
+    }
+    return trimmed
+  }
   return String(input)
+}
+
+function formatImportDateLabel(source?: string | null): string {
+  if (!source) return '—'
+  const parsed = new Date(source)
+  if (Number.isNaN(parsed.getTime())) return '—'
+  return parsed.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+}
+
+function formatStorageOriginLabel(storageUri?: string | null): string {
+  if (!storageUri) return 'Unknown'
+  const lower = storageUri.toLowerCase()
+  if (lower.startsWith('imagehub')) return 'Image Hub'
+  if (lower.startsWith('file://')) return 'Local import'
+  if (lower.startsWith('s3://')) return 'S3 bucket'
+  if (lower.startsWith('gs://')) return 'Cloud storage'
+  const scheme = storageUri.split('://')[0]?.trim()
+  if (scheme) {
+    return scheme.replace(/[_-]/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase())
+  }
+  return storageUri
+}
+
+function formatCameraModel(metadata: Record<string, unknown> | null | undefined): string {
+  const raw = pickMetadataValue(metadata, ['camera_model_name', 'model', 'exif.image.model', 'exif:model'])
+  return formatMetadataText(raw)
+}
+
+function formatLensModel(metadata: Record<string, unknown> | null | undefined): string {
+  const raw = pickMetadataValue(metadata, ['lens_model', 'lens', 'lens_id', 'lens_type'])
+  return formatMetadataText(raw)
+}
+
+function formatApertureValue(metadata: Record<string, unknown> | null | undefined): string {
+  const raw = pickMetadataValue(metadata, ['fnumber', 'aperturevalue', 'aperture'])
+  const numeric = parseNumericFromUnknown(raw)
+  if (numeric && numeric > 0) {
+    return `f/${trimNumber(numeric, numeric >= 10 ? 0 : 1)}`
+  }
+  if (typeof raw === 'string') {
+    const cleaned = raw.toLowerCase().startsWith('f/') ? raw : `f/${raw}`
+    return cleaned
+  }
+  return '—'
+}
+
+function formatShutterValue(metadata: Record<string, unknown> | null | undefined): string {
+  const raw = pickMetadataValue(metadata, ['shutterspeedvalue', 'shutter_speed', 'exposuretime'])
+  if (typeof raw === 'string' && raw.includes('/')) {
+    return `${raw.trim()} s`
+  }
+  const numeric = parseNumericFromUnknown(raw)
+  if (!numeric || numeric <= 0) return '—'
+  if (numeric >= 1) {
+    return `${trimNumber(numeric)} s`
+  }
+  return `${formatFractionFromDecimal(numeric)} s`
+}
+
+function formatIsoValue(metadata: Record<string, unknown> | null | undefined): string {
+  const raw = pickMetadataValue(metadata, ['iso', 'isospeedratings'])
+  const numeric = parseNumericFromUnknown(raw)
+  if (numeric && numeric > 0) {
+    return `ISO ${Math.round(numeric)}`
+  }
+  if (typeof raw === 'string' && raw.trim()) {
+    return `ISO ${raw.trim()}`
+  }
+  return '—'
+}
+
+function formatFocalLengthValue(metadata: Record<string, unknown> | null | undefined): string {
+  const raw = pickMetadataValue(metadata, ['focallengthin35mmfilm', 'focallength'])
+  const numeric = parseNumericFromUnknown(raw)
+  if (numeric && numeric > 0) {
+    return `${Math.round(numeric)} mm`
+  }
+  if (typeof raw === 'string' && raw.trim()) {
+    return raw.trim().endsWith('mm') ? raw.trim() : `${raw.trim()} mm`
+  }
+  return '—'
+}
+
+function formatMetadataText(value: unknown): string {
+  if (value === null || value === undefined) return '—'
+  if (typeof value === 'string') return value
+  if (typeof value === 'number') return trimNumber(value)
+  return formatMetadataValue(value)
+}
+
+function pickMetadataValue(metadata: Record<string, unknown> | null | undefined, candidates: string[]): unknown {
+  if (!metadata) return null
+  const entries = Object.entries(metadata)
+  if (!entries.length) return null
+  const normalized = candidates.map((candidate) => candidate.toLowerCase())
+  for (const target of normalized) {
+    const hit = entries.find(([key]) => key.toLowerCase() === target)
+    if (hit) return hit[1]
+  }
+  for (const target of normalized) {
+    const hit = entries.find(([key]) => key.toLowerCase().includes(target))
+    if (hit) return hit[1]
+  }
+  return null
+}
+
+function parseNumericFromUnknown(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (!trimmed) return null
+    const fraction = trimmed.match(/^(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)/)
+    if (fraction) {
+      const numerator = Number(fraction[1])
+      const denominator = Number(fraction[2])
+      if (Number.isFinite(numerator) && Number.isFinite(denominator) && denominator !== 0) {
+        return numerator / denominator
+      }
+    }
+    const parsed = Number(trimmed)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return null
+}
+
+function trimNumber(value: number, decimals: number = 2): string {
+  const options = Math.max(0, Math.min(decimals, 4))
+  const fixed = value.toFixed(options)
+  return fixed.replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1')
+}
+
+function formatFractionFromDecimal(value: number): string {
+  if (value <= 0) return String(value)
+  const denominator = Math.max(1, Math.round(1 / value))
+  return `1/${denominator}`
 }
 
 type LocalFileDescriptor = {

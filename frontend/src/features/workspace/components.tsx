@@ -49,6 +49,46 @@ export type GridSelectOptions = {
   ctrlKey?: boolean
 }
 
+type UsedProjectLink = {
+  id: string
+  name: string
+  coverThumb: string | null
+  lastModified: string | null
+  isCurrent: boolean
+}
+
+type InspectorField = {
+  label: string
+  value: string
+}
+
+type KeyMetadataSections = {
+  general: InspectorField[]
+  capture: InspectorField[]
+}
+
+type MetadataSummary = {
+  rating: number
+  colorLabel: ColorTag
+  pickRejectLabel: string
+  picked: boolean
+  rejected: boolean
+  hasEdits: boolean
+}
+
+type MetadataEntry = {
+  key: string
+  value: unknown
+}
+
+type MetadataCategory = 'camera' | 'lens' | 'exposure' | 'gps' | 'software' | 'custom'
+
+type MetadataGroup = {
+  id: MetadataCategory
+  label: string
+  entries: MetadataEntry[]
+}
+
 function setsAreEqual<T>(a: Set<T>, b: Set<T>): boolean {
   if (a.size !== b.size) return false
   for (const value of a) {
@@ -1152,8 +1192,15 @@ export function InspectorPanel({
   collapsed,
   onCollapse,
   onExpand,
-  summaryRows,
   hasSelection,
+  usedProjects,
+  usedProjectsLoading,
+  usedProjectsError,
+  metadataSourceProjectId,
+  onSelectMetadataSource,
+  metadataCopyBusy,
+  keyMetadataSections,
+  metadataSummary,
   metadataEntries,
   metadataWarnings,
   metadataLoading,
@@ -1162,9 +1209,16 @@ export function InspectorPanel({
   collapsed: boolean
   onCollapse: () => void
   onExpand: () => void
-  summaryRows: { label: string; value: string }[]
   hasSelection: boolean
-  metadataEntries: { key: string; value: string }[]
+  usedProjects: UsedProjectLink[]
+  usedProjectsLoading: boolean
+  usedProjectsError: string | null
+  metadataSourceProjectId: string | null
+  onSelectMetadataSource: (projectId: string, projectName: string) => void
+  metadataCopyBusy: boolean
+  keyMetadataSections: KeyMetadataSections | null
+  metadataSummary: MetadataSummary | null
+  metadataEntries: MetadataEntry[]
   metadataWarnings: string[]
   metadataLoading: boolean
   metadataError: string | null
@@ -1174,6 +1228,14 @@ export function InspectorPanel({
   const [inspectorOpen, setInspectorOpen] = useState(true)
   const [metadataOpen, setMetadataOpen] = useState(true)
   const [pendingTarget, setPendingTarget] = useState<RightPanelTarget | null>(null)
+  const generalFields = keyMetadataSections?.general ?? []
+  const captureFields = keyMetadataSections?.capture ?? []
+  const metadataGroups = useMemo(() => groupMetadataEntries(metadataEntries), [metadataEntries])
+  const [metadataAccordion, setMetadataAccordion] = useState<Record<string, boolean>>(() => makeMetadataAccordionState(metadataGroups))
+
+  useEffect(() => {
+    setMetadataAccordion(makeMetadataAccordionState(metadataGroups))
+  }, [metadataGroups])
 
   const scrollToTarget = useCallback((target: RightPanelTarget) => {
     const ref = target === 'inspector' ? inspectorSectionRef.current : metadataSectionRef.current
@@ -1205,7 +1267,9 @@ export function InspectorPanel({
     [collapsed, onExpand, scrollToTarget],
   )
 
-  const showSummaryRows = hasSelection && summaryRows.length > 0
+  const toggleMetadataGroup = useCallback((groupId: string) => {
+    setMetadataAccordion((prev) => ({ ...prev, [groupId]: !prev[groupId] }))
+  }, [])
 
   return (
     <aside
@@ -1247,10 +1311,35 @@ export function InspectorPanel({
               open={inspectorOpen}
               onToggle={() => setInspectorOpen((open) => !open)}
               className="flex-1 min-h-0"
-              contentClassName="px-4 py-3 flex flex-col gap-2 overflow-y-auto"
+              contentClassName="px-4 py-3 flex flex-col gap-4 overflow-y-auto"
             >
-              {showSummaryRows ? (
-                summaryRows.map((row) => <SummaryRow key={row.label} label={row.label} value={row.value} />)
+              {hasSelection ? (
+                <div className="flex flex-col gap-4">
+                  <InspectorCard
+                    title="Used in Projects"
+                    description="See where this asset appears and pull metadata from another project."
+                  >
+                    <UsedProjectsSection
+                      projects={usedProjects}
+                      loading={usedProjectsLoading}
+                      error={usedProjectsError}
+                      metadataSourceProjectId={metadataSourceProjectId}
+                      onSelectMetadataSource={onSelectMetadataSource}
+                      metadataCopyBusy={metadataCopyBusy}
+                    />
+                  </InspectorCard>
+                  <InspectorCard title="Key Data" description="Essential file and capture info in human-readable form.">
+                    <div className="flex flex-col gap-4">
+                      <KeyDataSection title="General" fields={generalFields} />
+                      <KeyDataSection title="Camera / Capture" fields={captureFields} />
+                    </div>
+                  </InspectorCard>
+                  <InspectorCard title="Metadata Summary" description="Current rating, color, and status for this project.">
+                    {metadataSummary ? <MetadataSummarySection summary={metadataSummary} /> : (
+                      <p className="text-sm text-[var(--text-muted,#6B645B)]">No metadata summary available for this selection.</p>
+                    )}
+                  </InspectorCard>
+                </div>
               ) : (
                 <p className="text-sm text-[var(--text-muted,#6B645B)]">Select a photo from the gallery to inspect its details.</p>
               )}
@@ -1278,14 +1367,7 @@ export function InspectorPanel({
               ) : null}
               {hasSelection ? (
                 metadataEntries.length ? (
-                  <dl className="flex-1 min-h-0 overflow-auto rounded-[12px] border border-[var(--border,#EDE1C6)]">
-                    {metadataEntries.map(({ key, value }, index) => (
-                      <div key={`${key}-${index}`} className="flex items-start gap-3 border-b border-[var(--border,#EDE1C6)] px-3 py-2 text-[11px] last:border-b-0">
-                        <dt className="w-28 shrink-0 font-semibold text-[var(--text,#1F1E1B)]">{key}</dt>
-                        <dd className="flex-1 break-words text-[var(--text-muted,#6B645B)]">{value}</dd>
-                      </div>
-                    ))}
-                  </dl>
+                  <MetadataAccordion groups={metadataGroups} openState={metadataAccordion} onToggle={toggleMetadataGroup} />
                 ) : (
                   <p className="text-sm text-[var(--text-muted,#6B645B)]">No metadata available for this asset.</p>
                 )
@@ -1314,13 +1396,331 @@ export function InspectorPanel({
   )
 }
 
-function SummaryRow({ label, value }: { label: string; value: string }) {
+function InspectorCard({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-3 border-b border-[var(--border,#EDE1C6)] py-1.5 last:border-b-0">
-      <span className="text-[11px] text-[var(--text-muted,#6B645B)]">{label}</span>
-      <span className="max-w-[60%] truncate text-[12px] font-semibold text-[var(--text,#1F1E1B)]">{value || '—'}</span>
+    <section className="rounded-[20px] border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] p-3 shadow-sm">
+      <div className="mb-2">
+        <div className="text-sm font-semibold text-[var(--text,#1F1E1B)]">{title}</div>
+        {description ? <p className="text-[11px] text-[var(--text-muted,#6B645B)]">{description}</p> : null}
+      </div>
+      {children}
+    </section>
+  )
+}
+
+function UsedProjectsSection({
+  projects,
+  loading,
+  error,
+  metadataSourceProjectId,
+  onSelectMetadataSource,
+  metadataCopyBusy,
+}: {
+  projects: UsedProjectLink[]
+  loading: boolean
+  error: string | null
+  metadataSourceProjectId: string | null
+  onSelectMetadataSource: (projectId: string, projectName: string) => void
+  metadataCopyBusy: boolean
+}) {
+  if (loading) {
+    return <p className="text-sm text-[var(--text-muted,#6B645B)]">Loading project memberships…</p>
+  }
+  if (error) {
+    return <p className="text-sm text-[#B42318]">{error}</p>
+  }
+  if (!projects.length) {
+    return <p className="text-sm text-[var(--text-muted,#6B645B)]">Not linked to any projects yet.</p>
+  }
+  const effectiveSourceId = metadataSourceProjectId ?? projects.find((project) => project.isCurrent)?.id ?? null
+  return (
+    <div className="flex flex-col gap-3">
+      {projects.map((project) => {
+        const title = project.lastModified ? `${project.name} • ${formatProjectTimestamp(project.lastModified)}` : project.name
+        return (
+          <div
+            key={project.id}
+            className={`flex items-center gap-3 rounded-[16px] border px-2 py-2 transition-colors ${
+              project.isCurrent ? 'border-[var(--charcoal-500,#4A4235)] bg-[var(--surface-subtle,#FBF7EF)]' : 'border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)]'
+            }`}
+            title={title}
+          >
+            <ProjectThumbnail cover={project.coverThumb} name={project.name} />
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-[var(--text,#1F1E1B)]">
+                <span className="truncate">{project.name}</span>
+                {project.isCurrent ? <InspectorBadge>Current</InspectorBadge> : null}
+                {effectiveSourceId === project.id ? <InspectorBadge tone="primary">Metadata source</InspectorBadge> : null}
+              </div>
+              <div className="text-[11px] text-[var(--text-muted,#6B645B)]">{formatProjectTimestamp(project.lastModified)}</div>
+            </div>
+            {!project.isCurrent ? (
+              <button
+                type="button"
+                className="shrink-0 rounded-full border border-[var(--border,#EDE1C6)] px-3 py-1 text-[11px] font-medium text-[var(--text,#1F1E1B)] transition hover:border-[var(--text,#1F1E1B)] disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={() => onSelectMetadataSource(project.id, project.name)}
+                disabled={metadataCopyBusy}
+              >
+                Set as Metadata Source
+              </button>
+            ) : null}
+          </div>
+        )
+      })}
     </div>
   )
+}
+
+function ProjectThumbnail({ cover, name }: { cover: string | null; name: string }) {
+  if (cover) {
+    return <img src={cover} alt="" className="h-12 w-12 rounded-xl object-cover" loading="lazy" />
+  }
+  return (
+    <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-[var(--border,#EDE1C6)] bg-[var(--surface-subtle,#FBF7EF)] text-sm font-semibold text-[var(--text,#1F1E1B)]">
+      {projectInitials(name)}
+    </div>
+  )
+}
+
+function KeyDataSection({ title, fields }: { title: string; fields: InspectorField[] }) {
+  return (
+    <div>
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">{title}</div>
+      {fields.length ? (
+        <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-3">
+          {fields.map((field) => (
+            <div key={field.label} className="min-w-0 text-[12px]">
+              <dt className="text-[10px] uppercase tracking-wide text-[var(--text-muted,#6B645B)]">{field.label}</dt>
+              <dd className="truncate text-sm font-medium text-[var(--text,#1F1E1B)]">{field.value || '—'}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : (
+        <p className="mt-2 text-sm text-[var(--text-muted,#6B645B)]">No data in this section.</p>
+      )}
+    </div>
+  )
+}
+
+function MetadataSummarySection({ summary }: { summary: MetadataSummary }) {
+  return (
+    <div className="flex flex-col gap-3">
+      <div>
+        <div className="text-[10px] uppercase tracking-wide text-[var(--text-muted,#6B645B)]">Rating</div>
+        <div className="mt-1 flex items-center gap-2">
+          <StarDisplay value={summary.rating} />
+          <span className="text-[11px] text-[var(--text-muted,#6B645B)]">{summary.rating}/5</span>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3 text-sm">
+        <SummaryStat label="Color label">
+          <ColorLabelPill value={summary.colorLabel} />
+        </SummaryStat>
+        <SummaryStat label="Pick / Reject">
+          <span>{summary.pickRejectLabel}</span>
+        </SummaryStat>
+        <SummaryStat label="Edit state">
+          {summary.hasEdits ? <InspectorBadge tone="primary">Edits present</InspectorBadge> : <span>No edits</span>}
+        </SummaryStat>
+      </div>
+    </div>
+  )
+}
+
+function SummaryStat({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-[12px] border border-[var(--border,#EDE1C6)] px-2 py-2">
+      <div className="text-[10px] uppercase tracking-wide text-[var(--text-muted,#6B645B)]">{label}</div>
+      <div className="mt-1 text-sm font-semibold text-[var(--text,#1F1E1B)]">{children}</div>
+    </div>
+  )
+}
+
+function InspectorBadge({ children, tone = 'neutral' }: { children: React.ReactNode; tone?: 'neutral' | 'primary' | 'success' | 'danger' }) {
+  const tones: Record<string, string> = {
+    neutral: 'border border-[var(--border,#EDE1C6)] text-[var(--text-muted,#6B645B)]',
+    primary: 'bg-[var(--river-100,#E3F2F4)] text-[var(--river-700,#2F5F62)]',
+    success: 'bg-[#ECFDF3] text-[#027A48]',
+    danger: 'bg-[#FEF3F2] text-[#B42318]',
+  }
+  return (
+    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${tones[tone] || tones.neutral}`}>
+      {children}
+    </span>
+  )
+}
+
+function ColorLabelPill({ value }: { value: ColorTag }) {
+  const swatch = COLOR_MAP[value]
+  return (
+    <span className="inline-flex items-center gap-1">
+      <span className="h-3 w-3 rounded-full border border-[var(--border,#EDE1C6)]" style={{ backgroundColor: swatch }} />
+      {value}
+    </span>
+  )
+}
+
+function StarDisplay({ value }: { value: number }) {
+  const stars = [1, 2, 3, 4, 5]
+  return (
+    <div className="inline-flex items-center gap-0.5 text-[var(--amber-500,#D97706)]">
+      {stars.map((star) => (
+        <span key={star} aria-hidden="true" className={`text-base ${value >= star ? '' : 'text-[var(--border,#EDE1C6)]'}`}>
+          ★
+        </span>
+      ))}
+    </div>
+  )
+}
+
+function MetadataAccordion({
+  groups,
+  openState,
+  onToggle,
+}: {
+  groups: MetadataGroup[]
+  openState: Record<string, boolean>
+  onToggle: (groupId: string) => void
+}) {
+  if (!groups.length) {
+    return <p className="text-sm text-[var(--text-muted,#6B645B)]">No technical metadata captured.</p>
+  }
+  return (
+    <div className="flex-1 min-h-0 overflow-hidden rounded-[16px] border border-[var(--border,#EDE1C6)]">
+      <div className="max-h-[360px] overflow-auto">
+        {groups.map((group) => {
+          const open = openState[group.id] ?? true
+          return (
+            <div key={group.id} className="border-b border-[var(--border,#EDE1C6)] last:border-b-0">
+              <button
+                type="button"
+                className="sticky top-0 z-10 flex w-full items-center justify-between gap-2 bg-[var(--surface,#FFFFFF)] px-3 py-2 text-left text-[12px] font-semibold text-[var(--text,#1F1E1B)]"
+                aria-expanded={open}
+                onClick={() => onToggle(group.id)}
+              >
+                <span>{group.label}</span>
+                <ChevronDownIcon className={`h-4 w-4 transition-transform ${open ? 'rotate-180' : ''}`} />
+              </button>
+              <div className={`overflow-hidden transition-[max-height] duration-200 ease-out ${open ? 'max-h-[999px]' : 'max-h-0'}`}>
+                <dl>
+                  {group.entries.map((entry, index) => (
+                    <div key={`${group.id}-${entry.key}-${index}`} className="grid grid-cols-[minmax(140px,35%)_minmax(0,1fr)] gap-3 px-3 py-2 text-[11px] odd:bg-[var(--surface-subtle,#FBF7EF)]">
+                      <dt className="font-semibold text-[var(--text,#1F1E1B)]">{entry.key}</dt>
+                      <dd className="break-words text-[var(--text-muted,#6B645B)]">{formatMetadataEntryValue(entry.value)}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function makeMetadataAccordionState(groups: MetadataGroup[]): Record<string, boolean> {
+  const state: Record<string, boolean> = {}
+  groups.forEach((group, index) => {
+    state[group.id] = index < 2
+  })
+  return state
+}
+
+const METADATA_GROUP_ORDER: { id: MetadataCategory; label: string }[] = [
+  { id: 'camera', label: 'Camera' },
+  { id: 'lens', label: 'Lens' },
+  { id: 'exposure', label: 'Exposure' },
+  { id: 'gps', label: 'GPS' },
+  { id: 'software', label: 'Software' },
+  { id: 'custom', label: 'Custom' },
+]
+
+function groupMetadataEntries(entries: MetadataEntry[]): MetadataGroup[] {
+  if (!entries.length) return []
+  const buckets: Record<MetadataCategory, MetadataEntry[]> = {
+    camera: [],
+    lens: [],
+    exposure: [],
+    gps: [],
+    software: [],
+    custom: [],
+  }
+  entries.forEach((entry) => {
+    const category = categorizeMetadataKey(entry.key)
+    buckets[category].push(entry)
+  })
+  return METADATA_GROUP_ORDER
+    .map((category) => ({
+      id: category.id,
+      label: category.label,
+      entries: buckets[category.id].sort((a, b) => a.key.localeCompare(b.key)),
+    }))
+    .filter((group) => group.entries.length > 0)
+}
+
+function categorizeMetadataKey(key: string): MetadataCategory {
+  const lower = key.toLowerCase()
+  if (lower.includes('lens')) return 'lens'
+  if (lower.includes('camera') || lower.includes('model') || lower.includes('body')) return 'camera'
+  if (lower.includes('exposure') || lower.includes('aperture') || lower.includes('shutter') || lower.includes('iso') || lower.includes('speed')) return 'exposure'
+  if (lower.includes('gps') || lower.includes('latitude') || lower.includes('longitude') || lower.includes('location')) return 'gps'
+  if (lower.includes('software') || lower.includes('firmware') || lower.includes('application') || lower.includes('program')) return 'software'
+  return 'custom'
+}
+
+function formatMetadataEntryValue(value: unknown): string {
+  if (value === null || value === undefined) return '—'
+  if (Array.isArray(value)) {
+    if (!value.length) return '[]'
+    return value.map((item) => formatMetadataEntryValue(item)).join(', ')
+  }
+  if (typeof value === 'object') {
+    try {
+      return JSON.stringify(value)
+    } catch {
+      return '[object]'
+    }
+  }
+  if (typeof value === 'boolean') {
+    return value ? 'true' : 'false'
+  }
+  if (typeof value === 'number') {
+    return formatMetadataEntryNumber(value)
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (!trimmed) return '—'
+    const decimalMatch = trimmed.match(/^-?\d+\.(\d{4,})/)
+    if (decimalMatch) {
+      const [whole] = trimmed.split('.')
+      return `${whole}.${decimalMatch[1].slice(0, 4)}`
+    }
+    return trimmed
+  }
+  return String(value)
+}
+
+function formatMetadataEntryNumber(value: number): string {
+  if (!Number.isFinite(value)) return '—'
+  const magnitude = Math.abs(value)
+  const decimals = magnitude >= 1000 ? 0 : magnitude >= 1 ? 4 : 6
+  const fixed = value.toFixed(decimals)
+  return fixed.replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1')
+}
+
+function formatProjectTimestamp(timestamp: string | null): string {
+  if (!timestamp) return 'No recent edits'
+  const parsed = new Date(timestamp)
+  if (Number.isNaN(parsed.getTime())) return 'No recent edits'
+  return `Updated ${parsed.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`
+}
+
+function projectInitials(name: string): string {
+  const parts = name.split(/\s+/).filter(Boolean)
+  if (!parts.length) return 'P'
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  return `${parts[0][0]}${parts[1][0]}`.toUpperCase()
 }
 
 function RightRail({

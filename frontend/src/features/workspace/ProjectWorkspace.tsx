@@ -2,7 +2,7 @@ import React, { useMemo, useRef, useEffect, useState, useCallback } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { TOKENS } from './utils'
-import { listProjectAssets, assetThumbUrl, assetPreviewUrl, updateAssetInteractions, getAsset, type AssetListItem, type AssetDetail } from '../../shared/api/assets'
+import { listProjectAssets, assetThumbUrl, assetPreviewUrl, updateAssetInteractions, getAsset, linkAssetsToProject, type AssetListItem, type AssetDetail } from '../../shared/api/assets'
 import { getProject, updateProject, type ProjectApiResponse } from '../../shared/api/projects'
 import { initUpload, putUpload, completeUpload } from '../../shared/api/uploads'
 import { placeholderRatioForAspect } from '../../shared/placeholder'
@@ -24,6 +24,8 @@ import {
   type GridSelectOptions,
 } from './components'
 import ImageHubImportPane from './ImageHubImportPane'
+import { fetchImageHubAssetStatus, type ImageHubAssetStatus } from '../../shared/api/hub'
+import { getImageHubSettings } from '../../shared/api/settings'
 
 const LEFT_MIN_WIDTH = 280
 const LEFT_MAX_WIDTH = 420
@@ -1504,6 +1506,13 @@ type ToggleOptions = {
   shiftKey?: boolean
 }
 
+type InheritancePromptState = {
+  assetIds: string[]
+  assetsWithOptions: string[]
+  statuses: Record<string, ImageHubAssetStatus>
+  candidateProjects: { id: string; name: string }[]
+}
+
 function generateLocalDescriptorId(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
     try {
@@ -1805,6 +1814,14 @@ export function ImportSheet({
   const [mode, setMode] = useState<'choose' | 'local' | 'hub' | 'upload'>('choose')
   const [localItems, setLocalItems] = useState<PendingItem[]>([])
   const [hubSelection, setHubSelection] = useState<PendingItem[]>([])
+  const [hubStatusSnapshot, setHubStatusSnapshot] = useState<Record<string, ImageHubAssetStatus>>({})
+  const hubStatusRef = useRef<Record<string, ImageHubAssetStatus>>({})
+  const [hubProjectDirectory, setHubProjectDirectory] = useState<Record<string, string>>({})
+  const [hubResetSignal, setHubResetSignal] = useState(0)
+  const [hubImporting, setHubImporting] = useState(false)
+  const [hubImportError, setHubImportError] = useState<string | null>(null)
+  const [inheritancePrompt, setInheritancePrompt] = useState<InheritancePromptState | null>(null)
+  const [selectedInheritanceProject, setSelectedInheritanceProject] = useState('')
   const [ignoreDup, setIgnoreDup] = useState(true)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const folderInputRef = useRef<HTMLInputElement | null>(null)
@@ -1824,6 +1841,30 @@ export function ImportSheet({
     totalBytes: 0,
     processedBytes: 0,
   })
+
+  const { data: hubSettingsData } = useQuery({
+    queryKey: ['image-hub-settings'],
+    queryFn: getImageHubSettings,
+    staleTime: 5 * 60 * 1000,
+  })
+  const metadataInheritance = hubSettingsData?.metadata_inheritance ?? 'ask'
+
+  useEffect(() => {
+    hubStatusRef.current = hubStatusSnapshot
+  }, [hubStatusSnapshot])
+
+  useEffect(() => {
+    setHubImportError(null)
+  }, [hubSelection])
+
+  const handleStatusSnapshot = useCallback((snapshot: Record<string, ImageHubAssetStatus>) => {
+    setHubStatusSnapshot(snapshot)
+  }, [])
+
+  const handleProjectDirectoryChange = useCallback((directory: Record<string, string>) => {
+    setHubProjectDirectory(directory)
+  }, [])
+
 
   const derivedDest = folderMode === 'date' ? 'YYYY/MM/DD' : customFolder.trim() || 'Custom'
   const [uploadDestination, setUploadDestination] = useState(derivedDest)
@@ -1895,6 +1936,128 @@ export function ImportSheet({
     selectedItems.forEach((item) => folders.add(item.meta?.folder ?? 'Selection'))
     return folders
   }, [selectedItems])
+
+  const formatProjectName = useCallback((projectId: string) => (
+    hubProjectDirectory[projectId]
+    || `Project ${projectId.slice(0, 8).toUpperCase()}`
+  ), [hubProjectDirectory])
+
+  const ensureHubStatusEntries = useCallback(async (assetIds: string[]) => {
+    if (!projectId) {
+      throw new Error('Missing project context.')
+    }
+    let snapshot = hubStatusRef.current
+    const missing = assetIds.filter((assetId) => !snapshot[assetId])
+    if (missing.length) {
+      const fetched = await Promise.all(
+        missing.map(async (assetId) => {
+          const status = await fetchImageHubAssetStatus(assetId, projectId)
+          return [assetId, status] as const
+        }),
+      )
+      snapshot = { ...snapshot }
+      fetched.forEach(([assetId, status]) => {
+        snapshot[assetId] = status
+      })
+      hubStatusRef.current = snapshot
+      setHubStatusSnapshot(snapshot)
+    }
+    return snapshot
+  }, [projectId])
+
+  const buildAutomaticInheritance = useCallback((assetsWithOptions: string[], statuses: Record<string, ImageHubAssetStatus>) => {
+    const inheritance: Record<string, string> = {}
+    assetsWithOptions.forEach((assetId) => {
+      const source = statuses[assetId]?.other_projects?.[0]
+      if (source) {
+        inheritance[assetId] = source
+      }
+    })
+    return inheritance
+  }, [])
+
+  const finalizeHubLink = useCallback(async (assetIds: string[], inheritance: Record<string, string | null> = {}) => {
+    if (!projectId) {
+      throw new Error('Missing project context.')
+    }
+    await linkAssetsToProject(projectId, { assetIds, inheritance })
+    setHubSelection([])
+    setHubResetSignal((token) => token + 1)
+    const fallbackTypes = selectedTypes.length ? selectedTypes : (['JPEG'] as ImgType[])
+    onImport({ count: assetIds.length, types: fallbackTypes, dest: effectiveDest })
+  }, [projectId, onImport, selectedTypes, effectiveDest])
+
+  const handleHubImport = useCallback(async () => {
+    if (hubImporting) return
+    if (!projectId) {
+      setHubImportError('Missing project context. Close this dialog and reopen the project.')
+      return
+    }
+    if (!hubSelection.length) return
+    setHubImportError(null)
+    setHubImporting(true)
+    try {
+      const assetIds = Array.from(new Set(hubSelection.map((item) => item.id)))
+      const statuses = await ensureHubStatusEntries(assetIds)
+      const assetsWithOptions = assetIds.filter((assetId) => (statuses[assetId]?.other_projects?.length))
+      if (metadataInheritance === 'ask' && assetsWithOptions.length) {
+        const candidateIds = Array.from(new Set(assetsWithOptions.flatMap((assetId) => statuses[assetId]?.other_projects ?? [])))
+        if (candidateIds.length) {
+          const candidateProjects = candidateIds.map((id) => ({ id, name: formatProjectName(id) }))
+          setInheritancePrompt({ assetIds, assetsWithOptions, statuses, candidateProjects })
+          setSelectedInheritanceProject(candidateProjects[0]?.id ?? '')
+          setHubImporting(false)
+          return
+        }
+      }
+      let inheritance: Record<string, string | null> = {}
+      if (metadataInheritance === 'always' && assetsWithOptions.length) {
+        inheritance = buildAutomaticInheritance(assetsWithOptions, statuses)
+      }
+      await finalizeHubLink(assetIds, inheritance)
+    } catch (err) {
+      setHubImportError(err instanceof Error ? err.message : 'Failed to import from Image Hub')
+    } finally {
+      setHubImporting(false)
+    }
+  }, [hubImporting, projectId, hubSelection, ensureHubStatusEntries, metadataInheritance, formatProjectName, buildAutomaticInheritance, finalizeHubLink])
+
+  const handleInheritanceConfirm = useCallback(async () => {
+    if (!inheritancePrompt || !selectedInheritanceProject) return
+    setInheritancePrompt(null)
+    setHubImportError(null)
+    setHubImporting(true)
+    try {
+      const inheritance: Record<string, string> = {}
+      inheritancePrompt.assetsWithOptions.forEach((assetId) => {
+        const options = inheritancePrompt.statuses[assetId]?.other_projects ?? []
+        if (options.includes(selectedInheritanceProject)) {
+          inheritance[assetId] = selectedInheritanceProject
+        }
+      })
+      await finalizeHubLink(inheritancePrompt.assetIds, inheritance)
+    } catch (err) {
+      setHubImportError(err instanceof Error ? err.message : 'Failed to import from Image Hub')
+    } finally {
+      setSelectedInheritanceProject('')
+      setHubImporting(false)
+    }
+  }, [inheritancePrompt, selectedInheritanceProject, finalizeHubLink])
+
+  const handleInheritanceSkip = useCallback(async () => {
+    if (!inheritancePrompt) return
+    setInheritancePrompt(null)
+    setSelectedInheritanceProject('')
+    setHubImportError(null)
+    setHubImporting(true)
+    try {
+      await finalizeHubLink(inheritancePrompt.assetIds, {})
+    } catch (err) {
+      setHubImportError(err instanceof Error ? err.message : 'Failed to import from Image Hub')
+    } finally {
+      setHubImporting(false)
+    }
+  }, [inheritancePrompt, finalizeHubLink])
 
   const uploadUploadedBytes = useMemo(() => uploadTasks.reduce((acc, task) => acc + task.bytesUploaded, 0), [uploadTasks])
   const uploadTotalBytes = useMemo(() => uploadTasks.reduce((acc, task) => acc + task.size, 0), [uploadTasks])
@@ -1997,6 +2160,8 @@ export function ImportSheet({
   const canSubmit = !isUploadMode
     && selectedItems.length > 0
     && !(isLocalMode && localQueueProgress.active)
+    && !(isHubMode && (hubImporting || Boolean(inheritancePrompt)))
+  const primaryButtonLabel = isHubMode ? (hubImporting ? 'Importing…' : 'Import selected') : 'Start upload'
 
   const isPreparingLocalSelection = mode !== 'upload'
     && !hasLocalItems
@@ -2370,6 +2535,10 @@ function openLocalPicker(kind: 'files' | 'folder' = 'files') {
   function submit() {
     if (!canSubmit) {
       if (mode === 'local') openLocalPicker('files')
+      return
+    }
+    if (isHubMode) {
+      void handleHubImport()
       return
     }
     if (!selectedItems.length) return
@@ -2790,7 +2959,13 @@ function openLocalPicker(kind: 'files' | 'folder' = 'files') {
 
           {isHubMode && (
             <div className="flex h-full min-h-0 gap-5 overflow-hidden">
-              <ImageHubImportPane currentProjectId={projectId ?? null} onSelectionChange={setHubSelection} />
+              <ImageHubImportPane
+                currentProjectId={projectId ?? null}
+                onSelectionChange={setHubSelection}
+                onStatusSnapshot={handleStatusSnapshot}
+                onProjectDirectoryChange={handleProjectDirectoryChange}
+                resetSignal={hubResetSignal}
+              />
               {renderSummaryCard('w-56 flex-shrink-0', true, effectiveDest)}
             </div>
           )}
@@ -2875,13 +3050,54 @@ function openLocalPicker(kind: 'files' | 'folder' = 'files') {
               disabled={!canSubmit}
               className={`px-3 py-1.5 rounded text-[var(--primary-contrast,#FFFFFF)] ${canSubmit ? 'bg-[var(--primary,#A56A4A)]' : 'bg-[var(--sand-300,#E1D3B9)] cursor-not-allowed'}`}
             >
-              Start upload
+              {primaryButtonLabel}
             </button>
           )}
         </div>
+        {isHubMode && hubImportError && (
+          <div className="px-5 pb-4 text-xs text-[#B42318]" role="alert">{hubImportError}</div>
+        )}
       </div>
       <input ref={fileInputRef} type="file" multiple onChange={handleLocalFilesChange} className="hidden" accept="image/*" />
       <input ref={folderInputRef} type="file" multiple onChange={handleLocalFilesChange} className="hidden" accept="image/*" />
+      {inheritancePrompt && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 px-4 py-8">
+          <div className="w-full max-w-md rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-6 shadow-2xl" role="dialog" aria-modal="true">
+            <div className="text-base font-semibold text-[var(--text,#1F1E1B)]">Load settings from another project?</div>
+            <p className="mt-2 text-sm text-[var(--text-muted,#6B645B)]">
+              {inheritancePrompt.assetsWithOptions.length === 1
+                ? 'This asset already exists in another project. Choose where to inherit ratings, labels, and picks from.'
+                : `These ${inheritancePrompt.assetsWithOptions.length} assets already exist in other projects. Choose where to inherit ratings, labels, and picks from.`}
+            </p>
+            <label className="mt-4 flex flex-col gap-2 text-sm">
+              <span className="font-medium text-[var(--text,#1F1E1B)]">Project</span>
+              <select
+                value={selectedInheritanceProject}
+                onChange={(event) => setSelectedInheritanceProject(event.target.value)}
+                className="rounded border border-[var(--border,#E1D3B9)] px-3 py-2 text-sm"
+              >
+                {inheritancePrompt.candidateProjects.map((proj) => (
+                  <option key={proj.id} value={proj.id}>{proj.name}</option>
+                ))}
+              </select>
+            </label>
+            <div className="mt-2 text-[11px] text-[var(--text-muted,#6B645B)]">
+              Assets that are not part of the selected project will import without inheriting metadata.
+            </div>
+            <div className="mt-6 flex flex-wrap justify-end gap-2 text-sm">
+              <button type="button" onClick={handleInheritanceSkip} className="rounded border border-[var(--border,#E1D3B9)] px-3 py-1.5">Don’t inherit</button>
+              <button
+                type="button"
+                onClick={handleInheritanceConfirm}
+                disabled={!selectedInheritanceProject}
+                className={`rounded px-3 py-1.5 text-[var(--primary-contrast,#FFFFFF)] ${selectedInheritanceProject ? 'bg-[var(--primary,#A56A4A)]' : 'bg-[var(--sand-300,#E1D3B9)] cursor-not-allowed'}`}
+              >
+                Choose project to inherit from
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

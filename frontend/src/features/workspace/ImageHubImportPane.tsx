@@ -8,6 +8,7 @@ import {
   type ImageHubDateBucket,
   type ImageHubProject,
   type ImageHubAssetFilters,
+  type ImageHubAssetStatus,
 } from '../../shared/api/hub'
 import type { ColorLabelValue } from '../../shared/api/assets'
 import type { PendingItem } from './importTypes'
@@ -65,6 +66,9 @@ type HubTile = {
 type ImageHubImportPaneProps = {
   currentProjectId: string | null
   onSelectionChange: (items: PendingItem[]) => void
+  onStatusSnapshot?: (snapshot: Record<string, ImageHubAssetStatus>) => void
+  onProjectDirectoryChange?: (directory: Record<string, string>) => void
+  resetSignal?: number
 }
 
 type VirtualMetrics = {
@@ -146,7 +150,7 @@ type AssetStatusMap = Map<string, { already_linked: boolean; other_projects: str
 
 function useAssetStatuses(assetIds: string[], currentProjectId: string | null) {
   const cacheRef = useRef<AssetStatusMap>(new Map())
-  const [, forceRender] = useState(0)
+  const [version, forceRender] = useState(0)
 
   useEffect(() => {
     if (!assetIds.length || !currentProjectId) return
@@ -176,7 +180,7 @@ function useAssetStatuses(assetIds: string[], currentProjectId: string | null) {
     }
   }, [assetIds, currentProjectId])
 
-  return cacheRef.current
+  return [cacheRef.current, version] as const
 }
 
 type VirtualizedGridProps<T> = {
@@ -277,7 +281,7 @@ function createPendingItems(tile: HubTile, folderLabel: string): PendingItem[] {
   return entries
 }
 
-export default function ImageHubImportPane({ currentProjectId, onSelectionChange }: ImageHubImportPaneProps) {
+export default function ImageHubImportPane({ currentProjectId, onSelectionChange, onStatusSnapshot, onProjectDirectoryChange, resetSignal }: ImageHubImportPaneProps) {
   const [tab, setTab] = useState<HubBrowserTab>('project')
   const [viewMode, setViewMode] = useState<HubViewMode>('grid')
   const [search, setSearch] = useState('')
@@ -306,6 +310,19 @@ export default function ImageHubImportPane({ currentProjectId, onSelectionChange
     setSelectionMap(new Map())
   }, [tab, dateSelection.year, dateSelection.month, dateSelection.day])
 
+  const resetRef = useRef<number | undefined>(undefined)
+  useEffect(() => {
+    if (resetSignal === undefined) return
+    if (resetRef.current === undefined) {
+      resetRef.current = resetSignal
+      return
+    }
+    if (resetSignal !== resetRef.current) {
+      resetRef.current = resetSignal
+      setSelectionMap(new Map())
+    }
+  }, [resetSignal])
+
   const projectQuery = useInfiniteQuery({
     queryKey: ['imagehub-projects', debouncedSearch],
     initialPageParam: null as string | null,
@@ -314,6 +331,15 @@ export default function ImageHubImportPane({ currentProjectId, onSelectionChange
   })
 
   const projects = useMemo(() => projectQuery.data?.pages.flatMap((page) => page.projects) ?? [], [projectQuery.data])
+
+  useEffect(() => {
+    if (!onProjectDirectoryChange) return
+    if (!projects.length) {
+      onProjectDirectoryChange({})
+      return
+    }
+    onProjectDirectoryChange(Object.fromEntries(projects.map((proj) => [proj.project_id, proj.name])))
+  }, [projects, onProjectDirectoryChange])
 
   useEffect(() => {
     if (tab !== 'project') return
@@ -407,7 +433,16 @@ export default function ImageHubImportPane({ currentProjectId, onSelectionChange
 
   const tiles = useMemo(() => groupAssetsByPair(rawAssets), [rawAssets])
   const assetIds = useMemo(() => rawAssets.map((asset) => asset.asset_id), [rawAssets])
-  const statusMap = useAssetStatuses(assetIds, currentProjectId)
+  const [statusMap, statusVersion] = useAssetStatuses(assetIds, currentProjectId)
+
+  useEffect(() => {
+    if (!onStatusSnapshot) return
+    if (!statusMap.size) {
+      onStatusSnapshot({})
+      return
+    }
+    onStatusSnapshot(Object.fromEntries(statusMap.entries()))
+  }, [statusVersion, statusMap, onStatusSnapshot])
 
   const selectedCount = useMemo(() => Array.from(selectionMap.values()).flat().length, [selectionMap])
 

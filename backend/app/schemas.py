@@ -211,6 +211,7 @@ class HubAsset(BaseModel):
     mime: str
     width: Optional[int]
     height: Optional[int]
+    original_filename: Optional[str] = None
     taken_at: Optional[datetime]
     created_at: datetime
     thumb_url: Optional[str] = None

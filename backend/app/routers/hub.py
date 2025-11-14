@@ -143,6 +143,7 @@ async def list_hub_assets(
                 mime=asset.mime,
                 width=asset.width,
                 height=asset.height,
+                original_filename=asset.original_filename,
                 taken_at=asset.taken_at,
                 created_at=asset.created_at,
                 thumb_url=_thumb_url(asset, storage),

@@ -124,12 +124,22 @@ export async function listProjectAssets(projectId: string): Promise<AssetListIte
   return (await res.json()) as AssetListItem[]
 }
 
-export async function linkAssetsToProject(projectId: string, assetIds: string[]): Promise<LinkResponse> {
+export async function linkAssetsToProject(
+  projectId: string,
+  payload: { assetIds: string[]; inheritance?: Record<string, string | null | undefined> },
+): Promise<LinkResponse> {
+  const body: Record<string, unknown> = { asset_ids: payload.assetIds }
+  if (payload.inheritance) {
+    const entries = Object.entries(payload.inheritance).filter(([, value]) => typeof value === 'string' && value)
+    if (entries.length) {
+      body.inheritance = Object.fromEntries(entries)
+    }
+  }
   const res = await fetch(withBase(`/v1/projects/${projectId}/assets:link`)!, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
-    body: JSON.stringify({ asset_ids: assetIds }),
+    body: JSON.stringify(body),
   })
   if (!res.ok) {
     throw new Error(await res.text())

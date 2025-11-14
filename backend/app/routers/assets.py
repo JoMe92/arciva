@@ -1,8 +1,9 @@
 import asyncio
+import json
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Sequence
+from typing import Any, Sequence
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc, func
@@ -251,11 +252,95 @@ async def _asset_detail(
     )
 
 
+def _metadata_cache_path(storage: PosixStorage, asset: models.Asset, *, ensure: bool = False) -> Path | None:
+    key = asset.sha256 or (str(asset.id) if asset.id else None)
+    if not key:
+        return None
+    root = storage.derivatives / key
+    if ensure:
+        root.mkdir(parents=True, exist_ok=True)
+    return root / "metadata.json"
+
+
+def _load_metadata_cache(storage: PosixStorage, asset: models.Asset) -> dict[str, Any] | None:
+    path = _metadata_cache_path(storage, asset)
+    if not path or not path.exists():
+        return None
+    try:
+        with path.open("r", encoding="utf-8") as fh:
+            payload = json.load(fh)
+        if isinstance(payload, dict):
+            return payload
+    except Exception:  # pragma: no cover - cache best-effort
+        path.unlink(missing_ok=True)
+    return None
+
+
+def _write_metadata_cache(storage: PosixStorage, asset: models.Asset, payload: dict[str, Any]) -> None:
+    path = _metadata_cache_path(storage, asset, ensure=True)
+    if not path:
+        return
+    try:
+        serialized = json.dumps(payload, ensure_ascii=False)
+        path.write_text(serialized, encoding="utf-8")
+    except Exception:  # pragma: no cover - cache best-effort
+        logging.getLogger("arciva.assets").warning("metadata_cache_write_failed asset=%s", asset.id, exc_info=True)
+
+
 async def _ensure_asset_metadata_populated(
     asset: models.Asset,
     db: AsyncSession,
     storage: PosixStorage,
 ) -> None:
+    cache_payload = _load_metadata_cache(storage, asset)
+    cache_taken_at: datetime | None = None
+    if cache_payload:
+        taken_str = cache_payload.get("taken_at")
+        if isinstance(taken_str, str):
+            try:
+                cache_taken_at = datetime.fromisoformat(taken_str)
+            except ValueError:
+                cache_taken_at = None
+    changed = False
+    if cache_payload:
+        cached_metadata = cache_payload.get("metadata")
+        if cached_metadata and not asset.metadata_json:
+            asset.metadata_json = cached_metadata
+            changed = True
+        if cache_taken_at and not asset.taken_at:
+            asset.taken_at = cache_taken_at
+            changed = True
+        cached_width = cache_payload.get("width")
+        cached_height = cache_payload.get("height")
+        if isinstance(cached_width, int) and not asset.width:
+            asset.width = cached_width
+            changed = True
+        if isinstance(cached_height, int) and not asset.height:
+            asset.height = cached_height
+            changed = True
+        cached_warnings = cache_payload.get("warnings")
+        if isinstance(cached_warnings, list) and not asset.metadata_warnings:
+            asset.metadata_warnings = "\n".join(str(w) for w in cached_warnings if w)
+            changed = True
+    if changed:
+        await db.commit()
+        await db.refresh(asset)
+
+    if asset.metadata_json and asset.taken_at and asset.width and asset.height:
+        if not cache_payload:
+            _write_metadata_cache(
+                storage,
+                asset,
+                {
+                    "metadata": asset.metadata_json,
+                    "taken_at": asset.taken_at.isoformat() if asset.taken_at else None,
+                    "width": asset.width,
+                    "height": asset.height,
+                    "warnings": _warnings_from_text(asset.metadata_warnings),
+                },
+            )
+        return
+
     source_path: Path | None = None
     if asset.storage_uri:
         candidate = Path(asset.storage_uri)
@@ -323,6 +408,17 @@ async def _ensure_asset_metadata_populated(
     if changed:
         await db.commit()
         await db.refresh(asset)
+        _write_metadata_cache(
+            storage,
+            asset,
+            {
+                "metadata": asset.metadata_json,
+                "taken_at": asset.taken_at.isoformat() if asset.taken_at else None,
+                "width": asset.width,
+                "height": asset.height,
+                "warnings": combined,
+            },
+        )
 
 router = APIRouter(prefix="/v1", tags=["assets"])
 logger = logging.getLogger("arciva.assets")

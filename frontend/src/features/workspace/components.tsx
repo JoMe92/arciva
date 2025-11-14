@@ -78,6 +78,8 @@ type MetadataSummary = {
 
 type MetadataEntry = {
   key: string
+  normalizedKey: string
+  label: string
   value: unknown
 }
 
@@ -1056,10 +1058,11 @@ type PanelSectionProps = {
   children: React.ReactNode
   className?: string
   contentClassName?: string
+  scrollable?: boolean
 }
 
 const PanelSection = React.forwardRef<HTMLDivElement, PanelSectionProps>(function PanelSectionComponent(
-  { id, label, open, onToggle, children, className = '', contentClassName },
+  { id, label, open, onToggle, children, className = '', contentClassName, scrollable = false },
   ref,
 ) {
   return (
@@ -1067,7 +1070,7 @@ const PanelSection = React.forwardRef<HTMLDivElement, PanelSectionProps>(functio
       id={id}
       ref={ref}
       tabIndex={-1}
-      className={`flex flex-col rounded-[var(--r-lg,20px)] border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] shadow-[0_18px_40px_rgba(31,30,27,0.12)]${className ? ` ${className}` : ''}`}
+      className={`flex min-h-0 flex-col rounded-[var(--r-lg,20px)] border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] shadow-[0_18px_40px_rgba(31,30,27,0.12)]${className ? ` ${className}` : ''}`}
       data-open={open}
     >
       <button
@@ -1083,9 +1086,16 @@ const PanelSection = React.forwardRef<HTMLDivElement, PanelSectionProps>(functio
       <div
         id={`${id}-content`}
         aria-hidden={!open}
-        className={`transition-[max-height,opacity] duration-200 ease-out ${open ? 'max-h-[999px] opacity-100' : 'pointer-events-none max-h-0 opacity-0'}`}
+        className={`flex-1 transition-[max-height,opacity] duration-200 ease-out ${open ? 'max-h-[999px] opacity-100' : 'pointer-events-none max-h-0 opacity-0'}`}
       >
-        <div className={contentClassName ? contentClassName : 'px-4 py-3'}>{children}</div>
+        <div
+          className={[
+            contentClassName ? contentClassName : 'px-4 py-3',
+            scrollable ? 'max-h-full overflow-y-auto overscroll-contain pr-2' : '',
+          ].filter(Boolean).join(' ')}
+        >
+          {children}
+        </div>
       </div>
     </section>
   )
@@ -1183,10 +1193,11 @@ function RailAction({ id, label, icon, onClick, ariaControls, ariaExpanded, isAc
 
 const RIGHT_PANEL_ID = 'workspace-inspector-panel'
 const RIGHT_PANEL_CONTENT_ID = `${RIGHT_PANEL_ID}-content`
-const RIGHT_INSPECTOR_SECTION_ID = `${RIGHT_PANEL_ID}-inspector`
+const RIGHT_KEY_SECTION_ID = `${RIGHT_PANEL_ID}-key-data`
+const RIGHT_PROJECT_SECTION_ID = `${RIGHT_PANEL_ID}-projects`
 const RIGHT_METADATA_SECTION_ID = `${RIGHT_PANEL_ID}-metadata`
 
-type RightPanelTarget = 'inspector' | 'metadata'
+type RightPanelTarget = 'keyData' | 'projects' | 'metadata'
 
 export function InspectorPanel({
   collapsed,
@@ -1223,9 +1234,11 @@ export function InspectorPanel({
   metadataLoading: boolean
   metadataError: string | null
 }) {
-  const inspectorSectionRef = useRef<HTMLDivElement | null>(null)
+  const keyDataSectionRef = useRef<HTMLDivElement | null>(null)
+  const projectsSectionRef = useRef<HTMLDivElement | null>(null)
   const metadataSectionRef = useRef<HTMLDivElement | null>(null)
-  const [inspectorOpen, setInspectorOpen] = useState(true)
+  const [keyDataOpen, setKeyDataOpen] = useState(true)
+  const [projectsOpen, setProjectsOpen] = useState(true)
   const [metadataOpen, setMetadataOpen] = useState(true)
   const [pendingTarget, setPendingTarget] = useState<RightPanelTarget | null>(null)
   const generalFields = keyMetadataSections?.general ?? []
@@ -1237,8 +1250,44 @@ export function InspectorPanel({
     setMetadataAccordion(makeMetadataAccordionState(metadataGroups))
   }, [metadataGroups])
 
+  const mergedInspectorFields = useMemo(() => {
+    const map = new Map<string, string>()
+    generalFields.forEach((field) => {
+      if (!map.has(field.label)) map.set(field.label, field.value)
+    })
+    captureFields.forEach((field) => {
+      if (!map.has(field.label)) map.set(field.label, field.value)
+    })
+    return map
+  }, [generalFields, captureFields])
+
+  const keyDataRows = useMemo(() => {
+    const colorLabel = metadataSummary?.colorLabel ?? 'None'
+    return [
+      { label: 'File Name', value: mergedInspectorFields.get('File Name') ?? '—' },
+      { label: 'File Type', value: mergedInspectorFields.get('File Type') ?? '—' },
+      { label: 'Import Date', value: mergedInspectorFields.get('Import Date') ?? '—' },
+      { label: 'Capture Date', value: mergedInspectorFields.get('Capture Date') ?? '—' },
+      { label: 'Dimensions', value: mergedInspectorFields.get('Dimensions') ?? '—' },
+      { label: 'Rating', value: formatRatingValue(metadataSummary?.rating) },
+      { label: 'Color Label', value: <ColorLabelValue value={colorLabel as ColorTag} /> },
+      { label: 'Pick/Reject', value: metadataSummary?.pickRejectLabel ?? '—' },
+    ]
+  }, [metadataSummary, mergedInspectorFields])
+
+  const ensureSectionOpen = useCallback((target: RightPanelTarget) => {
+    if (target === 'keyData') setKeyDataOpen(true)
+    else if (target === 'projects') setProjectsOpen(true)
+    else setMetadataOpen(true)
+  }, [])
+
   const scrollToTarget = useCallback((target: RightPanelTarget) => {
-    const ref = target === 'inspector' ? inspectorSectionRef.current : metadataSectionRef.current
+    const refMap: Record<RightPanelTarget, React.RefObject<HTMLDivElement>> = {
+      keyData: keyDataSectionRef,
+      projects: projectsSectionRef,
+      metadata: metadataSectionRef,
+    }
+    const ref = refMap[target]?.current
     if (ref) {
       ref.scrollIntoView({ block: 'start', behavior: 'smooth' })
       if (typeof ref.focus === 'function') {
@@ -1249,14 +1298,14 @@ export function InspectorPanel({
 
   useEffect(() => {
     if (collapsed || !pendingTarget) return
+    ensureSectionOpen(pendingTarget)
     scrollToTarget(pendingTarget)
     setPendingTarget(null)
-  }, [collapsed, pendingTarget, scrollToTarget])
+  }, [collapsed, ensureSectionOpen, pendingTarget, scrollToTarget])
 
   const handleRailSelect = useCallback(
     (target: RightPanelTarget) => {
-      if (target === 'inspector') setInspectorOpen(true)
-      else setMetadataOpen(true)
+      ensureSectionOpen(target)
       if (collapsed) {
         setPendingTarget(target)
         onExpand()
@@ -1264,7 +1313,7 @@ export function InspectorPanel({
       }
       scrollToTarget(target)
     },
-    [collapsed, onExpand, scrollToTarget],
+    [collapsed, ensureSectionOpen, onExpand, scrollToTarget],
   )
 
   const toggleMetadataGroup = useCallback((groupId: string) => {
@@ -1285,127 +1334,242 @@ export function InspectorPanel({
         className={`h-full transition-opacity duration-150 ${collapsed ? 'pointer-events-none opacity-0' : 'opacity-100'}`}
       >
         <div className="flex h-full flex-col overflow-hidden rounded-[var(--r-lg,20px)] border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] p-4 shadow-[0_30px_80px_rgba(31,30,27,0.16)]">
-          <header className="sticky top-0 z-10 flex flex-col gap-3 border-b border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] pb-3">
-            <div className="flex items-center justify-between gap-3">
+          <header className="sticky top-0 z-10 border-b border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] pb-3">
+            <div className="flex items-center gap-3">
               <button
                 type="button"
-                aria-expanded={!collapsed}
+                aria-label="Collapse Inspector"
                 aria-controls={RIGHT_PANEL_CONTENT_ID}
-                onClick={() => {
-                  if (collapsed) onExpand()
-                  else onCollapse()
-                }}
-                className="inline-flex items-center gap-2 text-[15px] font-semibold text-[var(--text,#1F1E1B)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)]"
+                onClick={onCollapse}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border,#EDE1C6)] text-[var(--text,#1F1E1B)] transition hover:border-[var(--text,#1F1E1B)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)]"
               >
-                Inspector
-                <ChevronDownIcon className={`h-4 w-4 transition-transform ${collapsed ? '' : 'rotate-180'}`} />
+                <ChevronRightIcon className="h-4 w-4" aria-hidden="true" />
               </button>
+              <InspectorIcon className="h-4 w-4 text-[var(--text,#1F1E1B)]" aria-hidden="true" />
+              <span className="text-sm font-semibold text-[var(--text,#1F1E1B)]">Inspector</span>
             </div>
-            <p className="text-xs text-[var(--text-muted,#6B645B)]">Check selection details and raw metadata. Use the rail when the panel is collapsed.</p>
           </header>
-          <div id={RIGHT_PANEL_CONTENT_ID} className="mt-4 flex-1 min-h-0 space-y-4 overflow-hidden">
-            <PanelSection
-              id={RIGHT_INSPECTOR_SECTION_ID}
-              ref={inspectorSectionRef}
-              label="Inspector"
-              open={inspectorOpen}
-              onToggle={() => setInspectorOpen((open) => !open)}
-              className="flex-1 min-h-0"
-              contentClassName="px-4 py-3 flex flex-col gap-4 overflow-y-auto"
+          <div id={RIGHT_PANEL_CONTENT_ID} className="flex flex-1 flex-col gap-3 overflow-hidden">
+            <InspectorSection
+              id={RIGHT_KEY_SECTION_ID}
+              ref={keyDataSectionRef}
+              icon={<InfoIcon className="h-4 w-4" aria-hidden="true" />}
+              label="Key Data"
+              open={keyDataOpen}
+              onToggle={() => setKeyDataOpen((open) => !open)}
+              maxBodyHeight={240}
             >
               {hasSelection ? (
-                <div className="flex flex-col gap-4">
-                  <InspectorCard
-                    title="Used in Projects"
-                    description="See where this asset appears and pull metadata from another project."
-                  >
-                    <UsedProjectsSection
-                      projects={usedProjects}
-                      loading={usedProjectsLoading}
-                      error={usedProjectsError}
-                      metadataSourceProjectId={metadataSourceProjectId}
-                      onSelectMetadataSource={onSelectMetadataSource}
-                      metadataCopyBusy={metadataCopyBusy}
-                    />
-                  </InspectorCard>
-                  <InspectorCard title="Key Data" description="Essential file and capture info in human-readable form.">
-                    <div className="flex flex-col gap-4">
-                      <KeyDataSection title="General" fields={generalFields} />
-                      <KeyDataSection title="Camera / Capture" fields={captureFields} />
-                    </div>
-                  </InspectorCard>
-                  <InspectorCard title="Metadata Summary" description="Current rating, color, and status for this project.">
-                    {metadataSummary ? <MetadataSummarySection summary={metadataSummary} /> : (
-                      <p className="text-sm text-[var(--text-muted,#6B645B)]">No metadata summary available for this selection.</p>
-                    )}
-                  </InspectorCard>
-                </div>
+                <KeyDataGrid rows={keyDataRows} />
               ) : (
                 <p className="text-sm text-[var(--text-muted,#6B645B)]">Select a photo from the gallery to inspect its details.</p>
               )}
-            </PanelSection>
-            <PanelSection
+            </InspectorSection>
+            <InspectorSection
+              id={RIGHT_PROJECT_SECTION_ID}
+              ref={projectsSectionRef}
+              icon={<LayoutListIcon className="h-4 w-4" aria-hidden="true" />}
+              label="Used in Projects"
+              open={projectsOpen}
+              onToggle={() => setProjectsOpen((open) => !open)}
+              maxBodyHeight={280}
+            >
+              {hasSelection ? (
+                <UsedProjectsSection
+                  projects={usedProjects}
+                  loading={usedProjectsLoading}
+                  error={usedProjectsError}
+                  metadataSourceProjectId={metadataSourceProjectId}
+                  onSelectMetadataSource={onSelectMetadataSource}
+                  metadataCopyBusy={metadataCopyBusy}
+                />
+              ) : (
+                <p className="text-sm text-[var(--text-muted,#6B645B)]">Select a photo to see where it is used.</p>
+              )}
+            </InspectorSection>
+            <InspectorSection
               id={RIGHT_METADATA_SECTION_ID}
               ref={metadataSectionRef}
+              icon={<CameraIcon className="h-4 w-4" aria-hidden="true" />}
               label="Metadata"
               open={metadataOpen}
               onToggle={() => setMetadataOpen((open) => !open)}
-              className="flex-1 min-h-0"
-              contentClassName="px-4 py-3 flex flex-col gap-3 overflow-hidden"
+              grow
             >
-              {metadataLoading ? <p className="text-xs text-[var(--text-muted,#6B645B)]">Loading metadata…</p> : null}
-              {metadataError ? <p className="text-xs text-[#B42318]">{metadataError}</p> : null}
-              {metadataWarnings.length ? (
-                <ul className="space-y-1 rounded-[12px] border border-[#F59E0B]/40 bg-[#FFF7ED] px-3 py-2 text-[11px] text-[#B45309]">
-                  {metadataWarnings.map((warning) => (
-                    <li key={warning} className="flex items-start gap-2">
-                      <span className="mt-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full border border-[#F59E0B] text-[10px]">!</span>
-                      <span className="flex-1 break-words">{warning}</span>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-              {hasSelection ? (
-                metadataEntries.length ? (
-                  <MetadataAccordion groups={metadataGroups} openState={metadataAccordion} onToggle={toggleMetadataGroup} />
+              <div className="flex min-h-0 flex-col gap-3">
+                {metadataLoading ? <p className="text-xs text-[var(--text-muted,#6B645B)]">Loading metadata…</p> : null}
+                {metadataError ? <p className="text-xs text-[#B42318]">{metadataError}</p> : null}
+                {metadataWarnings.length ? (
+                  <ul className="space-y-1 rounded-[12px] border border-[#F59E0B]/40 bg-[#FFF7ED] px-3 py-2 text-[11px] text-[#B45309]">
+                    {metadataWarnings.map((warning) => (
+                      <li key={warning} className="flex items-start gap-2">
+                        <span className="mt-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full border border-[#F59E0B] text-[10px]">!</span>
+                        <span className="flex-1 break-words">{warning}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+                {hasSelection ? (
+                  metadataEntries.length ? (
+                    <MetadataAccordion groups={metadataGroups} openState={metadataAccordion} onToggle={toggleMetadataGroup} />
+                  ) : (
+                    <p className="text-sm text-[var(--text-muted,#6B645B)]">No metadata available for this asset.</p>
+                  )
                 ) : (
-                  <p className="text-sm text-[var(--text-muted,#6B645B)]">No metadata available for this asset.</p>
-                )
-              ) : (
-                <p className="text-sm text-[var(--text-muted,#6B645B)]">Select a photo to review metadata.</p>
-              )}
-            </PanelSection>
+                  <p className="text-sm text-[var(--text-muted,#6B645B)]">Select a photo to review metadata.</p>
+                )}
+              </div>
+            </InspectorSection>
           </div>
         </div>
       </div>
       <div
         data-panel="rail"
         aria-hidden={!collapsed}
-        className={`absolute inset-0 flex items-center justify-center px-1 py-2 transition-opacity duration-150 ${collapsed ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
+        className={`pointer-events-none absolute inset-0 flex items-center justify-center px-1 py-2 transition-opacity duration-150 ${collapsed ? 'opacity-100' : 'opacity-0'}`}
       >
-        <RightRail
-          inspectorExpanded={!collapsed && inspectorOpen}
-          metadataExpanded={!collapsed && metadataOpen}
-          onInspector={() => handleRailSelect('inspector')}
-          onMetadata={() => handleRailSelect('metadata')}
-          inspectorActive={hasSelection}
-          metadataActive={metadataEntries.length > 0 || metadataWarnings.length > 0}
-        />
+        {collapsed ? (
+          <InspectorRail
+            onExpand={onExpand}
+            onKeyData={() => handleRailSelect('keyData')}
+            onProjects={() => handleRailSelect('projects')}
+            onMetadata={() => handleRailSelect('metadata')}
+          />
+        ) : null}
       </div>
     </aside>
   )
 }
 
-function InspectorCard({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
+type InspectorSectionProps = {
+  id: string
+  icon: React.ReactNode
+  label: string
+  open: boolean
+  onToggle: () => void
+  children: React.ReactNode
+  grow?: boolean
+  maxBodyHeight?: number
+}
+
+const InspectorSection = React.forwardRef<HTMLDivElement, InspectorSectionProps>(function InspectorSection(
+  { id, icon, label, open, onToggle, children, grow = false, maxBodyHeight },
+  ref,
+) {
+  const bodyStyle = maxBodyHeight ? { maxHeight: `${maxBodyHeight}px` } : undefined
   return (
-    <section className="rounded-[20px] border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] p-3 shadow-sm">
-      <div className="mb-2">
-        <div className="text-sm font-semibold text-[var(--text,#1F1E1B)]">{title}</div>
-        {description ? <p className="text-[11px] text-[var(--text-muted,#6B645B)]">{description}</p> : null}
+    <section
+      id={id}
+      ref={ref}
+      tabIndex={-1}
+      className={`flex flex-col rounded-[18px] border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] shadow-[0_18px_40px_rgba(31,30,27,0.12)] ${
+        grow ? 'flex-1 min-h-0' : ''
+      }`}
+    >
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={`${id}-content`}
+        onClick={onToggle}
+        className="flex items-center gap-3 px-4 py-2 text-sm font-semibold text-[var(--text,#1F1E1B)]"
+      >
+        <span className="inline-flex items-center gap-2">
+          <span className="text-[var(--text-muted,#6B645B)]">{icon}</span>
+          {label}
+        </span>
+        <span className="ml-auto text-[11px] font-medium uppercase tracking-wide text-[var(--text-muted,#6B645B)]">{open ? 'Hide' : 'Show'}</span>
+      </button>
+      <div
+        id={`${id}-content`}
+        aria-hidden={!open}
+        className={`flex-1 ${open ? 'flex flex-col px-4 pb-4 pt-1' : 'hidden'}`}
+      >
+        <div className={`flex-1 overflow-auto overscroll-contain pr-2 ${grow ? 'min-h-0' : ''}`} style={bodyStyle}>
+          {children}
+        </div>
       </div>
-      {children}
     </section>
   )
+})
+
+type KeyDataRow = { label: string; value: React.ReactNode }
+
+function KeyDataGrid({ rows }: { rows: KeyDataRow[] }) {
+  return (
+    <dl className="space-y-3">
+      {rows.map((row) => (
+        <div key={row.label} className="flex items-start gap-4 text-sm">
+          <dt className="w-32 flex-shrink-0 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">
+            {row.label}
+          </dt>
+          <dd className="flex-1 text-right text-sm font-semibold text-[var(--text,#1F1E1B)]">{row.value}</dd>
+        </div>
+      ))}
+    </dl>
+  )
+}
+
+function ColorLabelValue({ value }: { value: ColorTag }) {
+  const swatch = COLOR_MAP[value] ?? COLOR_MAP.None
+  return (
+    <span className="inline-flex w-full items-center justify-end gap-2 text-right">
+      <span className="h-3 w-3 rounded-full border border-[var(--border,#EDE1C6)]" style={{ backgroundColor: swatch }} />
+      {value}
+    </span>
+  )
+}
+
+function formatRatingValue(value?: number | null): string {
+  if (typeof value !== 'number' || Number.isNaN(value) || value <= 0) return 'Unrated'
+  return `${value} / 5`
+}
+
+function InspectorRail({ onExpand, onKeyData, onProjects, onMetadata }: {
+  onExpand: () => void
+  onKeyData: () => void
+  onProjects: () => void
+  onMetadata: () => void
+}) {
+  return (
+    <div
+      role="toolbar"
+      aria-label="Inspector rail"
+      className="pointer-events-auto flex h-full w-full flex-col items-center rounded-[var(--r-lg,20px)] border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] px-1 py-3 shadow-[0_20px_40px_rgba(31,30,27,0.18)]"
+    >
+      <div className="flex flex-col items-center gap-2">
+        <InspectorRailButton icon={<ChevronLeftIcon className="h-4 w-4" />} label="Expand Inspector" onClick={onExpand} />
+        <RailDivider />
+      </div>
+      <div className="mt-3 flex flex-1 flex-col items-center gap-2">
+        <InspectorRailButton icon={<InfoIcon className="h-4 w-4" />} label="Inspector" onClick={onKeyData} />
+        <InspectorRailButton icon={<LayoutListIcon className="h-4 w-4" />} label="Metadata" onClick={onProjects} />
+        <InspectorRailButton icon={<CameraIcon className="h-4 w-4" />} label="Camera" onClick={onMetadata} />
+        <InspectorRailButton icon={<CalendarClockIcon className="h-4 w-4" />} label="Dates" onClick={onMetadata} />
+      </div>
+      <div className="mt-auto flex flex-col items-center gap-2">
+        <RailDivider />
+        <InspectorRailButton icon={<SettingsIcon className="h-4 w-4" />} label="Inspector settings" onClick={onMetadata} />
+      </div>
+    </div>
+  )
+}
+
+function InspectorRailButton({ icon, label, onClick }: { icon: React.ReactNode; label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      className="inline-flex h-10 w-10 items-center justify-center rounded-[12px] text-[var(--text,#1F1E1B)] transition hover:bg-[var(--surface-subtle,#FBF7EF)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)]"
+    >
+      {icon}
+    </button>
+  )
+}
+
+function RailDivider() {
+  return <div className="h-px w-8 rounded-full bg-[var(--border,#EDE1C6)]" aria-hidden="true" />
 }
 
 function UsedProjectsSection({
@@ -1430,7 +1594,7 @@ function UsedProjectsSection({
     return <p className="text-sm text-[#B42318]">{error}</p>
   }
   if (!projects.length) {
-    return <p className="text-sm text-[var(--text-muted,#6B645B)]">Not linked to any projects yet.</p>
+    return <p className="text-sm text-[var(--text-muted,#6B645B)]">Linked only to the current project.</p>
   }
   const effectiveSourceId = metadataSourceProjectId ?? projects.find((project) => project.isCurrent)?.id ?? null
   return (
@@ -1449,15 +1613,16 @@ function UsedProjectsSection({
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-[var(--text,#1F1E1B)]">
                 <span className="truncate">{project.name}</span>
-                {project.isCurrent ? <InspectorBadge>Current</InspectorBadge> : null}
                 {effectiveSourceId === project.id ? <InspectorBadge tone="primary">Metadata source</InspectorBadge> : null}
               </div>
-              <div className="text-[11px] text-[var(--text-muted,#6B645B)]">{formatProjectTimestamp(project.lastModified)}</div>
+              <div className="text-[11px] text-[var(--text-muted,#6B645B)]">
+                {project.isCurrent ? 'Current project' : formatProjectTimestamp(project.lastModified)}
+              </div>
             </div>
             {!project.isCurrent ? (
               <button
                 type="button"
-                className="shrink-0 rounded-full border border-[var(--border,#EDE1C6)] px-3 py-1 text-[11px] font-medium text-[var(--text,#1F1E1B)] transition hover:border-[var(--text,#1F1E1B)] disabled:cursor-not-allowed disabled:opacity-60"
+                className="ml-auto shrink-0 rounded-full border border-[var(--border,#EDE1C6)] px-3 py-1 text-[11px] font-medium text-[var(--text,#1F1E1B)] transition hover:border-[var(--text,#1F1E1B)] disabled:cursor-not-allowed disabled:opacity-60"
                 onClick={() => onSelectMetadataSource(project.id, project.name)}
                 disabled={metadataCopyBusy}
               >
@@ -1473,65 +1638,11 @@ function UsedProjectsSection({
 
 function ProjectThumbnail({ cover, name }: { cover: string | null; name: string }) {
   if (cover) {
-    return <img src={cover} alt="" className="h-12 w-12 rounded-xl object-cover" loading="lazy" />
+    return <img src={cover} alt="" className="h-8 w-8 rounded-lg object-cover" loading="lazy" />
   }
   return (
-    <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-[var(--border,#EDE1C6)] bg-[var(--surface-subtle,#FBF7EF)] text-sm font-semibold text-[var(--text,#1F1E1B)]">
+    <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border,#EDE1C6)] bg-[var(--surface-subtle,#FBF7EF)] text-xs font-semibold text-[var(--text,#1F1E1B)]">
       {projectInitials(name)}
-    </div>
-  )
-}
-
-function KeyDataSection({ title, fields }: { title: string; fields: InspectorField[] }) {
-  return (
-    <div>
-      <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">{title}</div>
-      {fields.length ? (
-        <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-3">
-          {fields.map((field) => (
-            <div key={field.label} className="min-w-0 text-[12px]">
-              <dt className="text-[10px] uppercase tracking-wide text-[var(--text-muted,#6B645B)]">{field.label}</dt>
-              <dd className="truncate text-sm font-medium text-[var(--text,#1F1E1B)]">{field.value || '—'}</dd>
-            </div>
-          ))}
-        </dl>
-      ) : (
-        <p className="mt-2 text-sm text-[var(--text-muted,#6B645B)]">No data in this section.</p>
-      )}
-    </div>
-  )
-}
-
-function MetadataSummarySection({ summary }: { summary: MetadataSummary }) {
-  return (
-    <div className="flex flex-col gap-3">
-      <div>
-        <div className="text-[10px] uppercase tracking-wide text-[var(--text-muted,#6B645B)]">Rating</div>
-        <div className="mt-1 flex items-center gap-2">
-          <StarDisplay value={summary.rating} />
-          <span className="text-[11px] text-[var(--text-muted,#6B645B)]">{summary.rating}/5</span>
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-3 text-sm">
-        <SummaryStat label="Color label">
-          <ColorLabelPill value={summary.colorLabel} />
-        </SummaryStat>
-        <SummaryStat label="Pick / Reject">
-          <span>{summary.pickRejectLabel}</span>
-        </SummaryStat>
-        <SummaryStat label="Edit state">
-          {summary.hasEdits ? <InspectorBadge tone="primary">Edits present</InspectorBadge> : <span>No edits</span>}
-        </SummaryStat>
-      </div>
-    </div>
-  )
-}
-
-function SummaryStat({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="rounded-[12px] border border-[var(--border,#EDE1C6)] px-2 py-2">
-      <div className="text-[10px] uppercase tracking-wide text-[var(--text-muted,#6B645B)]">{label}</div>
-      <div className="mt-1 text-sm font-semibold text-[var(--text,#1F1E1B)]">{children}</div>
     </div>
   )
 }
@@ -1547,29 +1658,6 @@ function InspectorBadge({ children, tone = 'neutral' }: { children: React.ReactN
     <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${tones[tone] || tones.neutral}`}>
       {children}
     </span>
-  )
-}
-
-function ColorLabelPill({ value }: { value: ColorTag }) {
-  const swatch = COLOR_MAP[value]
-  return (
-    <span className="inline-flex items-center gap-1">
-      <span className="h-3 w-3 rounded-full border border-[var(--border,#EDE1C6)]" style={{ backgroundColor: swatch }} />
-      {value}
-    </span>
-  )
-}
-
-function StarDisplay({ value }: { value: number }) {
-  const stars = [1, 2, 3, 4, 5]
-  return (
-    <div className="inline-flex items-center gap-0.5 text-[var(--amber-500,#D97706)]">
-      {stars.map((star) => (
-        <span key={star} aria-hidden="true" className={`text-base ${value >= star ? '' : 'text-[var(--border,#EDE1C6)]'}`}>
-          ★
-        </span>
-      ))}
-    </div>
   )
 }
 
@@ -1605,7 +1693,7 @@ function MetadataAccordion({
                 <dl>
                   {group.entries.map((entry, index) => (
                     <div key={`${group.id}-${entry.key}-${index}`} className="grid grid-cols-[minmax(140px,35%)_minmax(0,1fr)] gap-3 px-3 py-2 text-[11px] odd:bg-[var(--surface-subtle,#FBF7EF)]">
-                      <dt className="font-semibold text-[var(--text,#1F1E1B)]">{entry.key}</dt>
+                      <dt className="font-semibold text-[var(--text,#1F1E1B)]">{entry.label}</dt>
                       <dd className="break-words text-[var(--text-muted,#6B645B)]">{formatMetadataEntryValue(entry.value)}</dd>
                     </div>
                   ))}
@@ -1647,25 +1735,25 @@ function groupMetadataEntries(entries: MetadataEntry[]): MetadataGroup[] {
     custom: [],
   }
   entries.forEach((entry) => {
-    const category = categorizeMetadataKey(entry.key)
+    const category = categorizeMetadataKey(entry.normalizedKey)
     buckets[category].push(entry)
   })
   return METADATA_GROUP_ORDER
     .map((category) => ({
       id: category.id,
       label: category.label,
-      entries: buckets[category.id].sort((a, b) => a.key.localeCompare(b.key)),
+      entries: buckets[category.id].sort((a, b) => a.label.localeCompare(b.label)),
     }))
     .filter((group) => group.entries.length > 0)
 }
 
-function categorizeMetadataKey(key: string): MetadataCategory {
-  const lower = key.toLowerCase()
-  if (lower.includes('lens')) return 'lens'
-  if (lower.includes('camera') || lower.includes('model') || lower.includes('body')) return 'camera'
-  if (lower.includes('exposure') || lower.includes('aperture') || lower.includes('shutter') || lower.includes('iso') || lower.includes('speed')) return 'exposure'
-  if (lower.includes('gps') || lower.includes('latitude') || lower.includes('longitude') || lower.includes('location')) return 'gps'
-  if (lower.includes('software') || lower.includes('firmware') || lower.includes('application') || lower.includes('program')) return 'software'
+function categorizeMetadataKey(normalizedKey: string): MetadataCategory {
+  const key = normalizedKey.split(':').pop() ?? normalizedKey
+  if (key.includes('lens')) return 'lens'
+  if (key.includes('camera') || key.includes('model') || key.includes('body')) return 'camera'
+  if (key.includes('exposure') || key.includes('aperture') || key.includes('shutter') || key.includes('iso') || key.includes('speed')) return 'exposure'
+  if (key.includes('gps') || key.includes('latitude') || key.includes('longitude') || key.includes('location')) return 'gps'
+  if (key.includes('software') || key.includes('firmware') || key.includes('application') || key.includes('program') || key.includes('version')) return 'software'
   return 'custom'
 }
 
@@ -1704,16 +1792,16 @@ function formatMetadataEntryValue(value: unknown): string {
 function formatMetadataEntryNumber(value: number): string {
   if (!Number.isFinite(value)) return '—'
   const magnitude = Math.abs(value)
-  const decimals = magnitude >= 1000 ? 0 : magnitude >= 1 ? 4 : 6
+  const decimals = magnitude >= 100 ? 0 : magnitude >= 10 ? 1 : 2
   const fixed = value.toFixed(decimals)
   return fixed.replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1')
 }
 
 function formatProjectTimestamp(timestamp: string | null): string {
-  if (!timestamp) return 'No recent edits'
+  if (!timestamp) return 'Last updated —'
   const parsed = new Date(timestamp)
-  if (Number.isNaN(parsed.getTime())) return 'No recent edits'
-  return `Updated ${parsed.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`
+  if (Number.isNaN(parsed.getTime())) return 'Last updated —'
+  return `Last updated ${parsed.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`
 }
 
 function projectInitials(name: string): string {
@@ -1723,49 +1811,70 @@ function projectInitials(name: string): string {
   return `${parts[0][0]}${parts[1][0]}`.toUpperCase()
 }
 
-function RightRail({
-  onInspector,
-  onMetadata,
-  inspectorExpanded,
-  metadataExpanded,
-  inspectorActive,
-  metadataActive,
-}: {
-  onInspector: () => void
-  onMetadata: () => void
-  inspectorExpanded: boolean
-  metadataExpanded: boolean
-  inspectorActive: boolean
-  metadataActive: boolean
-}) {
+function ChevronLeftIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
-    <div
-      role="toolbar"
-      aria-label="Inspector rail"
-      className="flex h-full w-full flex-col items-center gap-4 rounded-[var(--r-lg,20px)] border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] px-2 py-4 text-[10px] shadow-[0_20px_40px_rgba(31,30,27,0.18)]"
-    >
-      <RailAction
-        id="inspector-rail"
-        label="Inspector"
-        icon={<InspectorIcon className="h-4 w-4" />}
-        onClick={onInspector}
-        ariaControls={RIGHT_INSPECTOR_SECTION_ID}
-        ariaExpanded={inspectorExpanded}
-        isActive={inspectorActive}
-      />
-      <RailAction
-        id="metadata-rail"
-        label="Metadata"
-        icon={<MetadataIcon className="h-4 w-4" />}
-        onClick={onMetadata}
-        ariaControls={RIGHT_METADATA_SECTION_ID}
-        ariaExpanded={metadataExpanded}
-        isActive={metadataActive}
-      />
-    </div>
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M10 3 5 8l5 5" />
+    </svg>
   )
 }
 
+function ChevronRightIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="m6 3 5 5-5 5" />
+    </svg>
+  )
+}
+
+function InfoIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <circle cx="8" cy="8" r="5.5" />
+      <path d="M8 7v4" />
+      <path d="M8 5.25h.01" />
+    </svg>
+  )
+}
+
+function LayoutListIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <rect x="2.5" y="3" width="11" height="10" rx="2" />
+      <path d="M5 6.5h6M5 9.5h6M5 12.5h3" />
+    </svg>
+  )
+}
+
+function CameraIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M3 5.5h10a1.5 1.5 0 0 1 1.5 1.5v4.5A1.5 1.5 0 0 1 13 13h-10A1.5 1.5 0 0 1 1.5 11.5V7a1.5 1.5 0 0 1 1.5-1.5Z" />
+      <path d="M5.5 5.5 6.8 3.8a1 1 0 0 1 .8-.3h0.8a1 1 0 0 1 .8.3l1.3 1.7" />
+      <circle cx="8" cy="9" r="2" />
+    </svg>
+  )
+}
+
+function CalendarClockIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M4 2v2m8-2v2m-9 2h10" />
+      <rect x="2.5" y="3" width="11" height="10" rx="2" />
+      <circle cx="10.5" cy="10" r="2.25" />
+      <path d="M10.5 8.75V10l.8.8" />
+    </svg>
+  )
+}
+
+function SettingsIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="m6.5 2.5 3 .01.4 1.6a4.6 4.6 0 0 1 1.2.7l1.56-.5 1.5 2.6-1.2 1a4.7 4.7 0 0 1 0 .8l1.2 1-1.5 2.6-1.56-.5a4.6 4.6 0 0 1-1.2.7l-.4 1.6-3 .01-.4-1.6a4.6 4.6 0 0 1-1.2-.7l-1.56.5-1.5-2.6 1.2-1a4.7 4.7 0 0 1 0-.8l-1.2-1 1.5-2.6 1.56.5a4.6 4.6 0 0 1 1.2-.7Z" />
+      <circle cx="8" cy="8" r="1.7" />
+    </svg>
+  )
+}
 function PlusIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" {...props}>
@@ -1795,15 +1904,6 @@ function InspectorIcon(props: React.SVGProps<SVGSVGElement>) {
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" {...props}>
       <circle cx="6.5" cy="6.5" r="3.5" />
       <path d="m10 10 3 3" />
-    </svg>
-  )
-}
-
-function MetadataIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <rect x="2.5" y="3" width="11" height="10" rx="2" />
-      <path d="M5 6.5h6M5 9.5h3" />
     </svg>
   )
 }

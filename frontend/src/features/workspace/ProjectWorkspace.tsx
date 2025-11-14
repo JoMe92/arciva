@@ -46,13 +46,13 @@ const LEFT_MIN_WIDTH = 280
 const LEFT_MAX_WIDTH = 420
 const LEFT_DEFAULT_WIDTH = 320
 const LEFT_COLLAPSED_WIDTH = 64
-const RIGHT_MIN_WIDTH = 320
-const RIGHT_MAX_WIDTH = 480
+const RIGHT_MIN_WIDTH = 300
+const RIGHT_MAX_WIDTH = 560
 const RIGHT_DEFAULT_WIDTH = 360
-const RIGHT_COLLAPSED_WIDTH = 64
+const RIGHT_COLLAPSED_WIDTH = 56
 const HANDLE_WIDTH = 12
 const RESIZE_STEP = 16
-const IGNORED_METADATA_WARNINGS = new Set(['EXIFTOOL_ERROR', 'EXIFTOOL_NOT_INSTALLED', 'EXIFTOOL_JSON_ERROR'])
+const IGNORED_METADATA_WARNINGS = new Set(['EXIFTOOL_ERROR', 'EXIFTOOL_NOT_INSTALLED', 'EXIFTOOL_JSON_ERROR', 'ExifPill-Load failed'])
 const DATE_KEY_DELIM = '__'
 const UNKNOWN_VALUE = 'unknown'
 const MONTH_FORMATTER = new Intl.DateTimeFormat(undefined, { month: 'long' })
@@ -743,13 +743,11 @@ export default function ProjectWorkspace() {
     (event: React.PointerEvent<HTMLButtonElement>) => {
       if (event.pointerType === 'mouse' && event.button !== 0) return
       event.preventDefault()
+      if (rightPanelCollapsed) return
       const pointerId = event.pointerId
       const target = event.currentTarget
       const startX = event.clientX
       const startWidth = rightPanelWidth
-      if (rightPanelCollapsed) {
-        setRightPanelCollapsed(false)
-      }
       const handlePointerMove = (moveEvent: PointerEvent) => {
         const delta = moveEvent.clientX - startX
         setRightPanelWidth(clampNumber(startWidth - delta, RIGHT_MIN_WIDTH, RIGHT_MAX_WIDTH))
@@ -792,7 +790,10 @@ export default function ProjectWorkspace() {
         setRightPanelWidth((prev) => clampNumber(prev - RESIZE_STEP, RIGHT_MIN_WIDTH, RIGHT_MAX_WIDTH))
       } else if (event.key === 'ArrowRight') {
         event.preventDefault()
-        setRightPanelCollapsed(false)
+        if (rightPanelCollapsed) {
+          setRightPanelCollapsed(false)
+          return
+        }
         setRightPanelWidth((prev) => clampNumber(prev + RESIZE_STEP, RIGHT_MIN_WIDTH, RIGHT_MAX_WIDTH))
       } else if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault()
@@ -1294,7 +1295,12 @@ export default function ProjectWorkspace() {
     if (!currentAssetDetail?.metadata) return []
     return Object.entries(currentAssetDetail.metadata)
       .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([key, value]) => ({ key, value }))
+      .map(([key, value]) => ({
+        key,
+        normalizedKey: normalizeMetadataKey(key),
+        label: formatMetadataKeyLabel(key),
+        value,
+      }))
   }, [currentAssetDetail?.metadata])
   const metadataWarnings = useMemo(() => {
     const warnings = currentAssetDetail?.metadata_warnings ?? currentPhoto?.metadataWarnings ?? []
@@ -1302,14 +1308,22 @@ export default function ProjectWorkspace() {
   }, [currentAssetDetail?.metadata_warnings, currentPhoto?.metadataWarnings])
   const generalInspectorFields = useMemo(() => {
     if (!currentPhoto) return []
+    const sizeLabel =
+      assetDetailFetching && !currentAssetDetail
+        ? 'Loading…'
+        : currentAssetDetail
+          ? formatBytes(currentAssetDetail.size_bytes)
+          : '—'
     return [
       { label: 'File Name', value: currentAssetDetail?.original_filename ?? currentPhoto.name ?? '—' },
       { label: 'File Type', value: currentPhoto.displayType ?? currentPhoto.type },
       { label: 'Dimensions', value: formatDimensions(currentAssetDetail?.width, currentAssetDetail?.height) },
+      { label: 'Capture Date', value: formatCaptureDateLabel(currentAssetDetail?.metadata, currentAssetDetail?.taken_at ?? currentPhoto.capturedAt ?? null) },
       { label: 'Import Date', value: formatImportDateLabel(currentPhoto.uploadedAt ?? currentPhoto.date) },
+      { label: 'File Size', value: sizeLabel },
       { label: 'Storage Origin', value: formatStorageOriginLabel(currentAssetDetail?.storage_uri) },
     ]
-  }, [currentAssetDetail, currentPhoto])
+  }, [assetDetailFetching, currentAssetDetail, currentPhoto])
   const captureInspectorFields = useMemo(() => {
     if (!currentPhoto) return []
     const metadata = currentAssetDetail?.metadata ?? null
@@ -1698,7 +1712,7 @@ function formatMetadataValue(input: unknown): string {
   }
   if (typeof input === 'number') {
     const magnitude = Math.abs(input)
-    const decimals = magnitude >= 1 ? 4 : 6
+    const decimals = magnitude >= 100 ? 0 : magnitude >= 10 ? 1 : 2
     return trimNumber(input, decimals)
   }
   if (typeof input === 'string') {
@@ -1713,11 +1727,37 @@ function formatMetadataValue(input: unknown): string {
   return String(input)
 }
 
-function formatImportDateLabel(source?: string | null): string {
+function formatDateTimeLabel(source?: string | Date | null): string {
   if (!source) return '—'
-  const parsed = new Date(source)
-  if (Number.isNaN(parsed.getTime())) return '—'
-  return parsed.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+  const parsed = source instanceof Date ? source : new Date(source)
+  if (Number.isNaN(parsed.getTime())) {
+    return typeof source === 'string' ? source : '—'
+  }
+  return new Intl.DateTimeFormat(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(parsed)
+}
+
+function formatImportDateLabel(source?: string | null): string {
+  return formatDateTimeLabel(source)
+}
+
+function formatCaptureDateLabel(metadata: Record<string, unknown> | null | undefined, fallback?: string | null): string {
+  const cand =
+    pickMetadataValue(metadata, [
+      'exif:datetimeoriginal',
+      'datetimeoriginal',
+      'quicktime:createdate',
+      'xmp:createdate',
+      'iptc:datecreated',
+      'photoshop:datecreated',
+      'composite:datetimecreated',
+    ]) ?? fallback
+  return formatDateTimeLabel(typeof cand === 'string' ? cand : fallback)
 }
 
 function formatStorageOriginLabel(storageUri?: string | null): string {
@@ -1846,6 +1886,38 @@ function formatFractionFromDecimal(value: number): string {
   if (value <= 0) return String(value)
   const denominator = Math.max(1, Math.round(1 / value))
   return `1/${denominator}`
+}
+
+const METADATA_LABEL_OVERRIDES: Record<string, string> = {
+  'exif:lensid': 'Lens ID',
+  'composite:aperture': 'Aperture',
+  'composite:shutterspeed': 'Shutter Speed',
+  'makernotes:focusmode': 'Focus Mode',
+  'raf:version': 'Firmware Version',
+  'exif:fnumber': 'Aperture',
+  'exif:iso': 'ISO',
+  'iptc:keywords': 'Keywords',
+  'xmp:createdate': 'XMP Create Date',
+  'photoshop:datecreated': 'Photoshop Date Created',
+}
+
+function normalizeMetadataKey(key: string): string {
+  return key ? key.trim().toLowerCase() : ''
+}
+
+function formatMetadataKeyLabel(key: string): string {
+  const normalized = normalizeMetadataKey(key)
+  if (METADATA_LABEL_OVERRIDES[normalized]) {
+    return METADATA_LABEL_OVERRIDES[normalized]
+  }
+  const stripped = key.includes(':') ? key.split(':').slice(-1)[0] : key
+  const spaced = stripped
+    .replace(/_/g, ' ')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (!spaced) return key
+  return spaced.replace(/\b([a-z])/g, (char) => char.toUpperCase())
 }
 
 type LocalFileDescriptor = {

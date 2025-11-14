@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { RawPlaceholder, RawPlaceholderFrame } from '../../components/RawPlaceholder'
 import StoneTrailLogo from '../../components/StoneTrailLogo'
 import { useTheme } from '../../shared/theme'
@@ -127,6 +128,7 @@ export type WorkspaceFilterControls = {
 }
 
 const SHORTCUTS_LEGEND_ID = 'shortcuts-legend'
+const FILTERS_DIALOG_ID = 'workspace-filters-dialog'
 
 export function TopBar({
   projectName,
@@ -175,12 +177,58 @@ export function TopBar({
   const [draft, setDraft] = useState(projectName)
   const [filtersOpen, setFiltersOpen] = useState(false)
   const inputRef = useRef<HTMLInputElement | null>(null)
-  const filtersRef = useRef<HTMLDivElement | null>(null)
   const filtersButtonRef = useRef<HTMLButtonElement | null>(null)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const shortcutsButtonRef = useRef<HTMLButtonElement | null>(null)
-  const shortcutsLegendRef = useRef<HTMLDivElement | null>(null)
+  const [filtersAnchorRect, setFiltersAnchorRect] = useState<DOMRect | null>(null)
+  const [shortcutsAnchorRect, setShortcutsAnchorRect] = useState<DOMRect | null>(null)
   const { mode, toggle } = useTheme()
+
+  const syncFiltersAnchor = useCallback(() => {
+    if (!filtersButtonRef.current) return
+    setFiltersAnchorRect(filtersButtonRef.current.getBoundingClientRect())
+  }, [])
+
+  const syncShortcutsAnchor = useCallback(() => {
+    if (!shortcutsButtonRef.current) return
+    setShortcutsAnchorRect(shortcutsButtonRef.current.getBoundingClientRect())
+  }, [])
+
+  const closeFilters = useCallback(() => {
+    setFiltersOpen(false)
+    setFiltersAnchorRect(null)
+    filtersButtonRef.current?.focus()
+  }, [])
+
+  const closeShortcuts = useCallback(() => {
+    setShortcutsOpen(false)
+    setShortcutsAnchorRect(null)
+    shortcutsButtonRef.current?.focus()
+  }, [])
+
+  useLayoutEffect(() => {
+    if (!filtersOpen) return
+    const handle = () => syncFiltersAnchor()
+    handle()
+    window.addEventListener('resize', handle)
+    window.addEventListener('scroll', handle, true)
+    return () => {
+      window.removeEventListener('resize', handle)
+      window.removeEventListener('scroll', handle, true)
+    }
+  }, [filtersOpen, syncFiltersAnchor])
+
+  useLayoutEffect(() => {
+    if (!shortcutsOpen) return
+    const handle = () => syncShortcutsAnchor()
+    handle()
+    window.addEventListener('resize', handle)
+    window.addEventListener('scroll', handle, true)
+    return () => {
+      window.removeEventListener('resize', handle)
+      window.removeEventListener('scroll', handle, true)
+    }
+  }, [shortcutsOpen, syncShortcutsAnchor])
 
   useEffect(() => {
     if (!editing) {
@@ -196,47 +244,6 @@ export function TopBar({
     }
   }, [editing])
 
-  useEffect(() => {
-    if (!filtersOpen) return
-    const handleClick = (event: MouseEvent) => {
-      const target = event.target as Node
-      if (filtersRef.current?.contains(target)) return
-      if (filtersButtonRef.current?.contains(target)) return
-      setFiltersOpen(false)
-    }
-    const handleKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setFiltersOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClick)
-    document.addEventListener('keydown', handleKey)
-    return () => {
-      document.removeEventListener('mousedown', handleClick)
-      document.removeEventListener('keydown', handleKey)
-    }
-  }, [filtersOpen])
-
-  useEffect(() => {
-    if (!shortcutsOpen) return
-    const handleClick = (event: MouseEvent) => {
-      const target = event.target as Node
-      if (shortcutsLegendRef.current?.contains(target)) return
-      if (shortcutsButtonRef.current?.contains(target)) return
-      setShortcutsOpen(false)
-    }
-    const handleKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setShortcutsOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClick)
-    document.addEventListener('keydown', handleKey)
-    return () => {
-      document.removeEventListener('mousedown', handleClick)
-      document.removeEventListener('keydown', handleKey)
-    }
-  }, [shortcutsOpen])
 
   const startEditing = useCallback(() => {
     setDraft(projectName)
@@ -288,7 +295,7 @@ export function TopBar({
   }, [filterCount])
 
   const viewButtonClasses = (mode: 'grid' | 'detail') =>
-    `inline-flex h-9 items-center px-4 text-[12px] font-medium transition-colors ${
+    `inline-flex h-9 w-[88px] items-center justify-center text-[12px] font-medium transition-colors ${
       view === mode ? 'bg-[var(--sand-100,#F3EBDD)] text-[var(--text,#1F1E1B)]' : 'text-[var(--text-muted,#6B645B)]'
     }`
 
@@ -297,10 +304,10 @@ export function TopBar({
   return (
     <header className="sticky top-0 z-40 border-b border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]/95 backdrop-blur">
       <div
-        className="mx-auto grid h-16 max-w-7xl items-center gap-[var(--s-3)] px-4 sm:px-6 lg:px-8"
-        style={{ gridTemplateColumns: 'auto 1fr auto' }}
+        className="mx-auto grid h-16 max-w-7xl items-center gap-4 px-4 sm:px-6 lg:px-8"
+        style={{ gridTemplateColumns: 'auto minmax(0,1fr) auto auto auto' }}
       >
-        <div className="flex min-w-0 items-center gap-3">
+        <div className="flex items-center gap-3">
           <StoneTrailLogo className="hidden lg:inline-flex shrink-0" showLabel={false} mode={mode} onToggleTheme={toggle} />
           <button
             type="button"
@@ -310,209 +317,301 @@ export function TopBar({
           >
             ← Projects
           </button>
-          <nav className="hidden items-center text-sm text-[var(--text-muted,#6B645B)] md:flex">
-            <button type="button" onClick={onBack} className="font-medium text-[var(--text,#1F1E1B)] hover:underline focus:outline-none">
+        </div>
+        <div className="flex min-w-0 items-center gap-3">
+          <nav className="flex min-w-0 items-center gap-3 text-sm text-[var(--text-muted,#6B645B)]" aria-label="Breadcrumb">
+            <button
+              type="button"
+              onClick={onBack}
+              className="font-medium text-[var(--text-muted,#6B645B)] transition-colors hover:text-[var(--text,#1F1E1B)]"
+            >
               Projects
             </button>
-            <span className="mx-2">›</span>
-            <span className="max-w-[180px] truncate font-medium text-[var(--text,#1F1E1B)]" title={projectName}>
-              {projectName}
+            <span aria-hidden="true" className="text-base leading-none text-[var(--text-muted,#6B645B)]">
+              ›
             </span>
-          </nav>
-        </div>
-
-        <div className="flex flex-1 flex-col items-center text-center">
-          {editing ? (
-            <div className="flex items-center gap-2">
-              <input
-                ref={inputRef}
-                value={draft}
-                onChange={(event) => setDraft(event.target.value)}
-                onKeyDown={handleTitleKey}
-                onBlur={handleBlur}
-                disabled={renamePending}
-                className="h-11 min-w-[200px] rounded-xl border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 text-center text-xl font-semibold text-[var(--text,#1F1E1B)] shadow-inner focus:outline-none focus:ring-2 focus:ring-[var(--stone-trail-brand-focus,#4A463F)]"
-              />
+            {editing ? (
+              <div className="flex items-center gap-2">
+                <div className="relative">
+                  <input
+                    ref={inputRef}
+                    value={draft}
+                    onChange={(event) => setDraft(event.target.value)}
+                    onKeyDown={handleTitleKey}
+                    onBlur={handleBlur}
+                    disabled={renamePending}
+                    aria-label="Project name"
+                    className="h-9 min-w-[200px] max-w-[260px] rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-4 text-sm font-semibold text-[var(--text,#1F1E1B)] shadow-inner focus:outline-none focus:ring-2 focus:ring-[var(--stone-trail-brand-focus,#4A463F)]"
+                  />
+                  {renameError ? (
+                    <span className="absolute -bottom-5 left-0 text-xs text-[#B42318]">{renameError}</span>
+                  ) : null}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void commitRename()}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border,#E1D3B9)] text-xs"
+                  disabled={renamePending}
+                  aria-label="Save project name"
+                >
+                  ✓
+                </button>
+                <button
+                  type="button"
+                  onClick={cancelEditing}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border,#E1D3B9)] text-xs"
+                  disabled={renamePending}
+                  aria-label="Cancel renaming"
+                >
+                  ✕
+                </button>
+              </div>
+            ) : (
               <button
                 type="button"
-                onClick={() => void commitRename()}
-                className="h-9 w-9 rounded-full border border-[var(--border,#E1D3B9)] text-sm"
-                disabled={renamePending}
-                aria-label="Save project name"
-              >
-                ✓
-              </button>
-              <button
-                type="button"
-                onClick={cancelEditing}
-                className="h-9 w-9 rounded-full border border-[var(--border,#E1D3B9)] text-sm"
-                disabled={renamePending}
-                aria-label="Cancel renaming"
-              >
-                ✕
-              </button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-3">
-              <h1
-                className="text-2xl font-bold leading-tight tracking-tight text-[var(--text,#1F1E1B)]"
                 onDoubleClick={startEditing}
-                title="Double-click to rename"
+                className="truncate text-left text-sm font-semibold text-[var(--text,#1F1E1B)]"
+                title="Rename project"
               >
                 {projectName}
-              </h1>
-              <button
-                type="button"
-                onClick={startEditing}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border,#E1D3B9)] text-sm text-[var(--text-muted,#6B645B)] hover:text-[var(--text,#1F1E1B)]"
-                aria-label="Rename project"
-              >
-                ✎
               </button>
-            </div>
-          )}
-          {renameError ? (
-            <p className="mt-1 text-xs text-[#B42318]">{renameError}</p>
+            )}
+          </nav>
+          {!editing ? (
+            <button
+              type="button"
+              onClick={startEditing}
+              className="inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border border-[var(--border,#E1D3B9)] text-xs text-[var(--text-muted,#6B645B)] hover:text-[var(--text,#1F1E1B)]"
+              aria-label="Rename project"
+            >
+              ✎
+            </button>
           ) : null}
         </div>
-
-        <div className="flex flex-wrap items-center justify-end gap-[var(--s-3)] text-[12px]">
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="inline-flex items-center rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]">
-              <button type="button" className={`${viewButtonClasses('grid')} rounded-l-full`} onClick={() => onChangeView('grid')}>
-                Grid
-              </button>
-              <button type="button" className={`${viewButtonClasses('detail')} rounded-r-full`} onClick={() => onChangeView('detail')}>
-                Detail
-              </button>
-            </div>
-            {view === 'grid' ? (
-              <label className="hidden items-center gap-2 whitespace-nowrap text-[11px] text-[var(--text-muted,#6B645B)] lg:flex">
-                Size
-                <input
-                  type="range"
-                  min={minGridSize}
-                  max={240}
-                  value={gridSize}
-                  onChange={(event) => onGridSizeChange(Number(event.target.value))}
-                  aria-label="Thumbnail size"
-                />
-              </label>
-            ) : null}
-            <button
-              type="button"
-              className={`inline-flex h-9 items-center gap-2 rounded-full border px-4 text-[11px] font-medium ${
-                stackPairsEnabled ? 'border-[var(--text,#1F1E1B)] text-[var(--text,#1F1E1B)]' : 'border-[var(--border,#E1D3B9)] text-[var(--text-muted,#6B645B)]'
-              }`}
-              aria-pressed={stackPairsEnabled}
-              onClick={() => onToggleStackPairs(!stackPairsEnabled)}
-              disabled={stackTogglePending}
-            >
-              <span>Stack JPEG+RAW Pairs</span>
-              <span
-                className={`inline-flex h-5 w-9 items-center rounded-full border px-1 ${
-                  stackPairsEnabled ? 'border-[var(--text,#1F1E1B)] bg-[var(--text,#1F1E1B)]' : 'border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]'
-                }`}
-                aria-hidden="true"
-              >
-                <span
-                  className={`h-3 w-3 rounded-full bg-[var(--surface,#FFFFFF)] transition-transform duration-150 ${
-                    stackPairsEnabled ? 'translate-x-4' : ''
-                  }`}
-                />
-              </span>
+        <div className="flex min-w-0 items-center justify-center gap-3">
+          <div className="inline-flex items-center overflow-hidden rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]">
+            <button type="button" className={`${viewButtonClasses('grid')} border-r border-[var(--border,#E1D3B9)]`} onClick={() => onChangeView('grid')}>
+              Grid
             </button>
-            <div className="relative">
-              <button
-                type="button"
-                ref={filtersButtonRef}
-                onClick={() => setFiltersOpen((open) => !open)}
-                className={`inline-flex h-9 items-center rounded-full border px-4 text-[12px] font-medium ${
-                  filterCount ? 'border-[var(--text,#1F1E1B)] text-[var(--text,#1F1E1B)]' : 'border-[var(--border,#E1D3B9)] text-[var(--text-muted,#6B645B)]'
-                }`}
-                aria-haspopup="dialog"
-                aria-expanded={filtersOpen}
-              >
-                {filterLabel}
-              </button>
-              {filtersOpen ? (
-                <FiltersPopover
-                  ref={filtersRef}
-                  controls={filters}
-                  onReset={() => {
-                    onResetFilters()
-                    setFiltersOpen(false)
-                  }}
-                  onClose={() => setFiltersOpen(false)}
-                />
-              ) : null}
-            </div>
-            <button
-              type="button"
-              ref={shortcutsButtonRef}
-              onClick={() => setShortcutsOpen((open) => !open)}
-              className={`inline-flex h-9 items-center rounded-full border px-4 text-[12px] font-medium ${
-                shortcutsOpen ? 'border-[var(--text,#1F1E1B)] text-[var(--text,#1F1E1B)]' : 'border-[var(--border,#E1D3B9)] text-[var(--text-muted,#6B645B)]'
-              }`}
-              aria-expanded={shortcutsOpen}
-              aria-controls={SHORTCUTS_LEGEND_ID}
-            >
-              ⌨ Shortcuts
-            </button>
-            <button
-              type="button"
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border,#E1D3B9)] text-lg text-[var(--text-muted,#6B645B)]"
-              aria-label="More actions"
-            >
-              …
+            <button type="button" className={viewButtonClasses('detail')} onClick={() => onChangeView('detail')}>
+              Detail
             </button>
           </div>
-          <div
-            data-testid="top-bar-status-slot"
-            className="flex flex-col items-end justify-center text-[11px] text-[var(--text-muted,#6B645B)]"
-            style={{ minWidth: 200, maxWidth: 220 }}
+          {view === 'grid' ? (
+            <label
+              className="hidden h-9 flex-shrink-0 items-center gap-2 rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 text-[11px] text-[var(--text-muted,#6B645B)] lg:flex"
+              style={{ width: 200 }}
+            >
+              <span className="text-[11px] font-medium text-[var(--text-muted,#6B645B)]">Size</span>
+              <input
+                type="range"
+                min={minGridSize}
+                max={240}
+                value={gridSize}
+                onChange={(event) => onGridSizeChange(Number(event.target.value))}
+                aria-label="Thumbnail size"
+                className="h-1.5 flex-1 accent-[var(--text,#1F1E1B)]"
+              />
+            </label>
+          ) : null}
+          <button
+            type="button"
+            className={`inline-flex h-9 w-[220px] flex-shrink-0 items-center justify-between rounded-full border px-4 text-[11px] font-medium ${
+              stackPairsEnabled ? 'border-[var(--text,#1F1E1B)] text-[var(--text,#1F1E1B)]' : 'border-[var(--border,#E1D3B9)] text-[var(--text-muted,#6B645B)]'
+            } ${stackTogglePending ? 'cursor-not-allowed opacity-60' : ''}`}
+            aria-pressed={stackPairsEnabled}
+            onClick={() => onToggleStackPairs(!stackPairsEnabled)}
+            disabled={stackTogglePending}
           >
-            <div className="flex items-center gap-2 text-right">
+            <span className="whitespace-nowrap">Stack JPEG+RAW</span>
+            <span
+              className={`inline-flex h-5 w-10 items-center rounded-full border px-1 transition-colors duration-200 ${
+                stackPairsEnabled ? 'border-[var(--text,#1F1E1B)] bg-[var(--text,#1F1E1B)]' : 'border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]'
+              }`}
+              aria-hidden="true"
+            >
               <span
-                className={`transition-opacity duration-200 ${loadingAssets ? 'opacity-100 visible' : 'opacity-0 invisible'}`}
-                aria-live="polite"
-              >
-                Syncing…
-              </span>
-              <span
-                className={`transition-opacity duration-200 ${loadError ? 'opacity-100 visible text-[#B42318]' : 'opacity-0 invisible'}`}
-                aria-live="polite"
-              >
-                {loadError}
-              </span>
-              <span className="transition-opacity duration-200 opacity-100 visible text-[var(--text,#1F1E1B)]" aria-live="polite" title={photoCountText}>
-                {photoCountText}
-              </span>
-            </div>
+                className={`h-3.5 w-3.5 rounded-full bg-[var(--surface,#FFFFFF)] transition-transform duration-200 ${
+                  stackPairsEnabled ? 'translate-x-4' : ''
+                }`}
+              />
+            </span>
+          </button>
+        </div>
+        <div className="flex flex-shrink-0 items-center justify-end gap-2 text-[12px]">
+          <button
+            type="button"
+            ref={filtersButtonRef}
+            onClick={() => {
+              if (filtersOpen) {
+                closeFilters()
+              } else {
+                setFiltersOpen(true)
+                syncFiltersAnchor()
+              }
+            }}
+            className={`inline-flex h-9 min-w-[110px] items-center justify-center gap-2 rounded-full border px-4 text-[12px] font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--stone-trail-brand-focus,#4A463F)] ${
+              filterCount ? 'border-[var(--text,#1F1E1B)] text-[var(--text,#1F1E1B)]' : 'border-[var(--border,#E1D3B9)] text-[var(--text-muted,#6B645B)]'
+            }`}
+            aria-haspopup="dialog"
+            aria-controls={FILTERS_DIALOG_ID}
+            aria-expanded={filtersOpen}
+            title={filterLabel}
+          >
+            <span>Filters</span>
+            {filterCount ? <CountBadge count={filterCount} /> : null}
+          </button>
+          <button
+            type="button"
+            ref={shortcutsButtonRef}
+            onClick={() => {
+              if (shortcutsOpen) {
+                closeShortcuts()
+              } else {
+                setShortcutsOpen(true)
+                syncShortcutsAnchor()
+              }
+            }}
+            className={`inline-flex h-9 min-w-[130px] items-center justify-center gap-2 rounded-full border px-4 text-[12px] font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--stone-trail-brand-focus,#4A463F)] ${
+              shortcutsOpen ? 'border-[var(--text,#1F1E1B)] text-[var(--text,#1F1E1B)]' : 'border-[var(--border,#E1D3B9)] text-[var(--text-muted,#6B645B)]'
+            }`}
+            aria-haspopup="dialog"
+            aria-expanded={shortcutsOpen}
+            aria-controls={SHORTCUTS_LEGEND_ID}
+          >
+            <span aria-hidden="true">⌨</span>
+            <span>Shortcuts</span>
+          </button>
+        </div>
+        <div
+          data-testid="top-bar-status-slot"
+          className="flex flex-col items-end justify-center text-[11px] text-[var(--text-muted,#6B645B)]"
+          style={{ minWidth: 200, maxWidth: 220 }}
+        >
+          <div className="flex items-center justify-end gap-2 text-right">
+            <span
+              className={`transition-opacity duration-200 ${loadingAssets ? 'opacity-100 visible' : 'opacity-0 invisible'}`}
+              aria-live="polite"
+            >
+              Syncing…
+            </span>
+            <span
+              className={`transition-opacity duration-200 ${loadError ? 'opacity-100 visible text-[#B42318]' : 'opacity-0 invisible'}`}
+              aria-live="polite"
+            >
+              {loadError}
+            </span>
+            <span
+              className="text-sm font-semibold text-[var(--text-muted,#6B645B)]"
+              aria-live="polite"
+              title={photoCountText}
+            >
+              {photoCountText}
+            </span>
           </div>
         </div>
       </div>
-      {shortcutsOpen && <ShortcutsLegend ref={shortcutsLegendRef} onClose={() => setShortcutsOpen(false)} />}
+      {filtersOpen ? (
+        <FiltersDialog
+          controls={filters}
+          onReset={() => {
+            onResetFilters()
+            closeFilters()
+          }}
+          onClose={closeFilters}
+          anchorRect={filtersAnchorRect}
+        />
+      ) : null}
+      {shortcutsOpen ? <ShortcutsDialog onClose={closeShortcuts} anchorRect={shortcutsAnchorRect} /> : null}
     </header>
   )
 }
 
-const FiltersPopover = React.forwardRef<HTMLDivElement, {
-  controls: WorkspaceFilterControls
-  onReset: () => void
+type OverlayDialogProps = {
+  id?: string
+  title: string
   onClose: () => void
-}>(({ controls, onReset, onClose }, ref) => {
-  return (
+  headerAction?: React.ReactNode
+  children: React.ReactNode
+  maxWidthClass?: string
+  anchorRect?: DOMRect | null
+}
+
+function OverlayDialog({ id, title, onClose, headerAction, children, maxWidthClass = 'max-w-md', anchorRect }: OverlayDialogProps) {
+  useEffect(() => {
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose()
+      }
+    }
+    document.addEventListener('keydown', handleKey)
+    return () => document.removeEventListener('keydown', handleKey)
+  }, [onClose])
+
+  const anchored = Boolean(anchorRect)
+  const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 0
+  const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 0
+  const anchorStyle = anchorRect
+    ? {
+        position: 'absolute' as const,
+        top: Math.min(anchorRect.bottom + 12, viewportHeight - 24),
+        right: Math.max(16, viewportWidth - anchorRect.right),
+        maxHeight: 'calc(100vh - 48px)',
+      }
+    : undefined
+
+  return createPortal(
     <div
-      ref={ref}
-      className="absolute right-0 top-full z-50 mt-3 w-80 rounded-2xl border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-4 text-[12px] shadow-xl"
+      className={`fixed inset-0 z-[70] bg-black/20 px-4 py-8 ${anchored ? '' : 'flex items-center justify-center'}`}
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) {
+          onClose()
+        }
+      }}
     >
-      <div className="mb-3 flex items-center justify-between">
-        <div className="font-semibold text-[var(--text,#1F1E1B)]">Filters</div>
-        <button type="button" onClick={onReset} className="text-[11px] text-[var(--river-500,#6B7C7A)] hover:underline">
+      <div
+        id={id}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        className={`w-full ${maxWidthClass} rounded-2xl border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-4 text-[12px] shadow-xl`}
+        style={anchorStyle}
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <p className="text-sm font-semibold text-[var(--text,#1F1E1B)]">{title}</p>
+          <div className="flex items-center gap-2">
+            {headerAction}
+            <button
+              type="button"
+              onClick={onClose}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-transparent text-sm text-[var(--text-muted,#6B645B)] transition-colors hover:border-[var(--border,#E1D3B9)] hover:text-[var(--text,#1F1E1B)]"
+              aria-label={`Close ${title}`}
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+        {children}
+      </div>
+    </div>,
+    document.body,
+  )
+}
+
+function FiltersDialog({ controls, onReset, onClose, anchorRect }: { controls: WorkspaceFilterControls; onReset: () => void; onClose: () => void; anchorRect?: DOMRect | null }) {
+  return (
+    <OverlayDialog
+      id={FILTERS_DIALOG_ID}
+      title="Filters"
+      onClose={onClose}
+      headerAction={
+        <button type="button" onClick={onReset} className="text-[11px] font-medium text-[var(--river-500,#6B7C7A)] hover:underline">
           Reset
         </button>
-      </div>
+      }
+      anchorRect={anchorRect}
+    >
       {controls.dateFilterActive ? (
         <div className="mb-3 rounded-xl border border-[var(--border,#E1D3B9)] bg-[var(--sand-50,#FBF7EF)] px-3 py-2">
           <div className="text-[11px] font-semibold text-[var(--text,#1F1E1B)]">Date</div>
@@ -552,10 +651,9 @@ const FiltersPopover = React.forwardRef<HTMLDivElement, {
           </label>
         </div>
       </div>
-    </div>
+    </OverlayDialog>
   )
-})
-FiltersPopover.displayName = 'FiltersPopover'
+}
 
 const SHORTCUTS: Array<{ keys: string; description: string }> = [
   { keys: 'G', description: 'Switch to the grid view' },
@@ -567,37 +665,23 @@ const SHORTCUTS: Array<{ keys: string; description: string }> = [
   { keys: 'Alt + [ / ]', description: 'Collapse or expand the date rail' },
 ]
 
-const ShortcutsLegend = React.forwardRef<HTMLDivElement, { onClose: () => void }>(({ onClose }, ref) => (
-  <div ref={ref} id={SHORTCUTS_LEGEND_ID} role="region" aria-label="Keyboard shortcuts" className="w-full">
-    <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 sm:px-6 lg:px-8 pb-3 pt-2">
-      <div className="rounded-2xl border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-4 shadow-xl">
-        <div className="flex items-center justify-between">
-          <p className="text-sm font-semibold text-[var(--text,#1F1E1B)]">Keyboard shortcuts</p>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close shortcuts legend"
-            className="text-sm text-[var(--text-muted,#6B645B)] transition hover:text-[var(--text,#1F1E1B)]"
+function ShortcutsDialog({ onClose, anchorRect }: { onClose: () => void; anchorRect?: DOMRect | null }) {
+  return (
+    <OverlayDialog id={SHORTCUTS_LEGEND_ID} title="Keyboard shortcuts" onClose={onClose} maxWidthClass="max-w-2xl" anchorRect={anchorRect}>
+      <ul className="grid gap-2 text-[11px] sm:grid-cols-2">
+        {SHORTCUTS.map((shortcut) => (
+          <li
+            key={shortcut.keys}
+            className="flex items-center justify-between gap-3 rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--surface-subtle,#FBF7EF)] px-3 py-2"
           >
-            ✕
-          </button>
-        </div>
-        <ul className="mt-3 grid gap-2 text-[11px] sm:grid-cols-2">
-          {SHORTCUTS.map((shortcut) => (
-            <li
-              key={shortcut.keys}
-              className="flex items-center justify-between gap-3 rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--surface-subtle,#FBF7EF)] px-3 py-2"
-            >
-              <span className="font-mono text-[11px] text-[var(--text-muted,#6B645B)]">{shortcut.keys}</span>
-              <span className="text-right text-[var(--text,#1F1E1B)]">{shortcut.description}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
-    </div>
-  </div>
-))
-ShortcutsLegend.displayName = 'ShortcutsLegend'
+            <span className="font-mono text-[11px] text-[var(--text-muted,#6B645B)]">{shortcut.keys}</span>
+            <span className="text-right text-[var(--text,#1F1E1B)]">{shortcut.description}</span>
+          </li>
+        ))}
+      </ul>
+    </OverlayDialog>
+  )
+}
 
 function MinStarRow({ value, onChange }: { value: 0 | 1 | 2 | 3 | 4 | 5; onChange: (v: 0 | 1 | 2 | 3 | 4 | 5) => void }) {
   const stars = [0, 1, 2, 3, 4, 5] as const

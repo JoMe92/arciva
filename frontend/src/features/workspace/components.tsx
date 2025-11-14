@@ -660,6 +660,7 @@ function CountBadge({ count, className = '' }: { count: number; className?: stri
 
 const LEFT_PANEL_ID = 'workspace-import-panel'
 const LEFT_PANEL_CONTENT_ID = `${LEFT_PANEL_ID}-content`
+const LEFT_IMPORT_SECTION_ID = `${LEFT_PANEL_ID}-import`
 const LEFT_DATE_SECTION_ID = `${LEFT_PANEL_ID}-date`
 const LEFT_FOLDER_SECTION_ID = `${LEFT_PANEL_ID}-folder`
 
@@ -688,10 +689,11 @@ export function Sidebar({
 }) {
   const [expandedYears, setExpandedYears] = useState<Set<string>>(() => new Set())
   const [expandedMonths, setExpandedMonths] = useState<Set<string>>(() => new Set())
+  const [importSectionOpen, setImportSectionOpen] = useState(true)
   const [dateSectionOpen, setDateSectionOpen] = useState(true)
   const [folderSectionOpen, setFolderSectionOpen] = useState(true)
   const [pendingTarget, setPendingTarget] = useState<LeftPanelTarget | null>(null)
-  const importHeaderRef = useRef<HTMLButtonElement | null>(null)
+  const importSectionRef = useRef<HTMLDivElement | null>(null)
   const dateSectionRef = useRef<HTMLDivElement | null>(null)
   const folderSectionRef = useRef<HTMLDivElement | null>(null)
 
@@ -735,38 +737,45 @@ export function Sidebar({
     })
   }, [selectedDay])
 
-  const scrollToTarget = useCallback(
-    (target: LeftPanelTarget) => {
-      if (target === 'import') {
-        importHeaderRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })
-        importHeaderRef.current?.focus({ preventScroll: true })
-        return
+  const ensureSectionOpen = useCallback((target: LeftPanelTarget) => {
+    if (target === 'import') setImportSectionOpen(true)
+    else if (target === 'date') setDateSectionOpen(true)
+    else setFolderSectionOpen(true)
+  }, [])
+
+  const scrollToTarget = useCallback((target: LeftPanelTarget) => {
+    const refMap: Record<LeftPanelTarget, React.RefObject<HTMLDivElement>> = {
+      import: importSectionRef,
+      date: dateSectionRef,
+      folder: folderSectionRef,
+    }
+    const ref = refMap[target]?.current
+    if (ref) {
+      ref.scrollIntoView({ block: 'start', behavior: 'smooth' })
+      if (typeof ref.focus === 'function') {
+        ref.focus({ preventScroll: true })
       }
-      const ref = target === 'date' ? dateSectionRef.current : folderSectionRef.current
-      if (ref) {
-        ref.scrollIntoView({ block: 'start', behavior: 'smooth' })
-        if (typeof ref.focus === 'function') {
-          ref.focus({ preventScroll: true })
-        }
-      }
-    },
-    [],
-  )
+    }
+  }, [])
 
   useEffect(() => {
     if (collapsed || !pendingTarget) return
+    ensureSectionOpen(pendingTarget)
     scrollToTarget(pendingTarget)
     setPendingTarget(null)
-  }, [collapsed, pendingTarget, scrollToTarget])
+  }, [collapsed, ensureSectionOpen, pendingTarget, scrollToTarget])
 
   const handleRailSelect = useCallback(
     (target: LeftPanelTarget) => {
       if (target === 'import') {
         onOpenImport()
+        if (!collapsed) {
+          ensureSectionOpen(target)
+          scrollToTarget(target)
+        }
         return
       }
-      if (target === 'date') setDateSectionOpen(true)
-      if (target === 'folder') setFolderSectionOpen(true)
+      ensureSectionOpen(target)
       if (collapsed) {
         setPendingTarget(target)
         onExpand()
@@ -774,7 +783,7 @@ export function Sidebar({
       }
       scrollToTarget(target)
     },
-    [collapsed, onExpand, onOpenImport, scrollToTarget],
+    [collapsed, ensureSectionOpen, onExpand, onOpenImport, scrollToTarget],
   )
 
   const toggleYear = useCallback((yearId: string) => {
@@ -951,42 +960,58 @@ export function Sidebar({
         className={`h-full transition-opacity duration-150 ${collapsed ? 'pointer-events-none opacity-0' : 'opacity-100'}`}
       >
         <div className="flex h-full flex-col overflow-hidden rounded-[var(--r-lg,20px)] border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] p-4 shadow-[0_30px_80px_rgba(31,30,27,0.16)]">
-          <header className="sticky top-0 z-10 flex flex-col gap-3 border-b border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] pb-3">
-            <div className="flex items-center justify-between gap-3">
+          <header className="sticky top-0 z-10 border-b border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] pb-3">
+            <div className="flex items-center gap-3">
               <button
                 type="button"
-                ref={importHeaderRef}
-                aria-expanded={!collapsed}
+                aria-label="Collapse Import panel"
                 aria-controls={LEFT_PANEL_CONTENT_ID}
-                onClick={() => {
-                  if (collapsed) onExpand()
-                  else onCollapse()
-                }}
-                className="inline-flex items-center gap-2 text-[15px] font-semibold text-[var(--text,#1F1E1B)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)]"
+                onClick={onCollapse}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border,#EDE1C6)] text-[var(--text,#1F1E1B)] transition hover:border-[var(--text,#1F1E1B)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)]"
               >
-                Import
-                <ChevronDownIcon className={`h-4 w-4 transition-transform ${collapsed ? '' : 'rotate-180'}`} />
+                <ChevronLeftIcon className="h-4 w-4" aria-hidden="true" />
               </button>
-              <button
-                type="button"
-                onClick={onOpenImport}
-                className="inline-flex h-10 min-w-[120px] items-center justify-center gap-2 rounded-full border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] px-4 text-sm font-semibold text-[var(--text,#1F1E1B)] shadow-[0_1px_2px_rgba(31,30,27,0.08)] transition hover:shadow-[0_4px_12px_rgba(31,30,27,0.14)] active:shadow-inner focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--focus-ring,#1A73E8)]"
-              >
-                <PlusIcon className="h-4 w-4" />
-                Import
-              </button>
+              <ImportIcon className="h-4 w-4 text-[var(--text,#1F1E1B)]" aria-hidden="true" />
+              <span className="text-sm font-semibold text-[var(--text,#1F1E1B)]">Import</span>
             </div>
-            <p className="text-xs text-[var(--text-muted,#6B645B)]">The Import flow is the single entry for adding photos. Use the rail icon when collapsed.</p>
           </header>
-          <div id={LEFT_PANEL_CONTENT_ID} className="mt-4 flex-1 space-y-4 overflow-y-auto pr-1">
-            <PanelSection
+          <div id={LEFT_PANEL_CONTENT_ID} className="flex flex-1 flex-col gap-3 overflow-hidden">
+            <InspectorSection
+              id={LEFT_IMPORT_SECTION_ID}
+              ref={importSectionRef}
+              icon={<ImportIcon className="h-4 w-4" aria-hidden="true" />}
+              label="Import"
+              open={importSectionOpen}
+              onToggle={() => setImportSectionOpen((open) => !open)}
+              maxBodyHeight={220}
+            >
+              <div className="space-y-3">
+                <p className="text-xs text-[var(--text-muted,#6B645B)]">
+                  The Import flow is the single entry for adding photos. Use the rail icon when collapsed to jump back here.
+                </p>
+                <button
+                  type="button"
+                  onClick={onOpenImport}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] px-4 py-2 text-sm font-semibold text-[var(--text,#1F1E1B)] shadow-[0_1px_2px_rgba(31,30,27,0.08)] transition hover:shadow-[0_4px_12px_rgba(31,30,27,0.14)] active:shadow-inner focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)]"
+                >
+                  <PlusIcon className="h-4 w-4" aria-hidden="true" />
+                  Open Import Flow
+                </button>
+                <p className="text-[11px] text-[var(--text-muted,#6B645B)]">
+                  Imports create folders per capture date automatically. Switch to a custom destination from the Import flow if you prefer a different structure.
+                </p>
+              </div>
+            </InspectorSection>
+            <InspectorSection
               id={LEFT_DATE_SECTION_ID}
               ref={dateSectionRef}
+              icon={<CalendarIcon className="h-4 w-4" aria-hidden="true" />}
               label="Date"
               open={dateSectionOpen}
               onToggle={() => setDateSectionOpen((open) => !open)}
+              grow
             >
-              <div className="flex flex-col gap-3">
+              <div className="flex min-h-0 flex-col gap-3">
                 <div className="rounded-xl border border-[var(--border,#EDE1C6)] bg-[var(--surface-subtle,#FBF7EF)] px-3 py-2 text-[11px] text-[var(--text,#1F1E1B)]">
                   {selectedDay ? (
                     <div className="flex items-center justify-between gap-2">
@@ -1001,13 +1026,15 @@ export function Sidebar({
                 </div>
                 <div className="flex-1 min-h-0 overflow-y-auto pr-1">{renderTree()}</div>
               </div>
-            </PanelSection>
-            <PanelSection
+            </InspectorSection>
+            <InspectorSection
               id={LEFT_FOLDER_SECTION_ID}
               ref={folderSectionRef}
+              icon={<FolderIcon className="h-4 w-4" aria-hidden="true" />}
               label="Folders"
               open={folderSectionOpen}
               onToggle={() => setFolderSectionOpen((open) => !open)}
+              maxBodyHeight={240}
             >
               <div className="space-y-3 text-left text-[12px] text-[var(--text,#1F1E1B)]">
                 <div className="flex items-center justify-between gap-2">
@@ -1028,90 +1055,50 @@ export function Sidebar({
                   </div>
                 </dl>
               </div>
-            </PanelSection>
+            </InspectorSection>
           </div>
         </div>
       </div>
       <div
         data-panel="rail"
         aria-hidden={!collapsed}
-        className={`absolute inset-0 flex items-center justify-center px-1 py-2 transition-opacity duration-150 ${collapsed ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
+        className={`pointer-events-none absolute inset-0 flex items-center justify-center px-1 py-2 transition-opacity duration-150 ${collapsed ? 'opacity-100' : 'opacity-0'}`}
       >
-        <LeftRail
-          dateExpanded={!collapsed && dateSectionOpen}
-          folderExpanded={!collapsed && folderSectionOpen}
-          hasDateFilter={Boolean(selectedDayKey)}
-          onImport={() => handleRailSelect('import')}
-          onDate={() => handleRailSelect('date')}
-          onFolder={() => handleRailSelect('folder')}
-        />
+        {collapsed ? (
+          <LeftRail
+            onExpand={onExpand}
+            onImport={() => handleRailSelect('import')}
+            onDate={() => handleRailSelect('date')}
+            onFolder={() => handleRailSelect('folder')}
+            onSettings={() => handleRailSelect('folder')}
+            importExpanded={importSectionOpen}
+            dateExpanded={dateSectionOpen}
+            folderExpanded={folderSectionOpen}
+            hasDateFilter={Boolean(selectedDayKey)}
+          />
+        ) : null}
       </div>
     </aside>
   )
 }
 
-type PanelSectionProps = {
-  id: string
-  label: string
-  open: boolean
-  onToggle: () => void
-  children: React.ReactNode
-  className?: string
-  contentClassName?: string
-  scrollable?: boolean
-}
-
-const PanelSection = React.forwardRef<HTMLDivElement, PanelSectionProps>(function PanelSectionComponent(
-  { id, label, open, onToggle, children, className = '', contentClassName, scrollable = false },
-  ref,
-) {
-  return (
-    <section
-      id={id}
-      ref={ref}
-      tabIndex={-1}
-      className={`flex min-h-0 flex-col rounded-[var(--r-lg,20px)] border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] shadow-[0_18px_40px_rgba(31,30,27,0.12)]${className ? ` ${className}` : ''}`}
-      data-open={open}
-    >
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-controls={`${id}-content`}
-        onClick={onToggle}
-        className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] px-4 py-2 text-sm font-semibold text-[var(--text,#1F1E1B)]"
-      >
-        <span>{label}</span>
-        <ChevronDownIcon className={`h-4 w-4 transition-transform ${open ? 'rotate-180' : ''}`} />
-      </button>
-      <div
-        id={`${id}-content`}
-        aria-hidden={!open}
-        className={`flex-1 transition-[max-height,opacity] duration-200 ease-out ${open ? 'max-h-[999px] opacity-100' : 'pointer-events-none max-h-0 opacity-0'}`}
-      >
-        <div
-          className={[
-            contentClassName ? contentClassName : 'px-4 py-3',
-            scrollable ? 'max-h-full overflow-y-auto overscroll-contain pr-2' : '',
-          ].filter(Boolean).join(' ')}
-        >
-          {children}
-        </div>
-      </div>
-    </section>
-  )
-})
-
 function LeftRail({
+  onExpand,
   onImport,
   onDate,
   onFolder,
+  onSettings,
+  importExpanded,
   dateExpanded,
   folderExpanded,
   hasDateFilter,
 }: {
+  onExpand: () => void
   onImport: () => void
   onDate: () => void
   onFolder: () => void
+  onSettings?: () => void
+  importExpanded: boolean
   dateExpanded: boolean
   folderExpanded: boolean
   hasDateFilter: boolean
@@ -1120,72 +1107,43 @@ function LeftRail({
     <div
       role="toolbar"
       aria-label="Import panel rail"
-      className="flex h-full w-full flex-col items-center gap-4 rounded-[var(--r-lg,20px)] border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] px-2 py-4 text-[10px] shadow-[0_20px_40px_rgba(31,30,27,0.18)]"
+      className="pointer-events-auto flex h-full w-full flex-col items-center rounded-[var(--r-lg,20px)] border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] px-1 py-3 shadow-[0_20px_40px_rgba(31,30,27,0.18)]"
     >
-      <RailAction id="import-rail" label="Import" icon={<PlusIcon className="h-4 w-4" />} onClick={onImport} />
-      <div className="h-px w-10 rounded-full bg-[var(--border,#EDE1C6)]" />
-      <div className="flex flex-1 flex-col items-center gap-3">
-        <RailAction
-          id="date-rail"
+      <div className="flex flex-col items-center gap-2">
+        <InspectorRailButton icon={<ChevronRightIcon className="h-4 w-4" aria-hidden="true" />} label="Expand Import panel" onClick={onExpand} />
+        <RailDivider />
+      </div>
+      <div className="mt-3 flex flex-1 flex-col items-center gap-2">
+        <InspectorRailButton
+          icon={<ImportIcon className="h-4 w-4" aria-hidden="true" />}
+          label="Import"
+          onClick={onImport}
+          ariaControls={LEFT_IMPORT_SECTION_ID}
+          ariaExpanded={importExpanded}
+        />
+        <InspectorRailButton
+          icon={<CalendarIcon className="h-4 w-4" aria-hidden="true" />}
           label="Date"
-          icon={<CalendarIcon className="h-4 w-4" />}
           onClick={onDate}
           ariaControls={LEFT_DATE_SECTION_ID}
           ariaExpanded={dateExpanded}
           isActive={hasDateFilter}
         />
-        <RailAction
-          id="folder-rail"
-          label="Folder"
-          icon={<FolderIcon className="h-4 w-4" />}
+        <InspectorRailButton
+          icon={<FolderIcon className="h-4 w-4" aria-hidden="true" />}
+          label="Folders"
           onClick={onFolder}
           ariaControls={LEFT_FOLDER_SECTION_ID}
           ariaExpanded={folderExpanded}
         />
       </div>
-    </div>
-  )
-}
-
-type RailActionProps = {
-  id: string
-  label: string
-  icon: React.ReactNode
-  onClick: () => void
-  ariaControls?: string
-  ariaExpanded?: boolean
-  isActive?: boolean
-}
-
-function RailAction({ id, label, icon, onClick, ariaControls, ariaExpanded, isActive = false }: RailActionProps) {
-  const [tooltipOpen, setTooltipOpen] = useState(false)
-  const tooltipId = `${id}-tooltip`
-  return (
-    <div className="relative">
-      <button
-        type="button"
-        aria-describedby={tooltipId}
-        aria-controls={ariaControls}
-        aria-expanded={ariaExpanded}
-        aria-label={label}
-        onClick={onClick}
-        onMouseEnter={() => setTooltipOpen(true)}
-        onMouseLeave={() => setTooltipOpen(false)}
-        onFocus={() => setTooltipOpen(true)}
-        onBlur={() => setTooltipOpen(false)}
-        className={`flex h-11 w-11 items-center justify-center rounded-full border border-transparent text-[var(--ink,#4A463F)] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)] ${
-          isActive ? 'border-[var(--border,#EDE1C6)] bg-[var(--surface-subtle,#FBF7EF)] text-[var(--text,#1F1E1B)]' : 'hover:bg-[var(--surface-subtle,#FBF7EF)] hover:text-[var(--text,#1F1E1B)]'
-        }`}
-      >
-        {icon}
-      </button>
-      <div
-        role="tooltip"
-        id={tooltipId}
-        aria-hidden={!tooltipOpen}
-        className={`pointer-events-none absolute left-[calc(100%+8px)] top-1/2 -translate-y-1/2 whitespace-nowrap rounded-md border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] px-2 py-1 text-[11px] text-[var(--text,#1F1E1B)] shadow-lg transition-opacity ${tooltipOpen ? 'opacity-100' : 'opacity-0'}`}
-      >
-        {label}
+      <div className="mt-auto flex flex-col items-center gap-2">
+        <RailDivider />
+        <InspectorRailButton
+          icon={<SettingsIcon className="h-4 w-4" aria-hidden="true" />}
+          label="Import settings"
+          onClick={onSettings ?? onFolder}
+        />
       </div>
     </div>
   )
@@ -1554,14 +1512,32 @@ function InspectorRail({ onExpand, onKeyData, onProjects, onMetadata }: {
   )
 }
 
-function InspectorRailButton({ icon, label, onClick }: { icon: React.ReactNode; label: string; onClick: () => void }) {
+function InspectorRailButton({
+  icon,
+  label,
+  onClick,
+  ariaControls,
+  ariaExpanded,
+  isActive = false,
+}: {
+  icon: React.ReactNode
+  label: string
+  onClick: () => void
+  ariaControls?: string
+  ariaExpanded?: boolean
+  isActive?: boolean
+}) {
   return (
     <button
       type="button"
       aria-label={label}
       title={label}
       onClick={onClick}
-      className="inline-flex h-10 w-10 items-center justify-center rounded-[12px] text-[var(--text,#1F1E1B)] transition hover:bg-[var(--surface-subtle,#FBF7EF)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)]"
+      aria-controls={ariaControls}
+      aria-expanded={ariaExpanded}
+      className={`inline-flex h-10 w-10 items-center justify-center rounded-[12px] border border-transparent text-[var(--text,#1F1E1B)] transition hover:bg-[var(--surface-subtle,#FBF7EF)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)] ${
+        isActive ? 'border-[var(--border,#EDE1C6)] bg-[var(--surface-subtle,#FBF7EF)]' : ''
+      }`}
     >
       {icon}
     </button>
@@ -1904,6 +1880,16 @@ function InspectorIcon(props: React.SVGProps<SVGSVGElement>) {
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" {...props}>
       <circle cx="6.5" cy="6.5" r="3.5" />
       <path d="m10 10 3 3" />
+    </svg>
+  )
+}
+
+function ImportIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M3.25 9.5h9.5a1.25 1.25 0 0 1 1.25 1.25V12a2 2 0 0 1-2 2h-8a2 2 0 0 1-2-2v-1.25A1.25 1.25 0 0 1 3.25 9.5Z" />
+      <path d="M8 2v6.5" />
+      <path d="m5.75 6.25 2.25 2.25 2.25-2.25" />
     </svg>
   )
 }

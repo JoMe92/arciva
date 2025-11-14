@@ -42,10 +42,10 @@ import { fetchImageHubAssetStatus, type ImageHubAssetStatus } from '../../shared
 import { getImageHubSettings } from '../../shared/api/settings'
 import ModalShell from '../../components/modals/ModalShell'
 
-const LEFT_MIN_WIDTH = 280
-const LEFT_MAX_WIDTH = 420
-const LEFT_DEFAULT_WIDTH = 320
-const LEFT_COLLAPSED_WIDTH = 64
+const LEFT_MIN_WIDTH = 300
+const LEFT_MAX_WIDTH = 560
+const LEFT_DEFAULT_WIDTH = 360
+const LEFT_COLLAPSED_WIDTH = 56
 const RIGHT_MIN_WIDTH = 300
 const RIGHT_MAX_WIDTH = 560
 const RIGHT_DEFAULT_WIDTH = 360

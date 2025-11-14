@@ -58,6 +58,20 @@ ENV
   set -a; source "${ROOT_DIR}/.env"; set +a
 }
 
+clear_old_logs() {
+  if [[ ! -d "${LOG_DIR}" ]]; then
+    return
+  fi
+  local removed=false
+  while IFS= read -r -d '' file; do
+    rm -f "${file}"
+    removed=true
+  done < <(find "${LOG_DIR}" -maxdepth 1 -type f -name '*.log*' -print0)
+  if ${removed}; then
+    info "Cleared previous log files in ${LOG_DIR}"
+  fi
+}
+
 ensure_exiftool_path() {
   if [[ -n "${EXIFTOOL_PATH:-}" && -x "${EXIFTOOL_PATH}" ]]; then
     info "EXIFTOOL_PATH already set to ${EXIFTOOL_PATH}"
@@ -342,6 +356,7 @@ Dev environment is up!"
 cmd_up() {
   ensure_env
   ensure_exiftool_path
+  clear_old_logs
   ensure_compose_up
   DB_PORT="${HOST_DB_PORT:-5432}"; REDIS_PORT="${HOST_REDIS_PORT:-6379}"
   wait_tcp localhost "$DB_PORT" 60 || fail "Postgres did not become ready on $DB_PORT"

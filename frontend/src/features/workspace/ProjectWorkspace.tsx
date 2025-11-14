@@ -24,6 +24,7 @@ import {
   type GridSelectOptions,
 } from './components'
 import ImageHubImportPane from './ImageHubImportPane'
+import ErrorBoundary from '../../components/ErrorBoundary'
 import { fetchImageHubAssetStatus, type ImageHubAssetStatus } from '../../shared/api/hub'
 import { getImageHubSettings } from '../../shared/api/settings'
 
@@ -1057,6 +1058,8 @@ export default function ProjectWorkspace() {
   const [importOpen, setImportOpen] = useState(false)
   const [uploadBanner, setUploadBanner] = useState<UploadBannerState | null>(null)
   const uploadBannerTimeoutRef = useRef<number | null>(null)
+  const [uploadInfo, setUploadInfo] = useState<string | null>(null)
+  const uploadInfoTimeoutRef = useRef<number | null>(null)
 
   const handleUploadProgress = useCallback((snapshot: UploadProgressSnapshot) => {
     if (uploadBannerTimeoutRef.current !== null) {
@@ -1102,6 +1105,31 @@ export default function ProjectWorkspace() {
   useEffect(() => () => {
     if (uploadBannerTimeoutRef.current !== null) {
       window.clearTimeout(uploadBannerTimeoutRef.current)
+    }
+  }, [])
+
+  const dismissUploadInfo = useCallback(() => {
+    if (uploadInfoTimeoutRef.current !== null) {
+      window.clearTimeout(uploadInfoTimeoutRef.current)
+      uploadInfoTimeoutRef.current = null
+    }
+    setUploadInfo(null)
+  }, [])
+
+  const showUploadInfo = useCallback((message: string) => {
+    setUploadInfo(message)
+    if (uploadInfoTimeoutRef.current !== null) {
+      window.clearTimeout(uploadInfoTimeoutRef.current)
+    }
+    uploadInfoTimeoutRef.current = window.setTimeout(() => {
+      setUploadInfo(null)
+      uploadInfoTimeoutRef.current = null
+    }, 6000)
+  }, [])
+
+  useEffect(() => () => {
+    if (uploadInfoTimeoutRef.current !== null) {
+      window.clearTimeout(uploadInfoTimeoutRef.current)
     }
   }, [])
   const handleImport = useCallback(async (_args: { count: number; types: ImgType[]; dest: string }) => {
@@ -1316,6 +1344,20 @@ export default function ProjectWorkspace() {
           </div>
         </div>
       )}
+      {uploadInfo && (
+        <div className="fixed bottom-6 left-6 z-50 w-80 rounded-lg border border-[var(--river-200,#DCEDEC)] bg-[var(--river-50,#F0F7F6)] px-4 py-3 text-sm text-[var(--river-900,#10302E)] shadow-lg">
+          <div className="flex items-start gap-3">
+            <span>{uploadInfo}</span>
+            <button
+              type="button"
+              className="ml-auto text-xs text-[var(--river-700,#2C5B58)] hover:text-[var(--river-900,#10302E)]"
+              onClick={dismissUploadInfo}
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
 
       <div
         className="flex-1 min-h-0 grid overflow-hidden"
@@ -1421,14 +1463,29 @@ export default function ProjectWorkspace() {
       </div>
 
       {importOpen && (
-        <ImportSheet
-          projectId={id}
-          onClose={() => setImportOpen(false)}
-          onImport={handleImport}
-          onProgressSnapshot={handleUploadProgress}
-          folderMode={folderMode}
-          customFolder={customFolder}
-        />
+        <ErrorBoundary fallback={(
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 p-4">
+            <div className="w-[min(95vw,640px)] rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-6 text-sm text-[var(--text,#1F1E1B)] shadow-2xl">
+              <div className="text-base font-semibold">Import panel crashed</div>
+              <p className="mt-2 text-[var(--text-muted,#6B645B)]">Something went wrong while loading the import sheet. Close it and try again.</p>
+              <div className="mt-4 flex justify-end">
+                <button type="button" onClick={() => setImportOpen(false)} className="rounded border border-[var(--border,#E1D3B9)] px-3 py-1.5">
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}>
+          <ImportSheet
+            projectId={id}
+            onClose={() => setImportOpen(false)}
+            onImport={handleImport}
+            onProgressSnapshot={handleUploadProgress}
+            folderMode={folderMode}
+            customFolder={customFolder}
+            onInfoMessage={showUploadInfo}
+          />
+        </ErrorBoundary>
       )}
     </div>
   )
@@ -1803,6 +1860,7 @@ export function ImportSheet({
   onProgressSnapshot,
   folderMode,
   customFolder,
+  onInfoMessage,
 }: {
   projectId?: string
   onClose: () => void
@@ -1810,6 +1868,7 @@ export function ImportSheet({
   onProgressSnapshot?: (snapshot: UploadProgressSnapshot) => void
   folderMode: 'date' | 'custom'
   customFolder: string
+  onInfoMessage?: (message: string) => void
 }) {
   const [mode, setMode] = useState<'choose' | 'local' | 'hub' | 'upload'>('choose')
   const [localItems, setLocalItems] = useState<PendingItem[]>([])
@@ -2644,7 +2703,11 @@ function openLocalPicker(kind: 'files' | 'folder' = 'files') {
           progress: 1,
         }))
 
-        await completeUpload(init.assetId, init.uploadToken, { ignoreDuplicates: ignoreDup })
+        const completion = await completeUpload(init.assetId, init.uploadToken, { ignoreDuplicates: ignoreDup })
+
+        if (completion.status === 'DUPLICATE') {
+          onInfoMessage?.(`${task.name} was already in Image Hub, so we added the existing asset instead of uploading it again.`)
+        }
 
         mutateTask(taskId, (prev) => ({
           ...prev,
@@ -2773,7 +2836,7 @@ function openLocalPicker(kind: 'files' | 'folder' = 'files') {
     return () => {
       canceled = true
     }
-  }, [ignoreDup, isUploadMode, markBlockedAfter, mutateTask, onImport, projectId, uploadDestination, uploadRunning])
+  }, [ignoreDup, isUploadMode, markBlockedAfter, mutateTask, onImport, projectId, uploadDestination, uploadRunning, onInfoMessage])
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 p-4">

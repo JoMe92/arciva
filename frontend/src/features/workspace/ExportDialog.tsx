@@ -9,6 +9,7 @@ import { useExportPresets, type ExportSettingsSnapshot, type ExportPreset } from
 type ExportDialogProps = {
   isOpen: boolean
   photos: Photo[]
+  projectId: string | null
   onClose: () => void
 }
 
@@ -69,7 +70,7 @@ function applySnapshot(prev: ExportSettingsState, snapshot: ExportSettingsSnapsh
   }
 }
 
-export function ExportDialog({ isOpen, photos, onClose }: ExportDialogProps) {
+export function ExportDialog({ isOpen, photos, projectId, onClose }: ExportDialogProps) {
   const { presets, addPreset } = useExportPresets()
   const [settings, setSettings] = useState<ExportSettingsState>(() => makeInitialSettings())
   const [errors, setErrors] = useState<ExportErrors>({})
@@ -87,6 +88,7 @@ export function ExportDialog({ isOpen, photos, onClose }: ExportDialogProps) {
   const hasRawSource = useMemo(() => photos.some((photo) => photo.type === 'RAW' || photo.pairedAssetType === 'RAW'), [photos])
   const jpegSettingsVisible = settings.outputFormat === 'JPEG' || (settings.contactSheetEnabled && settings.contactSheetFormat === 'JPEG')
   const totalSelected = photos.length
+  const canExport = Boolean(projectId && totalSelected > 0)
 
   useEffect(() => {
     if (!isOpen) return
@@ -194,6 +196,10 @@ export function ExportDialog({ isOpen, photos, onClose }: ExportDialogProps) {
   const handleExport = useCallback(async () => {
     if (!validate()) return
     if (!photos.length) return
+    if (!projectId) {
+      setExportError('Missing project context for export.')
+      return
+    }
     setPhase('exporting')
     setExportError(null)
     setExportResult(null)
@@ -205,6 +211,7 @@ export function ExportDialog({ isOpen, photos, onClose }: ExportDialogProps) {
     try {
       const result = await exportSelectedPhotos(
         {
+          projectId,
           photoIds: photos.map((photo) => photo.id),
           outputFormat: settings.outputFormat,
           rawHandling: settings.rawHandling,
@@ -213,7 +220,6 @@ export function ExportDialog({ isOpen, photos, onClose }: ExportDialogProps) {
           jpegQuality: settings.jpegQuality,
           contactSheetEnabled: settings.contactSheetEnabled,
           contactSheetFormat: settings.contactSheetFormat,
-          presetId: settings.presetId,
         },
         {
           signal: controller.signal,
@@ -232,7 +238,7 @@ export function ExportDialog({ isOpen, photos, onClose }: ExportDialogProps) {
     } finally {
       abortRef.current = null
     }
-  }, [photos, settings, validate])
+  }, [photos, projectId, settings, validate])
 
   const handleCancelExport = useCallback(() => {
     if (!abortRef.current) return
@@ -483,6 +489,7 @@ export function ExportDialog({ isOpen, photos, onClose }: ExportDialogProps) {
                     Exports are packaged as ZIP archives. When the export finishes, your browser will prompt you to choose where the file is saved.
                   </p>
                   <p className="text-[11px] text-[var(--text-muted,#6B645B)]">No server-side path selection is required—the download works in hosted deployments.</p>
+                  {!projectId ? <p className="text-[11px] text-[#B42318]">Connect to a project to enable exporting.</p> : null}
                 </div>
               </div>
             </div>
@@ -498,10 +505,10 @@ export function ExportDialog({ isOpen, photos, onClose }: ExportDialogProps) {
                 </button>
                 <button
                   type="button"
-                  disabled={!photos.length}
+                  disabled={!canExport}
                   onClick={handleExport}
                   className={`inline-flex h-10 items-center rounded-full px-5 text-sm font-semibold ${
-                    !photos.length
+                    !canExport
                       ? 'cursor-not-allowed border border-[var(--border,#E1D3B9)] text-[var(--text-muted,#6B645B)]'
                       : 'bg-[var(--charcoal-800,#1F1E1B)] text-white shadow-lg'
                   }`}

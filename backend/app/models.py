@@ -163,3 +163,48 @@ class AppSetting(Base):
         nullable=False,
     )
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class ExportJobStatus(str, enum.Enum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class ExportJob(Base):
+    __tablename__ = "export_jobs"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    photo_ids: Mapped[list[str]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+    )
+    settings: Mapped[dict[str, Any]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+    )
+    status: Mapped[ExportJobStatus] = mapped_column(
+        SAEnum(
+            ExportJobStatus,
+            name="exportjobstatus",
+            native_enum=False,
+            values_callable=lambda enum_cls: [entry.value for entry in enum_cls],
+            validate_strings=True,
+        ),
+        nullable=False,
+        default=ExportJobStatus.QUEUED,
+    )
+    progress: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    total_photos: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    exported_files: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    artifact_path: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    artifact_filename: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    artifact_size: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)

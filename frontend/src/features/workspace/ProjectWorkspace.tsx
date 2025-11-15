@@ -1697,7 +1697,7 @@ export default function ProjectWorkspace() {
           />
         </ErrorBoundary>
       )}
-      <ExportDialog isOpen={exportDialogOpen} photos={selectedPhotos} onClose={() => setExportDialogOpen(false)} />
+      <ExportDialog isOpen={exportDialogOpen} photos={selectedPhotos} projectId={projectId ?? null} onClose={() => setExportDialogOpen(false)} />
     </div>
   )
 }

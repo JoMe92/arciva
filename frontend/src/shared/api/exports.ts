@@ -1,9 +1,12 @@
+import { requireBase, withBase } from './base'
+
 export type ExportFileFormat = 'JPEG' | 'TIFF' | 'PNG'
 export type RawHandlingStrategy = 'raw' | 'developed'
 export type ExportSizeMode = 'original' | 'resize'
 export type ContactSheetFormat = 'JPEG' | 'TIFF' | 'PDF'
 
 export type ExportPhotosPayload = {
+  projectId: string
   photoIds: string[]
   outputFormat: ExportFileFormat
   rawHandling: RawHandlingStrategy
@@ -12,7 +15,6 @@ export type ExportPhotosPayload = {
   jpegQuality: number
   contactSheetEnabled: boolean
   contactSheetFormat: ContactSheetFormat
-  presetId?: string | null
 }
 
 export type ExportProgressSnapshot = {
@@ -35,69 +37,125 @@ export type ExportPhotosOptions = {
   onProgress?: (snapshot: ExportProgressSnapshot) => void
 }
 
-const MIN_STEP_MS = 220
-const MAX_STEP_MS = 420
-
-function delay(ms: number) {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms)
-  })
+type ExportJobRecord = {
+  id: string
+  project_id: string
+  status: ExportJobStatus
+  progress: number
+  total_photos: number
+  exported_files: number
+  download_url?: string | null
+  artifact_filename?: string | null
+  error_message?: string | null
 }
 
-/**
- * Placeholder implementation for exporting photos.
- *
- * The backend endpoints are not implemented yet, so this helper simulates
- * a long-running export so the UI can provide progress feedback. Once the
- * API is available, replace this with a real fetch() call.
- */
-export async function exportSelectedPhotos(payload: ExportPhotosPayload, options: ExportPhotosOptions = {}): Promise<ExportPhotosResponse> {
-  const total = Math.max(payload.photoIds.length, 1)
-  options.onProgress?.({ completed: 0, total })
-  for (let idx = 0; idx < payload.photoIds.length; idx += 1) {
-    if (options.signal?.aborted) {
-      throw createAbortError()
-    }
-    const duration = MIN_STEP_MS + Math.random() * (MAX_STEP_MS - MIN_STEP_MS)
-    await delay(duration)
-    options.onProgress?.({ completed: idx + 1, total })
-  }
-  if (options.signal?.aborted) {
-    throw createAbortError()
-  }
-  await delay(260)
-  const jobId =
-    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-      ? crypto.randomUUID()
-      : `export-${Date.now()}-${Math.round(Math.random() * 1000)}`
+const EXPORT_JOBS_ENDPOINT = '/v1/export-jobs'
+const POLL_INTERVAL_MS = 1200
 
-  let downloadUrl: string | null = null
-  let downloadFilename: string | null = null
-  if (typeof window !== 'undefined' && typeof URL !== 'undefined' && typeof Blob !== 'undefined') {
-    try {
-      const blob = new Blob(
-        [
-          `Arciva export (mock)\n\nJob: ${jobId}\nPhotos: ${
-            payload.photoIds.length
-          }\n\nReplace this mock implementation with the real backend call to download actual ZIP archives.`,
-        ],
-        { type: 'application/zip' },
-      )
-      downloadUrl = URL.createObjectURL(blob)
-      downloadFilename = `arciva-export-${jobId.slice(0, 8)}.zip`
-    } catch {
-      downloadUrl = null
-      downloadFilename = null
-    }
+export async function exportSelectedPhotos(payload: ExportPhotosPayload, options: ExportPhotosOptions = {}): Promise<ExportPhotosResponse> {
+  if (!payload.projectId) {
+    throw new Error('Project id required for exports.')
   }
+  const totalPhotos = Math.max(payload.photoIds.length, 1)
+  options.onProgress?.({ completed: 0, total: totalPhotos })
+
+  const body = {
+    project_id: payload.projectId,
+    photo_ids: payload.photoIds,
+    settings: {
+      output_format: payload.outputFormat,
+      raw_handling: payload.rawHandling,
+      size_mode: payload.sizeMode,
+      long_edge: payload.sizeMode === 'resize' ? payload.longEdge : undefined,
+      jpeg_quality: payload.jpegQuality,
+      contact_sheet_enabled: payload.contactSheetEnabled,
+      contact_sheet_format: payload.contactSheetFormat,
+    },
+  }
+
+  const createRes = await fetch(requireBase(EXPORT_JOBS_ENDPOINT), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(body),
+    signal: options.signal,
+  })
+  if (!createRes.ok) {
+    throw new Error(await createRes.text())
+  }
+  let job: ExportJobRecord = await createRes.json()
+  const normalizedTotal = job.total_photos ?? totalPhotos
+  options.onProgress?.({ completed: job.exported_files ?? 0, total: normalizedTotal })
+
+  job = await waitForJobCompletion(job.id, normalizedTotal, options)
+  const blob = await downloadArtifact(job, options)
+  const filename = job.artifact_filename ?? `arciva-export-${job.id.slice(0, 8)}.zip`
+  const downloadUrl = typeof URL !== 'undefined' ? URL.createObjectURL(blob) : null
 
   return {
-    jobId,
-    status: 'completed',
-    exported: payload.photoIds.length,
+    jobId: job.id,
+    status: job.status,
+    exported: job.exported_files ?? normalizedTotal,
     downloadUrl,
-    downloadFilename,
+    downloadFilename: filename,
   }
+}
+
+async function waitForJobCompletion(jobId: string, total: number, options: ExportPhotosOptions): Promise<ExportJobRecord> {
+  let job = await fetchJob(jobId, options.signal)
+  options.onProgress?.({ completed: job.exported_files ?? 0, total })
+  while (job.status === 'queued' || job.status === 'running') {
+    await delay(POLL_INTERVAL_MS, options.signal)
+    job = await fetchJob(jobId, options.signal)
+    options.onProgress?.({ completed: job.exported_files ?? 0, total })
+  }
+  if (job.status !== 'completed') {
+    throw new Error(job.error_message ?? 'Export failed.')
+  }
+  return job
+}
+
+async function fetchJob(jobId: string, signal?: AbortSignal): Promise<ExportJobRecord> {
+  const res = await fetch(requireBase(`${EXPORT_JOBS_ENDPOINT}/${jobId}`), {
+    credentials: 'include',
+    signal,
+  })
+  if (!res.ok) {
+    throw new Error(await res.text())
+  }
+  return (await res.json()) as ExportJobRecord
+}
+
+async function downloadArtifact(job: ExportJobRecord, options: ExportPhotosOptions): Promise<Blob> {
+  if (!job.download_url) {
+    throw new Error(job.error_message ?? 'Export artifact unavailable.')
+  }
+  const downloadHref = withBase(job.download_url) ?? requireBase(job.download_url)
+  const res = await fetch(downloadHref, {
+    credentials: 'include',
+    signal: options.signal,
+  })
+  if (!res.ok) {
+    throw new Error(await res.text())
+  }
+  return await res.blob()
+}
+
+function delay(ms: number, signal?: AbortSignal) {
+  if (signal?.aborted) {
+    return Promise.reject(createAbortError())
+  }
+  return new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort)
+      resolve()
+    }, ms)
+    const onAbort = () => {
+      clearTimeout(timer)
+      reject(createAbortError())
+    }
+    signal?.addEventListener('abort', onAbort, { once: true })
+  })
 }
 
 function createAbortError(): Error {

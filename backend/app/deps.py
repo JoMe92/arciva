@@ -22,12 +22,14 @@ class Settings(BaseSettings):
     fs_uploads_dir: str = str(Path.home() / "photo-store" / "uploads")
     fs_originals_dir: str = str(Path.home() / "photo-store" / "originals")
     fs_derivatives_dir: str = str(Path.home() / "photo-store" / "derivatives")
+    fs_exports_dir: str = str(Path.home() / "photo-store" / "exports")
 
     thumb_sizes: List[int] = [256]
     max_upload_mb: int = 200
     worker_concurrency: int = 2
     logs_dir: str = "logs"
     exiftool_path: str = "exiftool"
+    export_retention_hours: int = 24
 
     @field_validator("allowed_origins", mode="before")
     @classmethod
@@ -59,7 +61,7 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     s = Settings()
-    fs_paths = [s.fs_root, s.fs_uploads_dir, s.fs_originals_dir, s.fs_derivatives_dir]
+    fs_paths = [s.fs_root, s.fs_uploads_dir, s.fs_originals_dir, s.fs_derivatives_dir, s.fs_exports_dir]
     for p in fs_paths:
         os.makedirs(p, exist_ok=True)
     logs_path = Path(s.logs_dir).expanduser()

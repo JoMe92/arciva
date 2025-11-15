@@ -16,7 +16,7 @@ import {
   type AssetProjectUsage,
   type LoadMetadataFromProjectResponse,
 } from '../../shared/api/assets'
-import { getProject, updateProject, type ProjectApiResponse } from '../../shared/api/projects'
+import { getProject, updateProject, type ProjectApiResponse, type ProjectUpdatePayload } from '../../shared/api/projects'
 import { initUpload, putUpload, completeUpload } from '../../shared/api/uploads'
 import { placeholderRatioForAspect } from '../../shared/placeholder'
 import type { Photo, ImgType, ColorTag } from './types'
@@ -419,7 +419,20 @@ export default function ProjectWorkspace() {
     queryClient.setQueryData(['project', id], updated)
     queryClient.setQueryData<ProjectApiResponse[] | undefined>(['projects'], (prev) => {
       if (!prev) return prev
-      return prev.map((proj) => (proj.id === updated.id ? { ...proj, title: updated.title, updated_at: updated.updated_at, stack_pairs_enabled: updated.stack_pairs_enabled } : proj))
+      return prev.map((proj) =>
+        proj.id === updated.id
+          ? {
+              ...proj,
+              title: updated.title,
+              updated_at: updated.updated_at,
+              stack_pairs_enabled: updated.stack_pairs_enabled,
+              client: updated.client,
+              note: updated.note,
+              tags: updated.tags ?? proj.tags,
+              asset_count: updated.asset_count ?? proj.asset_count,
+            }
+          : proj,
+      )
     })
   }, [id, queryClient])
 
@@ -441,11 +454,32 @@ export default function ProjectWorkspace() {
       applyProjectUpdate(updated)
     },
   })
+  const projectInfoMutation = useMutation({
+    mutationFn: (patch: ProjectUpdatePayload) => {
+      if (!id) throw new Error('Project id missing')
+      return updateProject(id, patch)
+    },
+    onSuccess: (updated) => {
+      applyProjectUpdate(updated)
+    },
+  })
+  const renameErrorMessage = renameMutation.isError
+    ? renameMutation.error instanceof Error
+      ? renameMutation.error.message
+      : typeof renameMutation.error === 'string'
+        ? renameMutation.error
+        : 'Unable to rename project'
+    : null
+  const projectInfoErrorMessage = projectInfoMutation.isError
+    ? projectInfoMutation.error instanceof Error
+      ? projectInfoMutation.error.message
+      : typeof projectInfoMutation.error === 'string'
+        ? projectInfoMutation.error
+        : 'Unable to update project details'
+    : null
   const [searchParams, setSearchParams] = useSearchParams()
 
   const [photos, setPhotos] = useState<Photo[]>([])
-  const [loadingAssets, setLoadingAssets] = useState(false)
-  const [loadError, setLoadError] = useState<string | null>(null)
   const prevPhotosRef = useRef<Photo[]>([])
   const currentIndexRef = useRef(0)
   const currentPhotoIdRef = useRef<string | null>(null)
@@ -478,13 +512,15 @@ export default function ProjectWorkspace() {
       },
     })
   }, [stackPairsEnabled, stackToggleMutation])
+  const handleProjectInfoChange = useCallback(async (patch: ProjectUpdatePayload) => {
+    if (!id) return
+    await projectInfoMutation.mutateAsync(patch)
+  }, [id, projectInfoMutation])
 
   const refreshAssets = useCallback(async (focusNewest: boolean = false) => {
     if (!id) return
-    setLoadingAssets(true)
     try {
       const items = await listProjectAssets(id)
-      setLoadError(null)
       const prevPhotos = prevPhotosRef.current
       const prevIds = new Set(prevPhotos.map((p) => p.id))
       const prevMap = new Map(prevPhotos.map((p) => [p.id, p]))
@@ -522,10 +558,7 @@ export default function ProjectWorkspace() {
 
       setCurrent(nextIndex)
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to load assets'
-      setLoadError(message)
-    } finally {
-      setLoadingAssets(false)
+      console.error(err)
     }
   }, [id])
 
@@ -1350,6 +1383,17 @@ export default function ProjectWorkspace() {
     }
   }, [currentPhoto, currentAssetDetail?.metadata_state?.edits])
   const metadataSourceProjectId = currentPhoto?.metadataSourceProjectId ?? currentAssetDetail?.metadata_state?.source_project_id ?? null
+  const projectOverview = useMemo(() => {
+    if (!projectDetail) return null
+    return {
+      title: projectName,
+      description: projectDetail.note ?? '',
+      client: projectDetail.client ?? '',
+      tags: Array.isArray(projectDetail.tags) ? projectDetail.tags : [],
+      assetCount: typeof projectDetail.asset_count === 'number' ? projectDetail.asset_count : photos.length,
+      createdAt: projectDetail.created_at ?? null,
+    }
+  }, [projectDetail, projectName, photos.length])
   const usedProjects = useMemo(() => {
     const source = assetProjects ?? currentAssetDetail?.projects ?? []
     if (!Array.isArray(source)) return []
@@ -1398,7 +1442,7 @@ export default function ProjectWorkspace() {
         onBack={goBack}
         onRename={handleRename}
         renamePending={renameMutation.isPending}
-        renameError={renameMutation.isError ? (renameMutation.error as Error).message : null}
+        renameError={renameErrorMessage}
         view={view}
         onChangeView={setView}
         gridSize={gridSize}
@@ -1423,13 +1467,9 @@ export default function ProjectWorkspace() {
         }}
         filterCount={activeFilterCount}
         onResetFilters={resetFilters}
-        visibleCount={visible.length}
         stackPairsEnabled={stackPairsEnabled}
         onToggleStackPairs={handleStackToggle}
         stackTogglePending={stackToggleMutation.isPending}
-        selectedDayLabel={selectedDayNode ? selectedDayNode.label : null}
-        loadingAssets={loadingAssets}
-        loadError={loadError}
       />
       {uploadBanner && (
         <div className="pointer-events-none fixed bottom-6 right-6 z-50">
@@ -1582,6 +1622,13 @@ export default function ProjectWorkspace() {
           collapsed={rightPanelCollapsed}
           onCollapse={() => setRightPanelCollapsed(true)}
           onExpand={() => setRightPanelCollapsed(false)}
+          projectOverview={projectOverview}
+          onRenameProject={handleRename}
+          renamePending={renameMutation.isPending}
+          renameError={renameErrorMessage}
+          onProjectOverviewChange={handleProjectInfoChange}
+          projectOverviewPending={projectInfoMutation.isPending}
+          projectOverviewError={projectInfoErrorMessage}
           hasSelection={Boolean(currentPhoto)}
           usedProjects={usedProjects}
           usedProjectsLoading={assetProjectsLoading}

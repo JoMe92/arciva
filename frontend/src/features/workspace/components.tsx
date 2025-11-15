@@ -92,6 +92,15 @@ type MetadataGroup = {
   entries: MetadataEntry[]
 }
 
+type ProjectOverviewData = {
+  title: string
+  description: string
+  client: string
+  tags: string[]
+  assetCount: number
+  createdAt: string | null
+}
+
 function setsAreEqual<T>(a: Set<T>, b: Set<T>): boolean {
   if (a.size !== b.size) return false
   for (const value of a) {
@@ -129,6 +138,7 @@ export type WorkspaceFilterControls = {
 
 const SHORTCUTS_LEGEND_ID = 'shortcuts-legend'
 const FILTERS_DIALOG_ID = 'workspace-filters-dialog'
+const PROJECT_DATE_FORMAT = typeof Intl !== 'undefined' ? new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }) : null
 
 export function TopBar({
   projectName,
@@ -144,13 +154,9 @@ export function TopBar({
   filters,
   filterCount,
   onResetFilters,
-  visibleCount,
   stackPairsEnabled,
   onToggleStackPairs,
   stackTogglePending,
-  selectedDayLabel,
-  loadingAssets,
-  loadError,
 }: {
   projectName: string
   onBack: () => void
@@ -165,13 +171,9 @@ export function TopBar({
   filters: WorkspaceFilterControls
   filterCount: number
   onResetFilters: () => void
-  visibleCount: number
   stackPairsEnabled: boolean
   onToggleStackPairs: (next: boolean) => void
   stackTogglePending?: boolean
-  selectedDayLabel: string | null
-  loadingAssets: boolean
-  loadError: string | null
 }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(projectName)
@@ -299,15 +301,12 @@ export function TopBar({
       view === mode ? 'bg-[var(--sand-100,#F3EBDD)] text-[var(--text,#1F1E1B)]' : 'text-[var(--text-muted,#6B645B)]'
     }`
 
-  const photoCountText = `${visibleCount} photos${selectedDayLabel ? ` • ${selectedDayLabel}` : ''}`
+  const sizeControlWidth = 200
 
   return (
     <header className="sticky top-0 z-40 border-b border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]/95 backdrop-blur">
-      <div
-        className="mx-auto grid h-16 max-w-7xl items-center gap-4 px-4 sm:px-6 lg:px-8"
-        style={{ gridTemplateColumns: 'auto minmax(0,1fr) auto auto auto' }}
-      >
-        <div className="flex items-center gap-3">
+      <div className="grid h-16 w-full items-center gap-4" style={{ gridTemplateColumns: 'minmax(0,1fr) auto minmax(0,1fr)' }}>
+        <div className="flex min-w-0 items-center gap-3 pl-2 sm:pl-4">
           <StoneTrailLogo className="hidden lg:inline-flex shrink-0" showLabel={false} mode={mode} onToggleTheme={toggle} />
           <button
             type="button"
@@ -317,78 +316,78 @@ export function TopBar({
           >
             ← Projects
           </button>
-        </div>
-        <div className="flex min-w-0 items-center gap-3">
-          <nav className="flex min-w-0 items-center gap-3 text-sm text-[var(--text-muted,#6B645B)]" aria-label="Breadcrumb">
-            <button
-              type="button"
-              onClick={onBack}
-              className="font-medium text-[var(--text-muted,#6B645B)] transition-colors hover:text-[var(--text,#1F1E1B)]"
-            >
-              Projects
-            </button>
-            <span aria-hidden="true" className="text-base leading-none text-[var(--text-muted,#6B645B)]">
-              ›
-            </span>
-            {editing ? (
-              <div className="flex items-center gap-2">
-                <div className="relative">
-                  <input
-                    ref={inputRef}
-                    value={draft}
-                    onChange={(event) => setDraft(event.target.value)}
-                    onKeyDown={handleTitleKey}
-                    onBlur={handleBlur}
-                    disabled={renamePending}
-                    aria-label="Project name"
-                    className="h-9 min-w-[200px] max-w-[260px] rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-4 text-sm font-semibold text-[var(--text,#1F1E1B)] shadow-inner focus:outline-none focus:ring-2 focus:ring-[var(--stone-trail-brand-focus,#4A463F)]"
-                  />
-                  {renameError ? (
-                    <span className="absolute -bottom-5 left-0 text-xs text-[#B42318]">{renameError}</span>
-                  ) : null}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => void commitRename()}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border,#E1D3B9)] text-xs"
-                  disabled={renamePending}
-                  aria-label="Save project name"
-                >
-                  ✓
-                </button>
-                <button
-                  type="button"
-                  onClick={cancelEditing}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border,#E1D3B9)] text-xs"
-                  disabled={renamePending}
-                  aria-label="Cancel renaming"
-                >
-                  ✕
-                </button>
-              </div>
-            ) : (
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <nav className="flex min-w-0 items-center gap-3 text-sm text-[var(--text-muted,#6B645B)]" aria-label="Breadcrumb">
               <button
                 type="button"
-                onDoubleClick={startEditing}
-                className="truncate text-left text-sm font-semibold text-[var(--text,#1F1E1B)]"
-                title="Rename project"
+                onClick={onBack}
+                className="font-medium text-[var(--text-muted,#6B645B)] transition-colors hover:text-[var(--text,#1F1E1B)]"
               >
-                {projectName}
+                Projects
               </button>
-            )}
-          </nav>
-          {!editing ? (
-            <button
-              type="button"
-              onClick={startEditing}
-              className="inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border border-[var(--border,#E1D3B9)] text-xs text-[var(--text-muted,#6B645B)] hover:text-[var(--text,#1F1E1B)]"
-              aria-label="Rename project"
-            >
-              ✎
-            </button>
-          ) : null}
+              <span aria-hidden="true" className="text-base leading-none text-[var(--text-muted,#6B645B)]">
+                ›
+              </span>
+              {editing ? (
+                <div className="flex items-center gap-2">
+                  <div className="relative">
+                    <input
+                      ref={inputRef}
+                      value={draft}
+                      onChange={(event) => setDraft(event.target.value)}
+                      onKeyDown={handleTitleKey}
+                      onBlur={handleBlur}
+                      disabled={renamePending}
+                      aria-label="Project name"
+                      className="h-9 min-w-[200px] max-w-[260px] rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-4 text-sm font-semibold text-[var(--text,#1F1E1B)] shadow-inner focus:outline-none focus:ring-2 focus:ring-[var(--stone-trail-brand-focus,#4A463F)]"
+                    />
+                    {renameError ? (
+                      <span className="absolute -bottom-5 left-0 text-xs text-[#B42318]">{renameError}</span>
+                    ) : null}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void commitRename()}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border,#E1D3B9)] text-xs"
+                    disabled={renamePending}
+                    aria-label="Save project name"
+                  >
+                    ✓
+                  </button>
+                  <button
+                    type="button"
+                    onClick={cancelEditing}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border,#E1D3B9)] text-xs"
+                    disabled={renamePending}
+                    aria-label="Cancel renaming"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onDoubleClick={startEditing}
+                  className="truncate text-left text-sm font-semibold text-[var(--text,#1F1E1B)]"
+                  title="Rename project"
+                >
+                  {projectName}
+                </button>
+              )}
+            </nav>
+            {!editing ? (
+              <button
+                type="button"
+                onClick={startEditing}
+                className="inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border border-[var(--border,#E1D3B9)] text-xs text-[var(--text-muted,#6B645B)] hover:text-[var(--text,#1F1E1B)]"
+                aria-label="Rename project"
+              >
+                ✎
+              </button>
+            ) : null}
+          </div>
         </div>
-        <div className="flex min-w-0 items-center justify-center gap-3">
+        <div className="flex min-w-0 items-center justify-center gap-3 px-4 sm:px-6 lg:px-8">
           <div className="inline-flex items-center overflow-hidden rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]">
             <button type="button" className={`${viewButtonClasses('grid')} border-r border-[var(--border,#E1D3B9)]`} onClick={() => onChangeView('grid')}>
               Grid
@@ -397,12 +396,25 @@ export function TopBar({
               Detail
             </button>
           </div>
-          {view === 'grid' ? (
-            <label
-              className="hidden h-9 flex-shrink-0 items-center gap-2 rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 text-[11px] text-[var(--text-muted,#6B645B)] lg:flex"
-              style={{ width: 200 }}
-            >
-              <span className="text-[11px] font-medium text-[var(--text-muted,#6B645B)]">Size</span>
+          <button
+            type="button"
+            className={`inline-flex h-9 min-w-[170px] flex-shrink-0 items-center justify-center gap-3 rounded-full border border-[var(--border,#E1D3B9)] px-4 text-[12px] font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--stone-trail-brand-focus,#4A463F)] ${
+              stackPairsEnabled ? 'bg-[var(--sand-100,#F3EBDD)] text-[var(--text,#1F1E1B)]' : 'text-[var(--text-muted,#6B645B)]'
+            } ${stackTogglePending ? 'cursor-not-allowed opacity-60' : ''}`}
+            aria-pressed={stackPairsEnabled}
+            onClick={() => onToggleStackPairs(!stackPairsEnabled)}
+            disabled={stackTogglePending}
+          >
+            <span>{stackPairsEnabled ? 'Stacking' : 'Stack'}</span>
+            <span>JPEG + RAW</span>
+          </button>
+          <div
+            data-testid="top-bar-size-control"
+            className="hidden h-9 flex-shrink-0 items-center gap-2 rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 text-[11px] text-[var(--text-muted,#6B645B)] lg:flex"
+            style={{ width: sizeControlWidth }}
+          >
+            <span className="text-[11px] font-medium text-[var(--text-muted,#6B645B)]">Size</span>
+            {view === 'grid' ? (
               <input
                 type="range"
                 min={minGridSize}
@@ -412,33 +424,12 @@ export function TopBar({
                 aria-label="Thumbnail size"
                 className="h-1.5 flex-1 accent-[var(--text,#1F1E1B)]"
               />
-            </label>
-          ) : null}
-          <button
-            type="button"
-            className={`inline-flex h-9 w-[220px] flex-shrink-0 items-center justify-between rounded-full border px-4 text-[11px] font-medium ${
-              stackPairsEnabled ? 'border-[var(--text,#1F1E1B)] text-[var(--text,#1F1E1B)]' : 'border-[var(--border,#E1D3B9)] text-[var(--text-muted,#6B645B)]'
-            } ${stackTogglePending ? 'cursor-not-allowed opacity-60' : ''}`}
-            aria-pressed={stackPairsEnabled}
-            onClick={() => onToggleStackPairs(!stackPairsEnabled)}
-            disabled={stackTogglePending}
-          >
-            <span className="whitespace-nowrap">Stack JPEG+RAW</span>
-            <span
-              className={`inline-flex h-5 w-10 items-center rounded-full border px-1 transition-colors duration-200 ${
-                stackPairsEnabled ? 'border-[var(--text,#1F1E1B)] bg-[var(--text,#1F1E1B)]' : 'border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]'
-              }`}
-              aria-hidden="true"
-            >
-              <span
-                className={`h-3.5 w-3.5 rounded-full bg-[var(--surface,#FFFFFF)] transition-transform duration-200 ${
-                  stackPairsEnabled ? 'translate-x-4' : ''
-                }`}
-              />
-            </span>
-          </button>
+            ) : (
+              <span className="flex-1 text-right text-[10px] text-[var(--text-muted,#6B645B)]">Unavailable in detail view</span>
+            )}
+          </div>
         </div>
-        <div className="flex flex-shrink-0 items-center justify-end gap-2 text-[12px]">
+        <div className="flex min-w-0 items-center justify-end gap-3 px-4 sm:px-6 lg:px-8">
           <button
             type="button"
             ref={filtersButtonRef}
@@ -482,33 +473,6 @@ export function TopBar({
             <span aria-hidden="true">⌨</span>
             <span>Shortcuts</span>
           </button>
-        </div>
-        <div
-          data-testid="top-bar-status-slot"
-          className="flex flex-col items-end justify-center text-[11px] text-[var(--text-muted,#6B645B)]"
-          style={{ minWidth: 200, maxWidth: 220 }}
-        >
-          <div className="flex items-center justify-end gap-2 text-right">
-            <span
-              className={`transition-opacity duration-200 ${loadingAssets ? 'opacity-100 visible' : 'opacity-0 invisible'}`}
-              aria-live="polite"
-            >
-              Syncing…
-            </span>
-            <span
-              className={`transition-opacity duration-200 ${loadError ? 'opacity-100 visible text-[#B42318]' : 'opacity-0 invisible'}`}
-              aria-live="polite"
-            >
-              {loadError}
-            </span>
-            <span
-              className="text-sm font-semibold text-[var(--text-muted,#6B645B)]"
-              aria-live="polite"
-              title={photoCountText}
-            >
-              {photoCountText}
-            </span>
-          </div>
         </div>
       </div>
       {filtersOpen ? (
@@ -1235,16 +1199,24 @@ function LeftRail({
 
 const RIGHT_PANEL_ID = 'workspace-inspector-panel'
 const RIGHT_PANEL_CONTENT_ID = `${RIGHT_PANEL_ID}-content`
+const RIGHT_OVERVIEW_SECTION_ID = `${RIGHT_PANEL_ID}-overview`
 const RIGHT_KEY_SECTION_ID = `${RIGHT_PANEL_ID}-key-data`
 const RIGHT_PROJECT_SECTION_ID = `${RIGHT_PANEL_ID}-projects`
 const RIGHT_METADATA_SECTION_ID = `${RIGHT_PANEL_ID}-metadata`
 
-type RightPanelTarget = 'keyData' | 'projects' | 'metadata'
+type RightPanelTarget = 'overview' | 'keyData' | 'projects' | 'metadata'
 
 export function InspectorPanel({
   collapsed,
   onCollapse,
   onExpand,
+  projectOverview,
+  onRenameProject,
+  renamePending,
+  renameError,
+  onProjectOverviewChange,
+  projectOverviewPending,
+  projectOverviewError,
   hasSelection,
   usedProjects,
   usedProjectsLoading,
@@ -1262,6 +1234,13 @@ export function InspectorPanel({
   collapsed: boolean
   onCollapse: () => void
   onExpand: () => void
+  projectOverview: ProjectOverviewData | null
+  onRenameProject: (next: string) => Promise<void> | void
+  renamePending?: boolean
+  renameError?: string | null
+  onProjectOverviewChange: (patch: { note?: string | null; client?: string | null; tags?: string[] }) => Promise<void> | void
+  projectOverviewPending?: boolean
+  projectOverviewError?: string | null
   hasSelection: boolean
   usedProjects: UsedProjectLink[]
   usedProjectsLoading: boolean
@@ -1276,9 +1255,11 @@ export function InspectorPanel({
   metadataLoading: boolean
   metadataError: string | null
 }) {
+  const overviewSectionRef = useRef<HTMLDivElement | null>(null)
   const keyDataSectionRef = useRef<HTMLDivElement | null>(null)
   const projectsSectionRef = useRef<HTMLDivElement | null>(null)
   const metadataSectionRef = useRef<HTMLDivElement | null>(null)
+  const [overviewOpen, setOverviewOpen] = useState(true)
   const [keyDataOpen, setKeyDataOpen] = useState(true)
   const [projectsOpen, setProjectsOpen] = useState(true)
   const [metadataOpen, setMetadataOpen] = useState(true)
@@ -1318,13 +1299,15 @@ export function InspectorPanel({
   }, [metadataSummary, mergedInspectorFields])
 
   const ensureSectionOpen = useCallback((target: RightPanelTarget) => {
-    if (target === 'keyData') setKeyDataOpen(true)
+    if (target === 'overview') setOverviewOpen(true)
+    else if (target === 'keyData') setKeyDataOpen(true)
     else if (target === 'projects') setProjectsOpen(true)
     else setMetadataOpen(true)
   }, [])
 
   const scrollToTarget = useCallback((target: RightPanelTarget) => {
     const refMap: Record<RightPanelTarget, React.RefObject<HTMLDivElement>> = {
+      overview: overviewSectionRef,
       keyData: keyDataSectionRef,
       projects: projectsSectionRef,
       metadata: metadataSectionRef,
@@ -1393,6 +1376,29 @@ export function InspectorPanel({
           </header>
           <div id={RIGHT_PANEL_CONTENT_ID} className="flex flex-1 flex-col gap-3 overflow-hidden">
             <InspectorSection
+              id={RIGHT_OVERVIEW_SECTION_ID}
+              ref={overviewSectionRef}
+              icon={<LayoutListIcon className="h-4 w-4" aria-hidden="true" />}
+              label="Project Overview"
+              open={overviewOpen}
+              onToggle={() => setOverviewOpen((open) => !open)}
+              maxBodyHeight={320}
+            >
+              {projectOverview ? (
+                <ProjectOverviewDetails
+                  data={projectOverview}
+                  onRename={onRenameProject}
+                  renamePending={renamePending}
+                  renameError={renameError}
+                  onUpdate={onProjectOverviewChange}
+                  updatePending={projectOverviewPending}
+                  updateError={projectOverviewError}
+                />
+              ) : (
+                <p className="text-sm text-[var(--text-muted,#6B645B)]">Project details unavailable.</p>
+              )}
+            </InspectorSection>
+            <InspectorSection
               id={RIGHT_KEY_SECTION_ID}
               ref={keyDataSectionRef}
               icon={<InfoIcon className="h-4 w-4" aria-hidden="true" />}
@@ -1410,7 +1416,7 @@ export function InspectorPanel({
             <InspectorSection
               id={RIGHT_PROJECT_SECTION_ID}
               ref={projectsSectionRef}
-              icon={<LayoutListIcon className="h-4 w-4" aria-hidden="true" />}
+              icon={<FolderIcon className="h-4 w-4" aria-hidden="true" />}
               label="Used in Projects"
               open={projectsOpen}
               onToggle={() => setProjectsOpen((open) => !open)}
@@ -1473,6 +1479,7 @@ export function InspectorPanel({
         {collapsed ? (
           <InspectorRail
             onExpand={onExpand}
+            onOverview={() => handleRailSelect('overview')}
             onKeyData={() => handleRailSelect('keyData')}
             onProjects={() => handleRailSelect('projects')}
             onMetadata={() => handleRailSelect('metadata')}
@@ -1534,6 +1541,207 @@ const InspectorSection = React.forwardRef<HTMLDivElement, InspectorSectionProps>
   )
 })
 
+type ProjectOverviewDetailsProps = {
+  data: ProjectOverviewData
+  onRename: (next: string) => Promise<void> | void
+  renamePending?: boolean
+  renameError?: string | null
+  onUpdate: (patch: { note?: string | null; client?: string | null; tags?: string[] }) => Promise<void> | void
+  updatePending?: boolean
+  updateError?: string | null
+}
+
+function ProjectOverviewDetails({ data, onRename, renamePending, renameError, onUpdate, updatePending, updateError }: ProjectOverviewDetailsProps) {
+  const [name, setName] = useState(data.title)
+  const [description, setDescription] = useState(data.description ?? '')
+  const [client, setClient] = useState(data.client ?? '')
+  const [tags, setTags] = useState<string[]>(data.tags ?? [])
+  const [tagDraft, setTagDraft] = useState('')
+
+  useEffect(() => setName(data.title), [data.title])
+  useEffect(() => setDescription(data.description ?? ''), [data.description])
+  useEffect(() => setClient(data.client ?? ''), [data.client])
+  useEffect(() => setTags(data.tags ?? []), [data.tags])
+
+  const commitName = useCallback(() => {
+    const trimmed = name.trim()
+    if (!trimmed) {
+      setName(data.title)
+      return
+    }
+    if (trimmed === data.title) return
+    void onRename(trimmed)
+  }, [name, data.title, onRename])
+
+  const handleNameBlur = useCallback(() => {
+    if (renamePending) return
+    commitName()
+  }, [commitName, renamePending])
+
+  const handleNameKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLInputElement>) => {
+      if (event.key === 'Enter') {
+        event.preventDefault()
+        commitName()
+      } else if (event.key === 'Escape') {
+        event.preventDefault()
+        setName(data.title)
+      }
+    },
+    [commitName, data.title],
+  )
+
+  const commitDescription = useCallback(() => {
+    const normalized = description.trim()
+    const baseline = data.description ?? ''
+    if (normalized === baseline) return
+    void onUpdate({ note: normalized ? normalized : null })
+  }, [description, data.description, onUpdate])
+
+  const commitClient = useCallback(() => {
+    const normalized = client.trim()
+    const baseline = data.client ?? ''
+    if (normalized === baseline) return
+    void onUpdate({ client: normalized || null })
+  }, [client, data.client, onUpdate])
+
+  const handleDescriptionBlur = useCallback(() => {
+    if (updatePending) return
+    commitDescription()
+  }, [commitDescription, updatePending])
+
+  const handleClientBlur = useCallback(() => {
+    if (updatePending) return
+    commitClient()
+  }, [commitClient, updatePending])
+
+  const handleAddTag = useCallback(() => {
+    if (updatePending) return
+    const trimmed = tagDraft.trim()
+    if (!trimmed) return
+    if (tags.includes(trimmed)) {
+      setTagDraft('')
+      return
+    }
+    const nextTags = [...tags, trimmed]
+    setTags(nextTags)
+    setTagDraft('')
+    void onUpdate({ tags: nextTags })
+  }, [tagDraft, tags, onUpdate, updatePending])
+
+  const handleRemoveTag = useCallback(
+    (tag: string) => {
+      if (updatePending) return
+      if (!tags.includes(tag)) return
+      const nextTags = tags.filter((t) => t !== tag)
+      setTags(nextTags)
+      void onUpdate({ tags: nextTags })
+    },
+    [tags, onUpdate, updatePending],
+  )
+
+  const createdLabel = useMemo(() => {
+    if (!data.createdAt) return '—'
+    const parsed = new Date(data.createdAt)
+    if (Number.isNaN(parsed.getTime())) return '—'
+    return PROJECT_DATE_FORMAT ? PROJECT_DATE_FORMAT.format(parsed) : parsed.toLocaleDateString()
+  }, [data.createdAt])
+
+  return (
+    <div className="space-y-4 text-sm">
+      <label className="block text-xs text-[var(--text-muted,#6B645B)]">
+        Project name
+        <input
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          onBlur={handleNameBlur}
+          onKeyDown={handleNameKeyDown}
+          disabled={renamePending}
+          className="mt-1 w-full rounded-full border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] px-4 py-2 text-sm font-semibold text-[var(--text,#1F1E1B)] focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring,#1A73E8)]"
+        />
+        {renameError ? <span className="mt-1 block text-[11px] text-[#B42318]">{renameError}</span> : null}
+      </label>
+      <label className="block text-xs text-[var(--text-muted,#6B645B)]">
+        Description
+        <textarea
+          value={description}
+          onChange={(event) => setDescription(event.target.value)}
+          onBlur={handleDescriptionBlur}
+          disabled={updatePending}
+          rows={2}
+          className="mt-1 w-full rounded-[16px] border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] px-4 py-2 text-sm text-[var(--text,#1F1E1B)] focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring,#1A73E8)]"
+        />
+      </label>
+      <label className="block text-xs text-[var(--text-muted,#6B645B)]">
+        Client
+        <input
+          value={client}
+          onChange={(event) => setClient(event.target.value)}
+          onBlur={handleClientBlur}
+          disabled={updatePending}
+          className="mt-1 w-full rounded-full border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] px-4 py-2 text-sm text-[var(--text,#1F1E1B)] focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring,#1A73E8)]"
+        />
+      </label>
+      <div>
+        <p className="text-xs text-[var(--text-muted,#6B645B)]">Tags</p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {tags.length ? (
+            tags.map((tag) => (
+              <button
+                key={tag}
+                type="button"
+                onClick={() => handleRemoveTag(tag)}
+                disabled={updatePending}
+                aria-label={`Remove tag ${tag}`}
+                className="inline-flex items-center gap-1 rounded-full border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] px-3 py-0.5 text-[11px] text-[var(--text,#1F1E1B)] transition hover:border-[var(--text,#1F1E1B)]"
+              >
+                <span>{tag}</span>
+                <span aria-hidden="true">✕</span>
+              </button>
+            ))
+          ) : (
+            <span className="text-[12px] text-[var(--text-muted,#6B645B)]">No tags</span>
+          )}
+        </div>
+        <div className="mt-2 flex items-center gap-2">
+          <input
+            value={tagDraft}
+            onChange={(event) => setTagDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault()
+                handleAddTag()
+              }
+            }}
+            disabled={updatePending}
+            placeholder="Add tag"
+            className="h-9 flex-1 rounded-full border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] px-3 text-[12px] text-[var(--text,#1F1E1B)] focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring,#1A73E8)]"
+          />
+          <button
+            type="button"
+            onClick={handleAddTag}
+            disabled={updatePending}
+            className="inline-flex h-9 items-center rounded-full border border-[var(--border,#EDE1C6)] px-4 text-[12px] font-semibold text-[var(--text,#1F1E1B)]"
+          >
+            Add
+          </button>
+        </div>
+      </div>
+      <div className="grid gap-2 rounded-[18px] border border-[var(--border,#EDE1C6)] bg-[var(--surface-subtle,#FBF7EF)] p-3 text-[12px] text-[var(--text-muted,#6B645B)] sm:grid-cols-2">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wide">Total images</p>
+          <p className="mt-1 text-base font-semibold text-[var(--text,#1F1E1B)]">{data.assetCount}</p>
+        </div>
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wide">Created</p>
+          <p className="mt-1 text-sm text-[var(--text,#1F1E1B)]">{createdLabel}</p>
+        </div>
+      </div>
+      {updateError ? <p className="text-[11px] text-[#B42318]">{updateError}</p> : null}
+    </div>
+  )
+}
+
 type KeyDataRow = { label: string; value: React.ReactNode }
 
 function KeyDataGrid({ rows }: { rows: KeyDataRow[] }) {
@@ -1566,8 +1774,9 @@ function formatRatingValue(value?: number | null): string {
   return `${value} / 5`
 }
 
-function InspectorRail({ onExpand, onKeyData, onProjects, onMetadata }: {
+function InspectorRail({ onExpand, onOverview, onKeyData, onProjects, onMetadata }: {
   onExpand: () => void
+  onOverview: () => void
   onKeyData: () => void
   onProjects: () => void
   onMetadata: () => void
@@ -1583,9 +1792,10 @@ function InspectorRail({ onExpand, onKeyData, onProjects, onMetadata }: {
         <RailDivider />
       </div>
       <div className="mt-3 flex flex-1 flex-col items-center gap-2">
-        <InspectorRailButton icon={<InfoIcon className="h-4 w-4" />} label="Inspector" onClick={onKeyData} />
-        <InspectorRailButton icon={<LayoutListIcon className="h-4 w-4" />} label="Metadata" onClick={onProjects} />
-        <InspectorRailButton icon={<CameraIcon className="h-4 w-4" />} label="Camera" onClick={onMetadata} />
+        <InspectorRailButton icon={<LayoutListIcon className="h-4 w-4" />} label="Overview" onClick={onOverview} />
+        <InspectorRailButton icon={<InfoIcon className="h-4 w-4" />} label="Key data" onClick={onKeyData} />
+        <InspectorRailButton icon={<FolderIcon className="h-4 w-4" />} label="Projects" onClick={onProjects} />
+        <InspectorRailButton icon={<CameraIcon className="h-4 w-4" />} label="Metadata" onClick={onMetadata} />
         <InspectorRailButton icon={<CalendarClockIcon className="h-4 w-4" />} label="Dates" onClick={onMetadata} />
       </div>
       <div className="mt-auto flex flex-col items-center gap-2">

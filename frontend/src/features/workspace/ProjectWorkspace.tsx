@@ -41,6 +41,7 @@ import ErrorBoundary from '../../components/ErrorBoundary'
 import { fetchImageHubAssetStatus, type ImageHubAssetStatus } from '../../shared/api/hub'
 import { getImageHubSettings } from '../../shared/api/settings'
 import ModalShell from '../../components/modals/ModalShell'
+import ExportDialog from './ExportDialog'
 
 const LEFT_MIN_WIDTH = 300
 const LEFT_MAX_WIDTH = 560
@@ -463,18 +464,20 @@ export default function ProjectWorkspace() {
       applyProjectUpdate(updated)
     },
   })
+  const renameErrorValue = (renameMutation as { error?: unknown }).error
   const renameErrorMessage = renameMutation.isError
-    ? renameMutation.error instanceof Error
-      ? renameMutation.error.message
-      : typeof renameMutation.error === 'string'
-        ? renameMutation.error
+    ? renameErrorValue instanceof Error
+      ? renameErrorValue.message
+      : typeof renameErrorValue === 'string'
+        ? renameErrorValue
         : 'Unable to rename project'
     : null
+  const projectInfoErrorValue = (projectInfoMutation as { error?: unknown }).error
   const projectInfoErrorMessage = projectInfoMutation.isError
-    ? projectInfoMutation.error instanceof Error
-      ? projectInfoMutation.error.message
-      : typeof projectInfoMutation.error === 'string'
-        ? projectInfoMutation.error
+    ? projectInfoErrorValue instanceof Error
+      ? projectInfoErrorValue.message
+      : typeof projectInfoErrorValue === 'string'
+        ? projectInfoErrorValue
         : 'Unable to update project details'
     : null
   const [searchParams, setSearchParams] = useSearchParams()
@@ -489,6 +492,7 @@ export default function ProjectWorkspace() {
   const lastSelectedPhotoIdRef = useRef<string | null>(null)
   const selectionAnchorRef = useRef<string | null>(null)
   const suppressSelectionSyncRef = useRef(false)
+  const [exportDialogOpen, setExportDialogOpen] = useState(false)
   const [metadataSourceCandidate, setMetadataSourceCandidate] = useState<{ id: string; name: string } | null>(null)
   const resolveActionTargetIds = useCallback((primaryId: string | null) => {
     if (primaryId && selectedPhotoIds.has(primaryId)) {
@@ -925,6 +929,17 @@ export default function ProjectWorkspace() {
     const colorOk = filterColor === 'Any' || p.tag === filterColor
     return dateMatch && typeOk && ratingOk && pickOk && rejectOk && colorOk
   }), [displayPhotos, selectedDayKey, photoKeyMap, showJPEG, showRAW, minStars, onlyPicked, hideRejected, filterColor, stackPairsEnabled])
+
+  const selectedPhotos = useMemo(() => {
+    if (!selectedPhotoIds.size) return []
+    return visible.filter((photo) => selectedPhotoIds.has(photo.id))
+  }, [visible, selectedPhotoIds])
+
+  useEffect(() => {
+    if (exportDialogOpen && selectedPhotos.length === 0) {
+      setExportDialogOpen(false)
+    }
+  }, [exportDialogOpen, selectedPhotos.length])
 
   useEffect(() => {
     currentIndexRef.current = current
@@ -1470,6 +1485,8 @@ export default function ProjectWorkspace() {
         stackPairsEnabled={stackPairsEnabled}
         onToggleStackPairs={handleStackToggle}
         stackTogglePending={stackToggleMutation.isPending}
+        selectedCount={selectedPhotoIds.size}
+        onOpenExport={() => setExportDialogOpen(true)}
       />
       {uploadBanner && (
         <div className="pointer-events-none fixed bottom-6 right-6 z-50">
@@ -1680,6 +1697,7 @@ export default function ProjectWorkspace() {
           />
         </ErrorBoundary>
       )}
+      <ExportDialog isOpen={exportDialogOpen} photos={selectedPhotos} onClose={() => setExportDialogOpen(false)} />
     </div>
   )
 }

@@ -212,7 +212,7 @@ export async function updateAssetInteractions(
 }
 
 export async function listAssetProjects(assetId: string): Promise<AssetProjectUsage[]> {
-  const res = await fetch(withBase(`/imagehub/asset/${assetId}/projects`)!, {
+  const res = await fetch(withBase(`/v1/assets/${assetId}/projects`)!, {
     credentials: 'include',
   })
   if (!res.ok) {

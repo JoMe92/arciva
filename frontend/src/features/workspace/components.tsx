@@ -157,6 +157,8 @@ export function TopBar({
   stackPairsEnabled,
   onToggleStackPairs,
   stackTogglePending,
+  selectedCount,
+  onOpenExport,
 }: {
   projectName: string
   onBack: () => void
@@ -174,6 +176,8 @@ export function TopBar({
   stackPairsEnabled: boolean
   onToggleStackPairs: (next: boolean) => void
   stackTogglePending?: boolean
+  selectedCount: number
+  onOpenExport: () => void
 }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(projectName)
@@ -302,6 +306,7 @@ export function TopBar({
     }`
 
   const sizeControlWidth = 200
+  const canExport = selectedCount > 0
 
   return (
     <header className="sticky top-0 z-40 border-b border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]/95 backdrop-blur">
@@ -407,6 +412,20 @@ export function TopBar({
           >
             <span>{stackPairsEnabled ? 'Stacking' : 'Stack'}</span>
             <span>JPEG + RAW</span>
+          </button>
+          <button
+            type="button"
+            onClick={onOpenExport}
+            disabled={!canExport}
+            className={`inline-flex h-9 min-w-[150px] flex-shrink-0 items-center justify-center gap-2 rounded-full border px-4 text-[12px] font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--stone-trail-brand-focus,#4A463F)] ${
+              canExport ? 'border-[var(--text,#1F1E1B)] text-[var(--text,#1F1E1B)] shadow-[0_4px_14px_rgba(31,30,27,0.15)]' : 'border-[var(--border,#E1D3B9)] text-[var(--text-muted,#6B645B)]'
+            } ${!canExport ? 'cursor-not-allowed opacity-60' : ''}`}
+            aria-disabled={!canExport}
+            title={canExport ? `Export ${selectedCount} photo${selectedCount === 1 ? '' : 's'}` : 'Select at least one photo to enable exporting'}
+          >
+            <span aria-hidden="true">⇣</span>
+            <span>Export…</span>
+            {canExport ? <CountBadge count={selectedCount} /> : null}
           </button>
           <div
             data-testid="top-bar-size-control"
@@ -792,7 +811,7 @@ export function Sidebar({
   }, [])
 
   const scrollToTarget = useCallback((target: LeftPanelTarget) => {
-    const refMap: Record<LeftPanelTarget, React.RefObject<HTMLDivElement>> = {
+    const refMap: Record<LeftPanelTarget, React.RefObject<HTMLDivElement | null>> = {
       import: importSectionRef,
       date: dateSectionRef,
       folder: folderSectionRef,
@@ -1306,7 +1325,7 @@ export function InspectorPanel({
   }, [])
 
   const scrollToTarget = useCallback((target: RightPanelTarget) => {
-    const refMap: Record<RightPanelTarget, React.RefObject<HTMLDivElement>> = {
+    const refMap: Record<RightPanelTarget, React.RefObject<HTMLDivElement | null>> = {
       overview: overviewSectionRef,
       keyData: keyDataSectionRef,
       projects: projectsSectionRef,
@@ -1501,7 +1520,7 @@ type InspectorSectionProps = {
   maxBodyHeight?: number
 }
 
-const InspectorSection = React.forwardRef<HTMLDivElement, InspectorSectionProps>(function InspectorSection(
+const InspectorSection = React.forwardRef<HTMLDivElement | null, InspectorSectionProps>(function InspectorSection(
   { id, icon, label, open, onToggle, children, grow = false, maxBodyHeight },
   ref,
 ) {

@@ -12,7 +12,6 @@ export type ExportPhotosPayload = {
   jpegQuality: number
   contactSheetEnabled: boolean
   contactSheetFormat: ContactSheetFormat
-  folderPath: string
   presetId?: string | null
 }
 
@@ -21,9 +20,14 @@ export type ExportProgressSnapshot = {
   total: number
 }
 
+export type ExportJobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
+
 export type ExportPhotosResponse = {
+  jobId: string
+  status: ExportJobStatus
   exported: number
-  folderPath: string
+  downloadUrl?: string | null
+  downloadFilename?: string | null
 }
 
 export type ExportPhotosOptions = {
@@ -62,7 +66,38 @@ export async function exportSelectedPhotos(payload: ExportPhotosPayload, options
     throw createAbortError()
   }
   await delay(260)
-  return { exported: payload.photoIds.length, folderPath: payload.folderPath }
+  const jobId =
+    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `export-${Date.now()}-${Math.round(Math.random() * 1000)}`
+
+  let downloadUrl: string | null = null
+  let downloadFilename: string | null = null
+  if (typeof window !== 'undefined' && typeof URL !== 'undefined' && typeof Blob !== 'undefined') {
+    try {
+      const blob = new Blob(
+        [
+          `Arciva export (mock)\n\nJob: ${jobId}\nPhotos: ${
+            payload.photoIds.length
+          }\n\nReplace this mock implementation with the real backend call to download actual ZIP archives.`,
+        ],
+        { type: 'application/zip' },
+      )
+      downloadUrl = URL.createObjectURL(blob)
+      downloadFilename = `arciva-export-${jobId.slice(0, 8)}.zip`
+    } catch {
+      downloadUrl = null
+      downloadFilename = null
+    }
+  }
+
+  return {
+    jobId,
+    status: 'completed',
+    exported: payload.photoIds.length,
+    downloadUrl,
+    downloadFilename,
+  }
 }
 
 function createAbortError(): Error {

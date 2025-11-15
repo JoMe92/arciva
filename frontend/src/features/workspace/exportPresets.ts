@@ -11,7 +11,6 @@ export type ExportSettingsSnapshot = {
   jpegQuality: number
   contactSheetEnabled: boolean
   contactSheetFormat: ContactSheetFormat
-  folderPath?: string
 }
 
 export type ExportPreset = {
@@ -29,7 +28,9 @@ function readPresetsFromStorage(): ExportPreset[] {
     if (!raw) return []
     const parsed = JSON.parse(raw)
     if (!Array.isArray(parsed)) return []
-    return parsed.filter((item): item is ExportPreset => typeof item?.id === 'string' && typeof item?.name === 'string' && typeof item?.settings === 'object')
+    return parsed.filter((item): item is ExportPreset => {
+      return typeof item?.id === 'string' && typeof item?.name === 'string' && typeof item?.settings === 'object'
+    })
   } catch {
     return []
   }

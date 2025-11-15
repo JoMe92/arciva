@@ -14,12 +14,10 @@ type ExportDialogProps = {
 
 type ExportPhase = 'configure' | 'exporting' | 'success'
 
-type ExportErrors = Partial<Record<'folderPath' | 'longEdge' | 'presetName', string>>
+type ExportErrors = Partial<Record<'longEdge', string>>
 
 type ExportSettingsState = ExportSettingsSnapshot & {
-  folderPath: string
   presetId: string | null
-  storeFolderInPreset: boolean
 }
 
 const DEFAULT_PRESET_VALUE = '__default__'
@@ -41,9 +39,7 @@ const MAX_LONG_EDGE = 12_000
 function makeInitialSettings(): ExportSettingsState {
   return {
     ...DEFAULT_SNAPSHOT,
-    folderPath: '',
     presetId: null,
-    storeFolderInPreset: false,
   }
 }
 
@@ -56,7 +52,6 @@ function snapshotFromState(state: ExportSettingsState): ExportSettingsSnapshot {
     jpegQuality: state.jpegQuality,
     contactSheetEnabled: state.contactSheetEnabled,
     contactSheetFormat: state.contactSheetFormat,
-    folderPath: state.storeFolderInPreset && state.folderPath ? state.folderPath : undefined,
   }
 }
 
@@ -70,8 +65,6 @@ function applySnapshot(prev: ExportSettingsState, snapshot: ExportSettingsSnapsh
     jpegQuality: snapshot.jpegQuality,
     contactSheetEnabled: snapshot.contactSheetEnabled,
     contactSheetFormat: snapshot.contactSheetFormat,
-    folderPath: snapshot.folderPath ?? prev.folderPath,
-    storeFolderInPreset: Boolean(snapshot.folderPath),
     presetId,
   }
 }
@@ -84,6 +77,7 @@ export function ExportDialog({ isOpen, photos, onClose }: ExportDialogProps) {
   const [progress, setProgress] = useState({ completed: 0, total: Math.max(photos.length, 1) })
   const [exportError, setExportError] = useState<string | null>(null)
   const [exportResult, setExportResult] = useState<ExportPhotosResponse | null>(null)
+  const [autoDownloadedJobId, setAutoDownloadedJobId] = useState<string | null>(null)
   const [presetSaveOpen, setPresetSaveOpen] = useState(false)
   const [presetName, setPresetName] = useState('')
   const [presetDropdown, setPresetDropdown] = useState<string>(DEFAULT_PRESET_VALUE)
@@ -101,6 +95,7 @@ export function ExportDialog({ isOpen, photos, onClose }: ExportDialogProps) {
     setPhase('configure')
     setExportError(null)
     setExportResult(null)
+    setAutoDownloadedJobId(null)
     setProgress({ completed: 0, total: Math.max(photos.length, 1) })
     setPresetSaveOpen(false)
     setPresetName('')
@@ -126,6 +121,14 @@ export function ExportDialog({ isOpen, photos, onClose }: ExportDialogProps) {
   }, [isOpen, phase, onClose])
 
   useEffect(() => {
+    const url = exportResult?.downloadUrl
+    if (!url || typeof URL === 'undefined' || !url.startsWith('blob:')) return
+    return () => {
+      URL.revokeObjectURL(url)
+    }
+  }, [exportResult?.downloadUrl])
+
+  useEffect(() => {
     if (!isOpen && abortRef.current) {
       abortRef.current.abort()
       abortRef.current = null
@@ -134,9 +137,6 @@ export function ExportDialog({ isOpen, photos, onClose }: ExportDialogProps) {
 
   const validate = useCallback(() => {
     const nextErrors: ExportErrors = {}
-    if (!settings.folderPath.trim()) {
-      nextErrors.folderPath = 'Please choose an export folder.'
-    }
     if (settings.sizeMode === 'resize') {
       if (!Number.isFinite(settings.longEdge) || settings.longEdge < MIN_LONG_EDGE) {
         nextErrors.longEdge = `Long edge must be at least ${MIN_LONG_EDGE}px.`
@@ -147,15 +147,6 @@ export function ExportDialog({ isOpen, photos, onClose }: ExportDialogProps) {
     setErrors(nextErrors)
     return Object.keys(nextErrors).length === 0
   }, [settings])
-
-  const handleBrowse = useCallback(() => {
-    const suggested = settings.folderPath || '/Users/me/Pictures/Exports'
-    const nextPath = typeof window !== 'undefined' ? window.prompt('Enter export folder path', suggested)?.trim() ?? null : null
-    if (nextPath) {
-      setSettings((prev) => ({ ...prev, folderPath: nextPath }))
-      setErrors((prev) => ({ ...prev, folderPath: undefined }))
-    }
-  }, [settings.folderPath])
 
   const handlePresetChange = useCallback(
     (value: string) => {
@@ -186,12 +177,28 @@ export function ExportDialog({ isOpen, photos, onClose }: ExportDialogProps) {
     }
   }, [addPreset, presetName, settings])
 
+  const triggerDownload = useCallback((url: string, filename?: string | null) => {
+    if (typeof document === 'undefined') return
+    const anchor = document.createElement('a')
+    anchor.href = url
+    if (filename) {
+      anchor.download = filename
+    }
+    anchor.rel = 'noopener'
+    anchor.style.display = 'none'
+    document.body.appendChild(anchor)
+    anchor.click()
+    document.body.removeChild(anchor)
+  }, [])
+
   const handleExport = useCallback(async () => {
     if (!validate()) return
     if (!photos.length) return
     setPhase('exporting')
     setExportError(null)
+    setExportResult(null)
     setPresetSaveOpen(false)
+    setAutoDownloadedJobId(null)
     const controller = new AbortController()
     abortRef.current = controller
     setProgress({ completed: 0, total: photos.length })
@@ -206,7 +213,6 @@ export function ExportDialog({ isOpen, photos, onClose }: ExportDialogProps) {
           jpegQuality: settings.jpegQuality,
           contactSheetEnabled: settings.contactSheetEnabled,
           contactSheetFormat: settings.contactSheetFormat,
-          folderPath: settings.folderPath,
           presetId: settings.presetId,
         },
         {
@@ -233,20 +239,17 @@ export function ExportDialog({ isOpen, photos, onClose }: ExportDialogProps) {
     abortRef.current.abort()
   }, [])
 
-  const handleOpenFolder = useCallback(async () => {
-    if (!exportResult?.folderPath) return
-    const path = exportResult.folderPath
-    const normalized = path.startsWith('file://') ? path : `file://${path.replace(/^file:\/\//i, '')}`
-    const opened = typeof window !== 'undefined' ? window.open(normalized, '_blank') : null
-    if (!opened && typeof navigator !== 'undefined' && navigator.clipboard) {
-      try {
-        await navigator.clipboard.writeText(path)
-        setExportError('Opening folders is not supported in this preview. Path copied to clipboard.')
-      } catch {
-        setExportError('Unable to open the export folder.')
-      }
-    }
-  }, [exportResult])
+  const handleDownloadExport = useCallback(() => {
+    if (!exportResult?.downloadUrl) return
+    triggerDownload(exportResult.downloadUrl, exportResult.downloadFilename)
+  }, [exportResult, triggerDownload])
+
+  useEffect(() => {
+    if (phase !== 'success' || !exportResult?.downloadUrl) return
+    if (autoDownloadedJobId && autoDownloadedJobId === exportResult.jobId) return
+    triggerDownload(exportResult.downloadUrl, exportResult.downloadFilename)
+    setAutoDownloadedJobId(exportResult.jobId)
+  }, [autoDownloadedJobId, exportResult, phase, triggerDownload])
 
   if (!isOpen) return null
 
@@ -474,33 +477,12 @@ export function ExportDialog({ isOpen, photos, onClose }: ExportDialogProps) {
                     </p>
                   ) : null}
                 </div>
-                <div className="space-y-3 rounded-[18px] border border-[var(--border,#E1D3B9)] p-4">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">Export location</p>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={settings.folderPath}
-                      readOnly
-                      placeholder="Choose folder…"
-                      className="h-10 flex-1 rounded-[14px] border border-[var(--border,#E1D3B9)] bg-[var(--surface-subtle,#FBF7EF)] px-3 text-sm text-[var(--text,#1F1E1B)]"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleBrowse}
-                      className="flex h-10 items-center rounded-[14px] border border-[var(--border,#E1D3B9)] px-4 text-sm font-semibold text-[var(--text,#1F1E1B)]"
-                    >
-                      Browse…
-                    </button>
-                  </div>
-                  {errors.folderPath ? <p className="text-[11px] text-[#B42318]">{errors.folderPath}</p> : null}
-                  <label className="flex items-center gap-2 text-sm text-[var(--text,#1F1E1B)]">
-                    <input
-                      type="checkbox"
-                      checked={settings.storeFolderInPreset}
-                      onChange={(event) => setSettings((prev) => ({ ...prev, storeFolderInPreset: event.target.checked }))}
-                    />
-                    <span>Store this folder in preset</span>
-                  </label>
+                <div className="space-y-2 rounded-[18px] border border-[var(--border,#E1D3B9)] p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">Download</p>
+                  <p className="text-sm text-[var(--text,#1F1E1B)]">
+                    Exports are packaged as ZIP archives. When the export finishes, your browser will prompt you to choose where the file is saved.
+                  </p>
+                  <p className="text-[11px] text-[var(--text-muted,#6B645B)]">No server-side path selection is required—the download works in hosted deployments.</p>
                 </div>
               </div>
             </div>
@@ -516,10 +498,10 @@ export function ExportDialog({ isOpen, photos, onClose }: ExportDialogProps) {
                 </button>
                 <button
                   type="button"
-                  disabled={!photos.length || !settings.folderPath}
+                  disabled={!photos.length}
                   onClick={handleExport}
                   className={`inline-flex h-10 items-center rounded-full px-5 text-sm font-semibold ${
-                    !photos.length || !settings.folderPath
+                    !photos.length
                       ? 'cursor-not-allowed border border-[var(--border,#E1D3B9)] text-[var(--text-muted,#6B645B)]'
                       : 'bg-[var(--charcoal-800,#1F1E1B)] text-white shadow-lg'
                   }`}
@@ -535,7 +517,7 @@ export function ExportDialog({ isOpen, photos, onClose }: ExportDialogProps) {
             <div>
               <p className="text-xl font-semibold text-[var(--text,#1F1E1B)]">Exporting photos…</p>
               <p className="text-sm text-[var(--text-muted,#6B645B)]">
-                Exporting {progress.total} photo{progress.total === 1 ? '' : 's'} to <span className="font-medium">{settings.folderPath}</span>
+                Preparing a ZIP download for {progress.total} photo{progress.total === 1 ? '' : 's'}. Your browser will prompt for a save location once ready.
               </p>
             </div>
             <div className="h-3 w-full max-w-lg rounded-full bg-[var(--sand-100,#F3EBDD)]">
@@ -562,17 +544,23 @@ export function ExportDialog({ isOpen, photos, onClose }: ExportDialogProps) {
               ✓
             </div>
             <div>
-              <p className="text-xl font-semibold text-[var(--text,#1F1E1B)]">Successfully exported {progress.total} photo{progress.total === 1 ? '' : 's'}</p>
-              <p className="text-sm text-[var(--text-muted,#6B645B)]">Saved to {exportResult?.folderPath ?? settings.folderPath}</p>
+              <p className="text-xl font-semibold text-[var(--text,#1F1E1B)]">Export ready to download</p>
+              <p className="text-sm text-[var(--text-muted,#6B645B)]">
+                {progress.total} photo{progress.total === 1 ? '' : 's'} packaged as a ZIP archive. The download button below will re-trigger the browser save dialog.
+              </p>
+              <p className="text-xs text-[var(--text-muted,#6B645B)]">The browser decides where downloads are stored. Use the button below to download again.</p>
               {exportError ? <p className="mt-2 text-xs text-[#B42318]">{exportError}</p> : null}
             </div>
             <div className="flex items-center gap-3">
               <button
                 type="button"
-                onClick={handleOpenFolder}
-                className="inline-flex h-10 items-center rounded-full border border-[var(--border,#E1D3B9)] px-4 text-sm font-medium text-[var(--text,#1F1E1B)]"
+                disabled={!exportResult?.downloadUrl}
+                onClick={handleDownloadExport}
+                className={`inline-flex h-10 items-center rounded-full px-5 text-sm font-semibold ${
+                  exportResult?.downloadUrl ? 'bg-[var(--charcoal-800,#1F1E1B)] text-white shadow-lg' : 'cursor-not-allowed border border-[var(--border,#E1D3B9)] text-[var(--text-muted,#6B645B)]'
+                }`}
               >
-                Open export folder
+                {exportResult?.downloadUrl ? 'Download export' : 'Download unavailable'}
               </button>
               <button
                 type="button"

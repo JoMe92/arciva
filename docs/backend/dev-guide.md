@@ -127,6 +127,12 @@ curl -s "$API/v1/projects/$PROJECT/assets"
 
 > Tip: Use Insomnia/Postman and save a collection. Keep a sample image in the repo (e.g. `samples/demo.jpg`) for repeatable tests.
 
+### Image Hub dedup checkpoints
+
+- The upload pipeline now computes a streaming SHA-256 before the worker ever runs. If that hash already exists the API links the prior Asset to the current project and skips the heavy ingest job entirely.
+- If the byte hash is unique the worker falls back to a normalized perceptual hash (format-aware) to catch cases where containers differ but pixels match. These collisions short-circuit in the worker by re-linking projects and deleting the redundant blob.
+- Per-project metadata (rating/label/pick/reject) now lives in `asset_metadata_states`, so re-importing an image will always get a fresh state that can optionally inherit from another project at import time.
+
 ---
 
 ## 7) Developer workflow (tight loop)

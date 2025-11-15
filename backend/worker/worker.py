@@ -9,17 +9,20 @@ from typing import Any, Iterable, List, Optional, Tuple
 from uuid import UUID
 
 from arq.connections import RedisSettings
-from sqlalchemy import delete, func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app import models
 from backend.app.deps import get_settings
 from backend.app.db import SessionLocal
-from backend.app.imaging import make_thumb, read_exif, sha256_file
+from backend.app.imaging import make_thumb, read_exif, sha256_file, compute_pixel_hash
 from backend.app.logging_utils import setup_logging
 from backend.app.storage import PosixStorage
 from backend.app.schema_utils import ensure_asset_metadata_column
 from backend.app.services.raw_reader import RawReadResult, RawReaderService
+from backend.app.services.metadata_states import ensure_state_for_link
+from backend.app.services.dedup import adopt_duplicate_asset
+from backend.app.utils.assets import detect_asset_format
 
 SETTINGS = get_settings()
 setup_logging(SETTINGS.logs_dir)
@@ -124,7 +127,7 @@ async def ingest_asset(ctx, asset_id: str):
 
         temp_path = storage.temp_path_for(asset_id)
         temp_exists = temp_path.exists()
-        original_path: Path | None = Path(asset.storage_key) if asset.storage_key else None
+        original_path: Path | None = Path(asset.storage_uri) if asset.storage_uri else None
         if original_path and not original_path.exists():
             original_path = None
 
@@ -169,24 +172,24 @@ async def ingest_asset(ctx, asset_id: str):
                     logger.info(
                         "ingest_asset: asset=%s duplicate_of=%s", asset_id, duplicate.id
                     )
-                    await _handle_duplicate(db, asset, duplicate, storage, temp_path, now)
+                    await adopt_duplicate_asset(
+                        db,
+                        duplicate_asset=asset,
+                        existing_asset=duplicate,
+                        storage=storage,
+                        temp_path=temp_path,
+                        timestamp=now,
+                    )
                     return {"duplicate_of": str(duplicate.id)}
 
             ext = Path(asset.original_filename).suffix.lower()
+            if not ext and original_path:
+                ext = original_path.suffix.lower()
             if not ext:
-                if original_path:
-                    ext = original_path.suffix.lower()
-                if not ext:
-                    ext = ".bin"
+                ext = ".bin"
 
-            if temp_exists:
-                dest = storage.move_to_originals(temp_path, sha, ext)
-                source_path = dest
-            else:
-                if not original_path:
-                    dest = storage.original_path_for(sha, ext)
-                else:
-                    dest = original_path
+            asset_format = detect_asset_format(asset.original_filename, asset.mime)
+            asset.format = asset_format
 
             taken_at = asset.taken_at
             width = asset.width
@@ -270,6 +273,47 @@ async def ingest_asset(ctx, asset_id: str):
                     width, height = await asyncio.to_thread(_size)
                 except Exception:  # pragma: no cover - best effort
                     logger.exception("ingest_asset: fallback image size failed asset=%s", asset_id)
+
+            pixel_hash: str | None = None
+            pixel_format = asset_format or "UNKNOWN"
+            try:
+                if raw_preview_bytes:
+                    pixel_hash = await asyncio.to_thread(
+                        compute_pixel_hash,
+                        None,
+                        image_bytes=raw_preview_bytes,
+                    )
+                elif source_path.exists():
+                    pixel_hash = await asyncio.to_thread(compute_pixel_hash, source_path)
+            except Exception:  # pragma: no cover - best effort
+                logger.exception("ingest_asset: pixel hash failed asset=%s", asset_id)
+
+            if pixel_hash:
+                collision = (
+                    await db.execute(
+                        select(models.Asset).where(
+                            models.Asset.pixel_format == pixel_format,
+                            models.Asset.pixel_hash == pixel_hash,
+                            models.Asset.id != asset.id,
+                        )
+                    )
+                ).scalar_one_or_none()
+                if collision:
+                    logger.info(
+                        "ingest_asset: pixel duplicate asset=%s existing=%s",
+                        asset_id,
+                        collision.id,
+                    )
+                    await adopt_duplicate_asset(
+                        db,
+                        duplicate_asset=asset,
+                        existing_asset=collision,
+                        storage=storage,
+                        temp_path=temp_path if temp_exists else None,
+                        cleanup_temp=temp_exists,
+                        timestamp=now,
+                    )
+                    return {"duplicate_of": str(collision.id), "pixel": True}
 
             derivative_failures: List[str] = []
             for variant, size in DERIVATIVE_PRESETS:
@@ -390,8 +434,16 @@ async def ingest_asset(ctx, asset_id: str):
                         )
                     )
 
+            final_path: Path
+            if temp_exists:
+                final_path = storage.move_to_originals(temp_path, sha, ext)
+            elif source_path and source_path.exists():
+                final_path = source_path
+            else:
+                final_path = storage.original_path_for(sha, ext)
+
             asset.sha256 = sha
-            asset.storage_key = str(source_path.resolve())
+            asset.storage_uri = str(final_path.resolve())
             asset.width = width
             asset.height = height
             asset.taken_at = taken_at
@@ -400,6 +452,8 @@ async def ingest_asset(ctx, asset_id: str):
             asset.metadata_warnings = _warnings_to_text(warnings)
             if hasattr(asset, "metadata_json"):
                 asset.metadata_json = metadata_payload
+            asset.pixel_format = pixel_format
+            asset.pixel_hash = pixel_hash
             asset.reference_count = max(asset.reference_count or 1, 1)
             await db.commit()
             logger.info(
@@ -419,64 +473,6 @@ async def ingest_asset(ctx, asset_id: str):
             asset.completed_at = datetime.now(timezone.utc)
             await db.commit()
             return {"error": str(exc)}
-
-
-async def _handle_duplicate(
-    db: AsyncSession,
-    new_asset: models.Asset,
-    existing_asset: models.Asset,
-    storage: PosixStorage,
-    temp_path: Path,
-    now: datetime,
-) -> None:
-    project_ids = (
-        await db.execute(
-            select(models.ProjectAsset.project_id).where(
-                models.ProjectAsset.asset_id == new_asset.id
-            )
-        )
-    ).scalars().all()
-
-    linked = 0
-    for project_id in project_ids:
-        already_linked = (
-            await db.execute(
-                select(models.ProjectAsset).where(
-                    models.ProjectAsset.project_id == project_id,
-                    models.ProjectAsset.asset_id == existing_asset.id,
-                )
-            )
-        ).scalar_one_or_none()
-        if already_linked:
-            continue
-        db.add(models.ProjectAsset(project_id=project_id, asset_id=existing_asset.id))
-        linked += 1
-
-    await db.execute(
-        delete(models.ProjectAsset).where(models.ProjectAsset.asset_id == new_asset.id)
-    )
-    await db.execute(delete(models.Asset).where(models.Asset.id == new_asset.id))
-
-    count = (
-        await db.execute(
-            select(func.count()).select_from(models.ProjectAsset).where(
-                models.ProjectAsset.asset_id == existing_asset.id
-            )
-        )
-    ).scalar_one()
-    existing_asset.reference_count = max(int(count), 1)
-    existing_asset.completed_at = existing_asset.completed_at or now
-    existing_asset.status = models.AssetStatus.READY
-
-    storage.remove_temp(new_asset.id)
-    await db.commit()
-    logger.info(
-        "ingest_asset: duplicate asset=%s linked_to=%s new_links=%s total_refs=%s",
-        new_asset.id,
-        existing_asset.id,
-        linked,
-        existing_asset.reference_count,
-    )
 
 
 class WorkerSettings:

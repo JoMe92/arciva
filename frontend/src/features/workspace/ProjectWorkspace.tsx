@@ -1,12 +1,26 @@
 import React, { useMemo, useRef, useEffect, useState, useCallback } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient, type UseMutationResult } from '@tanstack/react-query'
 import { TOKENS } from './utils'
-import { listProjectAssets, assetThumbUrl, assetPreviewUrl, updateAssetInteractions, getAsset, type AssetListItem, type AssetDetail } from '../../shared/api/assets'
-import { getProject, updateProject, type ProjectApiResponse } from '../../shared/api/projects'
+import {
+  listProjectAssets,
+  assetThumbUrl,
+  assetPreviewUrl,
+  updateAssetInteractions,
+  getAsset,
+  linkAssetsToProject,
+  listAssetProjects,
+  loadMetadataFromProject,
+  type AssetListItem,
+  type AssetDetail,
+  type AssetProjectUsage,
+  type LoadMetadataFromProjectResponse,
+} from '../../shared/api/assets'
+import { getProject, updateProject, type ProjectApiResponse, type ProjectUpdatePayload } from '../../shared/api/projects'
 import { initUpload, putUpload, completeUpload } from '../../shared/api/uploads'
 import { placeholderRatioForAspect } from '../../shared/placeholder'
 import type { Photo, ImgType, ColorTag } from './types'
+import type { PendingItem } from './importTypes'
 import {
   TopBar,
   Sidebar,
@@ -22,18 +36,23 @@ import {
   type DateTreeDayNode,
   type GridSelectOptions,
 } from './components'
+import ImageHubImportPane from './ImageHubImportPane'
+import ErrorBoundary from '../../components/ErrorBoundary'
+import { fetchImageHubAssetStatus, type ImageHubAssetStatus } from '../../shared/api/hub'
+import { getImageHubSettings } from '../../shared/api/settings'
+import ModalShell from '../../components/modals/ModalShell'
 
-const LEFT_MIN_WIDTH = 280
-const LEFT_MAX_WIDTH = 420
-const LEFT_DEFAULT_WIDTH = 320
-const LEFT_COLLAPSED_WIDTH = 64
-const RIGHT_MIN_WIDTH = 320
-const RIGHT_MAX_WIDTH = 480
+const LEFT_MIN_WIDTH = 300
+const LEFT_MAX_WIDTH = 560
+const LEFT_DEFAULT_WIDTH = 360
+const LEFT_COLLAPSED_WIDTH = 56
+const RIGHT_MIN_WIDTH = 300
+const RIGHT_MAX_WIDTH = 560
 const RIGHT_DEFAULT_WIDTH = 360
-const RIGHT_COLLAPSED_WIDTH = 64
+const RIGHT_COLLAPSED_WIDTH = 56
 const HANDLE_WIDTH = 12
 const RESIZE_STEP = 16
-const IGNORED_METADATA_WARNINGS = new Set(['EXIFTOOL_ERROR', 'EXIFTOOL_NOT_INSTALLED', 'EXIFTOOL_JSON_ERROR'])
+const IGNORED_METADATA_WARNINGS = new Set(['EXIFTOOL_ERROR', 'EXIFTOOL_NOT_INSTALLED', 'EXIFTOOL_JSON_ERROR', 'ExifPill-Load failed'])
 const DATE_KEY_DELIM = '__'
 const UNKNOWN_VALUE = 'unknown'
 const MONTH_FORMATTER = new Intl.DateTimeFormat(undefined, { month: 'long' })
@@ -305,6 +324,7 @@ function mapAssetToPhoto(item: AssetListItem, existing?: Photo): Photo {
   const pairedAssetId = item.paired_asset_id ?? existing?.pairedAssetId ?? null
   const pairedAssetType = item.paired_asset_type ?? existing?.pairedAssetType ?? null
   const basename = item.basename ?? existing?.basename ?? null
+  const metadataSourceProjectId = item.metadata_source_project_id ?? existing?.metadataSourceProjectId ?? null
 
   return {
     id: item.id,
@@ -329,6 +349,7 @@ function mapAssetToPhoto(item: AssetListItem, existing?: Photo): Photo {
     pairedAssetId,
     pairedAssetType,
     stackPrimaryAssetId,
+    metadataSourceProjectId,
   }
 }
 
@@ -374,6 +395,7 @@ function patchPhotoInteractions(photo: Photo, patch: InteractionPatch): Photo {
 
 export default function ProjectWorkspace() {
   const { id } = useParams()
+  const projectId = id ?? undefined
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const cachedProjects = queryClient.getQueryData<ProjectApiResponse[]>(['projects'])
@@ -397,7 +419,20 @@ export default function ProjectWorkspace() {
     queryClient.setQueryData(['project', id], updated)
     queryClient.setQueryData<ProjectApiResponse[] | undefined>(['projects'], (prev) => {
       if (!prev) return prev
-      return prev.map((proj) => (proj.id === updated.id ? { ...proj, title: updated.title, updated_at: updated.updated_at, stack_pairs_enabled: updated.stack_pairs_enabled } : proj))
+      return prev.map((proj) =>
+        proj.id === updated.id
+          ? {
+              ...proj,
+              title: updated.title,
+              updated_at: updated.updated_at,
+              stack_pairs_enabled: updated.stack_pairs_enabled,
+              client: updated.client,
+              note: updated.note,
+              tags: updated.tags ?? proj.tags,
+              asset_count: updated.asset_count ?? proj.asset_count,
+            }
+          : proj,
+      )
     })
   }, [id, queryClient])
 
@@ -419,11 +454,32 @@ export default function ProjectWorkspace() {
       applyProjectUpdate(updated)
     },
   })
+  const projectInfoMutation = useMutation({
+    mutationFn: (patch: ProjectUpdatePayload) => {
+      if (!id) throw new Error('Project id missing')
+      return updateProject(id, patch)
+    },
+    onSuccess: (updated) => {
+      applyProjectUpdate(updated)
+    },
+  })
+  const renameErrorMessage = renameMutation.isError
+    ? renameMutation.error instanceof Error
+      ? renameMutation.error.message
+      : typeof renameMutation.error === 'string'
+        ? renameMutation.error
+        : 'Unable to rename project'
+    : null
+  const projectInfoErrorMessage = projectInfoMutation.isError
+    ? projectInfoMutation.error instanceof Error
+      ? projectInfoMutation.error.message
+      : typeof projectInfoMutation.error === 'string'
+        ? projectInfoMutation.error
+        : 'Unable to update project details'
+    : null
   const [searchParams, setSearchParams] = useSearchParams()
 
   const [photos, setPhotos] = useState<Photo[]>([])
-  const [loadingAssets, setLoadingAssets] = useState(false)
-  const [loadError, setLoadError] = useState<string | null>(null)
   const prevPhotosRef = useRef<Photo[]>([])
   const currentIndexRef = useRef(0)
   const currentPhotoIdRef = useRef<string | null>(null)
@@ -433,6 +489,7 @@ export default function ProjectWorkspace() {
   const lastSelectedPhotoIdRef = useRef<string | null>(null)
   const selectionAnchorRef = useRef<string | null>(null)
   const suppressSelectionSyncRef = useRef(false)
+  const [metadataSourceCandidate, setMetadataSourceCandidate] = useState<{ id: string; name: string } | null>(null)
   const resolveActionTargetIds = useCallback((primaryId: string | null) => {
     if (primaryId && selectedPhotoIds.has(primaryId)) {
       return new Set(selectedPhotoIds)
@@ -455,13 +512,15 @@ export default function ProjectWorkspace() {
       },
     })
   }, [stackPairsEnabled, stackToggleMutation])
+  const handleProjectInfoChange = useCallback(async (patch: ProjectUpdatePayload) => {
+    if (!id) return
+    await projectInfoMutation.mutateAsync(patch)
+  }, [id, projectInfoMutation])
 
   const refreshAssets = useCallback(async (focusNewest: boolean = false) => {
     if (!id) return
-    setLoadingAssets(true)
     try {
       const items = await listProjectAssets(id)
-      setLoadError(null)
       const prevPhotos = prevPhotosRef.current
       const prevIds = new Set(prevPhotos.map((p) => p.id))
       const prevMap = new Map(prevPhotos.map((p) => [p.id, p]))
@@ -499,10 +558,7 @@ export default function ProjectWorkspace() {
 
       setCurrent(nextIndex)
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to load assets'
-      setLoadError(message)
-    } finally {
-      setLoadingAssets(false)
+      console.error(err)
     }
   }, [id])
 
@@ -529,6 +585,39 @@ export default function ProjectWorkspace() {
     },
   })
 
+  const metadataSyncMutation: UseMutationResult<
+    LoadMetadataFromProjectResponse,
+    Error,
+    { assetId: string; sourceProjectId: string },
+    unknown
+  > = useMutation<
+    LoadMetadataFromProjectResponse,
+    Error,
+    { assetId: string; sourceProjectId: string },
+    unknown
+  >({
+    mutationFn: async ({ assetId, sourceProjectId }) => {
+      if (!projectId) {
+        throw new Error('Missing project identifier')
+      }
+      return loadMetadataFromProject({ assetId, sourceProjectId, targetProjectId: projectId })
+    },
+    onSuccess: (response, variables) => {
+      if (response?.asset) {
+        setPhotos((prev) => mergePhotosFromItems(prev, [response.asset]))
+        prevPhotosRef.current = mergePhotosFromItems(prevPhotosRef.current, [response.asset])
+      } else {
+        refreshAssets()
+      }
+      queryClient.invalidateQueries({ queryKey: ['asset-detail', variables.assetId, projectId] })
+      queryClient.invalidateQueries({ queryKey: ['asset-projects', variables.assetId] })
+      setMetadataSourceCandidate(null)
+    },
+    onError: (error) => {
+      console.error('Failed to adopt metadata from source project', error)
+    },
+  })
+
   const pairLookup = useMemo(() => {
     const map = new Map<string, string>()
     photos.forEach((photo) => {
@@ -538,7 +627,6 @@ export default function ProjectWorkspace() {
     })
     return map
   }, [photos])
-
   const [showJPEG, setShowJPEG] = useState(true)
   const [showRAW, setShowRAW] = useState(true)
   const [minStars, setMinStars] = useState<0 | 1 | 2 | 3 | 4 | 5>(0)
@@ -688,13 +776,11 @@ export default function ProjectWorkspace() {
     (event: React.PointerEvent<HTMLButtonElement>) => {
       if (event.pointerType === 'mouse' && event.button !== 0) return
       event.preventDefault()
+      if (rightPanelCollapsed) return
       const pointerId = event.pointerId
       const target = event.currentTarget
       const startX = event.clientX
       const startWidth = rightPanelWidth
-      if (rightPanelCollapsed) {
-        setRightPanelCollapsed(false)
-      }
       const handlePointerMove = (moveEvent: PointerEvent) => {
         const delta = moveEvent.clientX - startX
         setRightPanelWidth(clampNumber(startWidth - delta, RIGHT_MIN_WIDTH, RIGHT_MAX_WIDTH))
@@ -737,7 +823,10 @@ export default function ProjectWorkspace() {
         setRightPanelWidth((prev) => clampNumber(prev - RESIZE_STEP, RIGHT_MIN_WIDTH, RIGHT_MAX_WIDTH))
       } else if (event.key === 'ArrowRight') {
         event.preventDefault()
-        setRightPanelCollapsed(false)
+        if (rightPanelCollapsed) {
+          setRightPanelCollapsed(false)
+          return
+        }
         setRightPanelWidth((prev) => clampNumber(prev + RESIZE_STEP, RIGHT_MIN_WIDTH, RIGHT_MAX_WIDTH))
       } else if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault()
@@ -927,6 +1016,10 @@ export default function ProjectWorkspace() {
     return count
   }, [minStars, filterColor, showJPEG, showRAW, onlyPicked, hideRejected, selectedDayKey])
 
+  const applyChanges = useCallback(() => {
+    // Placeholder for future non-destructive edit syncing.
+  }, [])
+
   useEffect(() => { if (current >= visible.length) setCurrent(Math.max(0, visible.length - 1)) }, [visible, current])
 
   // Shortcuts (gleich wie Monolith)
@@ -1052,6 +1145,8 @@ export default function ProjectWorkspace() {
   const [importOpen, setImportOpen] = useState(false)
   const [uploadBanner, setUploadBanner] = useState<UploadBannerState | null>(null)
   const uploadBannerTimeoutRef = useRef<number | null>(null)
+  const [uploadInfo, setUploadInfo] = useState<string | null>(null)
+  const uploadInfoTimeoutRef = useRef<number | null>(null)
 
   const handleUploadProgress = useCallback((snapshot: UploadProgressSnapshot) => {
     if (uploadBannerTimeoutRef.current !== null) {
@@ -1097,6 +1192,31 @@ export default function ProjectWorkspace() {
   useEffect(() => () => {
     if (uploadBannerTimeoutRef.current !== null) {
       window.clearTimeout(uploadBannerTimeoutRef.current)
+    }
+  }, [])
+
+  const dismissUploadInfo = useCallback(() => {
+    if (uploadInfoTimeoutRef.current !== null) {
+      window.clearTimeout(uploadInfoTimeoutRef.current)
+      uploadInfoTimeoutRef.current = null
+    }
+    setUploadInfo(null)
+  }, [])
+
+  const showUploadInfo = useCallback((message: string) => {
+    setUploadInfo(message)
+    if (uploadInfoTimeoutRef.current !== null) {
+      window.clearTimeout(uploadInfoTimeoutRef.current)
+    }
+    uploadInfoTimeoutRef.current = window.setTimeout(() => {
+      setUploadInfo(null)
+      uploadInfoTimeoutRef.current = null
+    }, 6000)
+  }, [])
+
+  useEffect(() => () => {
+    if (uploadInfoTimeoutRef.current !== null) {
+      window.clearTimeout(uploadInfoTimeoutRef.current)
     }
   }, [])
   const handleImport = useCallback(async (_args: { count: number; types: ImgType[]; dest: string }) => {
@@ -1175,30 +1295,51 @@ export default function ProjectWorkspace() {
     isFetching: assetDetailFetching,
     error: assetDetailError,
   } = useQuery<AssetDetail>({
-    queryKey: ['asset-detail', currentAssetId],
-    queryFn: () => getAsset(currentAssetId as string),
+    queryKey: ['asset-detail', currentAssetId, projectId],
+    queryFn: () => getAsset(currentAssetId as string, { projectId }),
+    enabled: Boolean(currentAssetId && projectId),
+    staleTime: 1000 * 60 * 5,
+  })
+  const {
+    data: assetProjects,
+    isFetching: assetProjectsLoading,
+    error: assetProjectsError,
+  } = useQuery<AssetProjectUsage[]>({
+    queryKey: ['asset-projects', currentAssetId],
+    queryFn: () => listAssetProjects(currentAssetId as string),
     enabled: Boolean(currentAssetId),
     staleTime: 1000 * 60 * 5,
   })
+  const metadataSyncPending = metadataSyncMutation.isPending
+  const handleMetadataSourceRequest = useCallback((sourceProjectId: string, sourceProjectName: string) => {
+    metadataSyncMutation.reset()
+    setMetadataSourceCandidate({ id: sourceProjectId, name: sourceProjectName })
+  }, [metadataSyncMutation])
+  const handleConfirmMetadataCopy = useCallback(() => {
+    if (!metadataSourceCandidate || !currentAssetId) return
+    metadataSyncMutation.mutate({ assetId: currentAssetId, sourceProjectId: metadataSourceCandidate.id })
+  }, [metadataSourceCandidate, currentAssetId, metadataSyncMutation])
+  const handleCancelMetadataCopy = useCallback(() => {
+    if (metadataSyncPending) return
+    metadataSyncMutation.reset()
+    setMetadataSourceCandidate(null)
+  }, [metadataSyncPending, metadataSyncMutation])
   const metadataEntries = useMemo(() => {
     if (!currentAssetDetail?.metadata) return []
     return Object.entries(currentAssetDetail.metadata)
       .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([key, value]) => ({ key, value: formatMetadataValue(value) }))
+      .map(([key, value]) => ({
+        key,
+        normalizedKey: normalizeMetadataKey(key),
+        label: formatMetadataKeyLabel(key),
+        value,
+      }))
   }, [currentAssetDetail?.metadata])
   const metadataWarnings = useMemo(() => {
     const warnings = currentAssetDetail?.metadata_warnings ?? currentPhoto?.metadataWarnings ?? []
     return warnings.filter((warning) => !IGNORED_METADATA_WARNINGS.has(warning))
   }, [currentAssetDetail?.metadata_warnings, currentPhoto?.metadataWarnings])
-  const detailDateLabel = useMemo(() => {
-    if (!currentPhoto) return '—'
-    const source = currentPhoto.capturedAt ?? currentPhoto.uploadedAt ?? currentPhoto.date
-    if (!source) return '—'
-    const parsed = new Date(source)
-    if (Number.isNaN(parsed.getTime())) return '—'
-    return parsed.toLocaleDateString()
-  }, [currentPhoto])
-  const inspectorRows = useMemo(() => {
+  const generalInspectorFields = useMemo(() => {
     if (!currentPhoto) return []
     const sizeLabel =
       assetDetailFetching && !currentAssetDetail
@@ -1206,19 +1347,84 @@ export default function ProjectWorkspace() {
         : currentAssetDetail
           ? formatBytes(currentAssetDetail.size_bytes)
           : '—'
-    const dimensionsLabel = formatDimensions(currentAssetDetail?.width, currentAssetDetail?.height)
     return [
-      { label: 'Name', value: currentPhoto.name || '—' },
-      { label: 'Type', value: currentPhoto.displayType ?? currentPhoto.type },
-      { label: 'Date', value: detailDateLabel },
-      { label: 'Size', value: sizeLabel },
-      { label: 'Dimensions', value: dimensionsLabel },
-      { label: 'Rating', value: `${currentPhoto.rating}★` },
-      { label: 'Flag', value: currentPhoto.picked ? 'Picked' : '—' },
-      { label: 'Rejected', value: currentPhoto.rejected ? 'Yes' : 'No' },
-      { label: 'Color', value: currentPhoto.tag },
+      { label: 'File Name', value: currentAssetDetail?.original_filename ?? currentPhoto.name ?? '—' },
+      { label: 'File Type', value: currentPhoto.displayType ?? currentPhoto.type },
+      { label: 'Dimensions', value: formatDimensions(currentAssetDetail?.width, currentAssetDetail?.height) },
+      { label: 'Capture Date', value: formatCaptureDateLabel(currentAssetDetail?.metadata, currentAssetDetail?.taken_at ?? currentPhoto.capturedAt ?? null) },
+      { label: 'Import Date', value: formatImportDateLabel(currentPhoto.uploadedAt ?? currentPhoto.date) },
+      { label: 'File Size', value: sizeLabel },
+      { label: 'Storage Origin', value: formatStorageOriginLabel(currentAssetDetail?.storage_uri) },
     ]
-  }, [assetDetailFetching, currentAssetDetail, currentPhoto, detailDateLabel])
+  }, [assetDetailFetching, currentAssetDetail, currentPhoto])
+  const captureInspectorFields = useMemo(() => {
+    if (!currentPhoto) return []
+    const metadata = currentAssetDetail?.metadata ?? null
+    return [
+      { label: 'Camera', value: formatCameraModel(metadata) },
+      { label: 'Lens', value: formatLensModel(metadata) },
+      { label: 'Aperture', value: formatApertureValue(metadata) },
+      { label: 'Shutter', value: formatShutterValue(metadata) },
+      { label: 'ISO', value: formatIsoValue(metadata) },
+      { label: 'Focal Length', value: formatFocalLengthValue(metadata) },
+    ]
+  }, [currentPhoto, currentAssetDetail?.metadata])
+  const metadataSummary = useMemo(() => {
+    if (!currentPhoto) return null
+    const edits = currentAssetDetail?.metadata_state?.edits
+    const hasEdits = Boolean(edits && typeof edits === 'object' && Object.keys(edits).length)
+    return {
+      rating: currentPhoto.rating,
+      colorLabel: currentPhoto.tag,
+      pickRejectLabel: currentPhoto.picked ? 'Picked' : currentPhoto.rejected ? 'Rejected' : '—',
+      picked: currentPhoto.picked,
+      rejected: currentPhoto.rejected,
+      hasEdits,
+    }
+  }, [currentPhoto, currentAssetDetail?.metadata_state?.edits])
+  const metadataSourceProjectId = currentPhoto?.metadataSourceProjectId ?? currentAssetDetail?.metadata_state?.source_project_id ?? null
+  const projectOverview = useMemo(() => {
+    if (!projectDetail) return null
+    return {
+      title: projectName,
+      description: projectDetail.note ?? '',
+      client: projectDetail.client ?? '',
+      tags: Array.isArray(projectDetail.tags) ? projectDetail.tags : [],
+      assetCount: typeof projectDetail.asset_count === 'number' ? projectDetail.asset_count : photos.length,
+      createdAt: projectDetail.created_at ?? null,
+    }
+  }, [projectDetail, projectName, photos.length])
+  const usedProjects = useMemo(() => {
+    const source = assetProjects ?? currentAssetDetail?.projects ?? []
+    if (!Array.isArray(source)) return []
+    return source
+      .map((proj) => ({
+        id: proj.project_id,
+        name: proj.name,
+        coverThumb: proj.cover_thumb ?? null,
+        lastModified: proj.last_modified ?? null,
+        isCurrent: Boolean(projectId && proj.project_id === projectId),
+      }))
+      .sort((a, b) => {
+        if (a.isCurrent !== b.isCurrent) return a.isCurrent ? -1 : 1
+        const aTs = a.lastModified ? new Date(a.lastModified).getTime() : 0
+        const bTs = b.lastModified ? new Date(b.lastModified).getTime() : 0
+        return bTs - aTs
+      })
+  }, [assetProjects, currentAssetDetail?.projects, projectId])
+  const usedProjectsErrorMessage = useMemo(() => {
+    if (!assetProjectsError) return null
+    if (assetProjectsError instanceof Error) return assetProjectsError.message
+    if (typeof assetProjectsError === 'string') return assetProjectsError
+    return 'Unable to load project usage'
+  }, [assetProjectsError])
+  const metadataSyncError = (metadataSyncMutation as { error?: unknown }).error
+  const metadataCopyErrorMessage = useMemo(() => {
+    if (!metadataSyncError) return null
+    if (metadataSyncError instanceof Error) return metadataSyncError.message
+    if (typeof metadataSyncError === 'string') return metadataSyncError
+    return 'Unable to replace metadata'
+  }, [metadataSyncError])
   const metadataLoading = Boolean(currentAssetId) && assetDetailFetching
   const metadataErrorMessage = useMemo(() => {
     if (!assetDetailError) return null
@@ -1236,7 +1442,7 @@ export default function ProjectWorkspace() {
         onBack={goBack}
         onRename={handleRename}
         renamePending={renameMutation.isPending}
-        renameError={renameMutation.isError ? (renameMutation.error as Error).message : null}
+        renameError={renameErrorMessage}
         view={view}
         onChangeView={setView}
         gridSize={gridSize}
@@ -1261,13 +1467,9 @@ export default function ProjectWorkspace() {
         }}
         filterCount={activeFilterCount}
         onResetFilters={resetFilters}
-        visibleCount={visible.length}
         stackPairsEnabled={stackPairsEnabled}
         onToggleStackPairs={handleStackToggle}
         stackTogglePending={stackToggleMutation.isPending}
-        selectedDayLabel={selectedDayNode ? selectedDayNode.label : null}
-        loadingAssets={loadingAssets}
-        loadError={loadError}
       />
       {uploadBanner && (
         <div className="pointer-events-none fixed bottom-6 right-6 z-50">
@@ -1308,6 +1510,20 @@ export default function ProjectWorkspace() {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+      {uploadInfo && (
+        <div className="fixed bottom-6 left-6 z-50 w-80 rounded-lg border border-[var(--river-200,#DCEDEC)] bg-[var(--river-50,#F0F7F6)] px-4 py-3 text-sm text-[var(--river-900,#10302E)] shadow-lg">
+          <div className="flex items-start gap-3">
+            <span>{uploadInfo}</span>
+            <button
+              type="button"
+              className="ml-auto text-xs text-[var(--river-700,#2C5B58)] hover:text-[var(--river-900,#10302E)]"
+              onClick={dismissUploadInfo}
+            >
+              Dismiss
+            </button>
           </div>
         </div>
       )}
@@ -1406,8 +1622,22 @@ export default function ProjectWorkspace() {
           collapsed={rightPanelCollapsed}
           onCollapse={() => setRightPanelCollapsed(true)}
           onExpand={() => setRightPanelCollapsed(false)}
-          summaryRows={inspectorRows}
+          projectOverview={projectOverview}
+          onRenameProject={handleRename}
+          renamePending={renameMutation.isPending}
+          renameError={renameErrorMessage}
+          onProjectOverviewChange={handleProjectInfoChange}
+          projectOverviewPending={projectInfoMutation.isPending}
+          projectOverviewError={projectInfoErrorMessage}
           hasSelection={Boolean(currentPhoto)}
+          usedProjects={usedProjects}
+          usedProjectsLoading={assetProjectsLoading}
+          usedProjectsError={usedProjectsErrorMessage}
+          metadataSourceProjectId={metadataSourceProjectId}
+          onSelectMetadataSource={handleMetadataSourceRequest}
+          metadataCopyBusy={metadataSyncPending}
+          keyMetadataSections={{ general: generalInspectorFields, capture: captureInspectorFields }}
+          metadataSummary={metadataSummary}
           metadataEntries={metadataEntries}
           metadataWarnings={metadataWarnings}
           metadataLoading={metadataLoading}
@@ -1415,17 +1645,65 @@ export default function ProjectWorkspace() {
         />
       </div>
 
-      {importOpen && (
-        <ImportSheet
-          projectId={id}
-          onClose={() => setImportOpen(false)}
-          onImport={handleImport}
-          onProgressSnapshot={handleUploadProgress}
-          folderMode={folderMode}
-          customFolder={customFolder}
+      {metadataSourceCandidate ? (
+        <MetadataCopyConfirmModal
+          projectName={metadataSourceCandidate.name}
+          pending={metadataSyncPending}
+          error={metadataCopyErrorMessage}
+          onCancel={handleCancelMetadataCopy}
+          onConfirm={handleConfirmMetadataCopy}
         />
+      ) : null}
+
+      {importOpen && (
+        <ErrorBoundary fallback={(
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 p-4">
+            <div className="w-[min(95vw,640px)] rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-6 text-sm text-[var(--text,#1F1E1B)] shadow-2xl">
+              <div className="text-base font-semibold">Import panel crashed</div>
+              <p className="mt-2 text-[var(--text-muted,#6B645B)]">Something went wrong while loading the import sheet. Close it and try again.</p>
+              <div className="mt-4 flex justify-end">
+                <button type="button" onClick={() => setImportOpen(false)} className="rounded border border-[var(--border,#E1D3B9)] px-3 py-1.5">
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}>
+          <ImportSheet
+            projectId={id}
+            onClose={() => setImportOpen(false)}
+            onImport={handleImport}
+            onProgressSnapshot={handleUploadProgress}
+            folderMode={folderMode}
+            customFolder={customFolder}
+            onInfoMessage={showUploadInfo}
+          />
+        </ErrorBoundary>
       )}
     </div>
+  )
+}
+
+type MetadataCopyConfirmModalProps = {
+  projectName: string
+  pending: boolean
+  error: string | null
+  onCancel: () => void
+  onConfirm: () => void
+}
+
+function MetadataCopyConfirmModal({ projectName, pending, error, onCancel, onConfirm }: MetadataCopyConfirmModalProps) {
+  return (
+    <ModalShell title="Replace metadata?" onClose={onCancel} onPrimary={onConfirm} primaryLabel="Replace" primaryDisabled={pending}>
+      <p className="text-sm text-[var(--text,#1F1E1B)]">
+        Replace current metadata with values from project <span className="font-semibold">{projectName}</span>?
+      </p>
+      <p className="mt-2 text-xs text-[var(--text-muted,#6B645B)]">Rating, color label, pick/reject, and edits will be overwritten in this project.</p>
+      {error ? (
+        <p className="mt-3 rounded-md border border-[#F97066] bg-[#FEF3F2] px-3 py-2 text-[12px] text-[#B42318]">{error}</p>
+      ) : null}
+      {pending ? <p className="mt-3 text-[11px] text-[var(--text-muted,#6B645B)]">Replacing metadata…</p> : null}
+    </ModalShell>
   )
 }
 
@@ -1479,7 +1757,214 @@ function formatMetadataValue(input: unknown): string {
   if (typeof input === 'boolean') {
     return input ? 'true' : 'false'
   }
+  if (typeof input === 'number') {
+    const magnitude = Math.abs(input)
+    const decimals = magnitude >= 100 ? 0 : magnitude >= 10 ? 1 : 2
+    return trimNumber(input, decimals)
+  }
+  if (typeof input === 'string') {
+    const trimmed = input.trim()
+    const decimalMatch = trimmed.match(/^-?\d+\.(\d{4,})/)
+    if (decimalMatch) {
+      const fraction = decimalMatch[1]
+      return `${trimmed.split('.')[0]}.${fraction.slice(0, 4)}`
+    }
+    return trimmed
+  }
   return String(input)
+}
+
+function formatDateTimeLabel(source?: string | Date | null): string {
+  if (!source) return '—'
+  const parsed = source instanceof Date ? source : new Date(source)
+  if (Number.isNaN(parsed.getTime())) {
+    return typeof source === 'string' ? source : '—'
+  }
+  return new Intl.DateTimeFormat(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(parsed)
+}
+
+function formatImportDateLabel(source?: string | null): string {
+  return formatDateTimeLabel(source)
+}
+
+function formatCaptureDateLabel(metadata: Record<string, unknown> | null | undefined, fallback?: string | null): string {
+  const cand =
+    pickMetadataValue(metadata, [
+      'exif:datetimeoriginal',
+      'datetimeoriginal',
+      'quicktime:createdate',
+      'xmp:createdate',
+      'iptc:datecreated',
+      'photoshop:datecreated',
+      'composite:datetimecreated',
+    ]) ?? fallback
+  return formatDateTimeLabel(typeof cand === 'string' ? cand : fallback)
+}
+
+function formatStorageOriginLabel(storageUri?: string | null): string {
+  if (!storageUri) return 'Unknown'
+  const lower = storageUri.toLowerCase()
+  if (lower.startsWith('imagehub')) return 'Image Hub'
+  if (lower.startsWith('file://')) return 'Local import'
+  if (lower.startsWith('s3://')) return 'S3 bucket'
+  if (lower.startsWith('gs://')) return 'Cloud storage'
+  const scheme = storageUri.split('://')[0]?.trim()
+  if (scheme) {
+    return scheme.replace(/[_-]/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase())
+  }
+  return storageUri
+}
+
+function formatCameraModel(metadata: Record<string, unknown> | null | undefined): string {
+  const raw = pickMetadataValue(metadata, ['camera_model_name', 'model', 'exif.image.model', 'exif:model'])
+  return formatMetadataText(raw)
+}
+
+function formatLensModel(metadata: Record<string, unknown> | null | undefined): string {
+  const raw = pickMetadataValue(metadata, ['lens_model', 'lens', 'lens_id', 'lens_type'])
+  return formatMetadataText(raw)
+}
+
+function formatApertureValue(metadata: Record<string, unknown> | null | undefined): string {
+  const raw = pickMetadataValue(metadata, ['fnumber', 'aperturevalue', 'aperture'])
+  const numeric = parseNumericFromUnknown(raw)
+  if (numeric && numeric > 0) {
+    return `f/${trimNumber(numeric, numeric >= 10 ? 0 : 1)}`
+  }
+  if (typeof raw === 'string') {
+    const cleaned = raw.toLowerCase().startsWith('f/') ? raw : `f/${raw}`
+    return cleaned
+  }
+  return '—'
+}
+
+function formatShutterValue(metadata: Record<string, unknown> | null | undefined): string {
+  const raw = pickMetadataValue(metadata, ['shutterspeedvalue', 'shutter_speed', 'exposuretime'])
+  if (typeof raw === 'string' && raw.includes('/')) {
+    return `${raw.trim()} s`
+  }
+  const numeric = parseNumericFromUnknown(raw)
+  if (!numeric || numeric <= 0) return '—'
+  if (numeric >= 1) {
+    return `${trimNumber(numeric)} s`
+  }
+  return `${formatFractionFromDecimal(numeric)} s`
+}
+
+function formatIsoValue(metadata: Record<string, unknown> | null | undefined): string {
+  const raw = pickMetadataValue(metadata, ['iso', 'isospeedratings'])
+  const numeric = parseNumericFromUnknown(raw)
+  if (numeric && numeric > 0) {
+    return `ISO ${Math.round(numeric)}`
+  }
+  if (typeof raw === 'string' && raw.trim()) {
+    return `ISO ${raw.trim()}`
+  }
+  return '—'
+}
+
+function formatFocalLengthValue(metadata: Record<string, unknown> | null | undefined): string {
+  const raw = pickMetadataValue(metadata, ['focallengthin35mmfilm', 'focallength'])
+  const numeric = parseNumericFromUnknown(raw)
+  if (numeric && numeric > 0) {
+    return `${Math.round(numeric)} mm`
+  }
+  if (typeof raw === 'string' && raw.trim()) {
+    return raw.trim().endsWith('mm') ? raw.trim() : `${raw.trim()} mm`
+  }
+  return '—'
+}
+
+function formatMetadataText(value: unknown): string {
+  if (value === null || value === undefined) return '—'
+  if (typeof value === 'string') return value
+  if (typeof value === 'number') return trimNumber(value)
+  return formatMetadataValue(value)
+}
+
+function pickMetadataValue(metadata: Record<string, unknown> | null | undefined, candidates: string[]): unknown {
+  if (!metadata) return null
+  const entries = Object.entries(metadata)
+  if (!entries.length) return null
+  const normalized = candidates.map((candidate) => candidate.toLowerCase())
+  for (const target of normalized) {
+    const hit = entries.find(([key]) => key.toLowerCase() === target)
+    if (hit) return hit[1]
+  }
+  for (const target of normalized) {
+    const hit = entries.find(([key]) => key.toLowerCase().includes(target))
+    if (hit) return hit[1]
+  }
+  return null
+}
+
+function parseNumericFromUnknown(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (!trimmed) return null
+    const fraction = trimmed.match(/^(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)/)
+    if (fraction) {
+      const numerator = Number(fraction[1])
+      const denominator = Number(fraction[2])
+      if (Number.isFinite(numerator) && Number.isFinite(denominator) && denominator !== 0) {
+        return numerator / denominator
+      }
+    }
+    const parsed = Number(trimmed)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return null
+}
+
+function trimNumber(value: number, decimals: number = 2): string {
+  const options = Math.max(0, Math.min(decimals, 4))
+  const fixed = value.toFixed(options)
+  return fixed.replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1')
+}
+
+function formatFractionFromDecimal(value: number): string {
+  if (value <= 0) return String(value)
+  const denominator = Math.max(1, Math.round(1 / value))
+  return `1/${denominator}`
+}
+
+const METADATA_LABEL_OVERRIDES: Record<string, string> = {
+  'exif:lensid': 'Lens ID',
+  'composite:aperture': 'Aperture',
+  'composite:shutterspeed': 'Shutter Speed',
+  'makernotes:focusmode': 'Focus Mode',
+  'raf:version': 'Firmware Version',
+  'exif:fnumber': 'Aperture',
+  'exif:iso': 'ISO',
+  'iptc:keywords': 'Keywords',
+  'xmp:createdate': 'XMP Create Date',
+  'photoshop:datecreated': 'Photoshop Date Created',
+}
+
+function normalizeMetadataKey(key: string): string {
+  return key ? key.trim().toLowerCase() : ''
+}
+
+function formatMetadataKeyLabel(key: string): string {
+  const normalized = normalizeMetadataKey(key)
+  if (METADATA_LABEL_OVERRIDES[normalized]) {
+    return METADATA_LABEL_OVERRIDES[normalized]
+  }
+  const stripped = key.includes(':') ? key.split(':').slice(-1)[0] : key
+  const spaced = stripped
+    .replace(/_/g, ' ')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (!spaced) return key
+  return spaced.replace(/\b([a-z])/g, (char) => char.toUpperCase())
 }
 
 type LocalFileDescriptor = {
@@ -1497,24 +1982,15 @@ type LocalQueueProgress = {
   processedBytes: number
 }
 
-type PendingItem = {
-  id: string
-  name: string
-  type: ImgType
-  previewUrl?: string | null
-  source: 'local' | 'hub'
-  selected: boolean
-  size: number
-  file?: File | null
-  meta?: {
-    folder?: string
-    relativePath?: string
-  }
-  ready?: boolean
-}
-
 type ToggleOptions = {
   shiftKey?: boolean
+}
+
+type InheritancePromptState = {
+  assetIds: string[]
+  assetsWithOptions: string[]
+  statuses: Record<string, ImageHubAssetStatus>
+  candidateProjects: { id: string; name: string }[]
 }
 
 function generateLocalDescriptorId(): string {
@@ -1677,167 +2153,6 @@ type UploadProgressSnapshot = {
 
 type UploadBannerState = UploadProgressSnapshot & { status: 'running' | 'success' | 'error' }
 
-type HubNode = {
-  id: string
-  name: string
-  assetCount?: number
-  types?: ImgType[]
-  children?: HubNode[]
-}
-
-const IMAGE_HUB_TREE: HubNode[] = [
-  {
-    id: 'proj-northern-lights',
-    name: 'Northern Lights',
-    children: [
-      {
-        id: 'proj-northern-lights/basecamp-2024',
-        name: '2024 - Basecamp Diaries',
-        assetCount: 64,
-        types: ['RAW', 'JPEG'],
-      },
-      {
-        id: 'proj-northern-lights/night-shift',
-        name: 'Night Shift Selects',
-        assetCount: 28,
-        types: ['RAW'],
-      },
-    ],
-  },
-  {
-    id: 'proj-editorial',
-    name: 'Editorial Campaigns',
-    children: [
-      {
-        id: 'proj-editorial/wild-coast',
-        name: 'Wild Coast',
-        children: [
-          {
-            id: 'proj-editorial/wild-coast/lookbook',
-            name: 'Lookbook Deliverables',
-            assetCount: 35,
-            types: ['JPEG'],
-          },
-          {
-            id: 'proj-editorial/wild-coast/bts',
-            name: 'Behind the Scenes',
-            assetCount: 12,
-            types: ['RAW', 'JPEG'],
-          },
-        ],
-      },
-      {
-        id: 'proj-editorial/urban-shapes',
-        name: 'Urban Shapes',
-        assetCount: 52,
-        types: ['RAW', 'JPEG'],
-      },
-    ],
-  },
-  {
-    id: 'proj-archive',
-    name: 'Archive',
-    children: [
-      {
-        id: 'proj-archive/35mm',
-        name: '35mm Film',
-        assetCount: 120,
-        types: ['JPEG'],
-      },
-      {
-        id: 'proj-archive/medium-format',
-        name: 'Medium Format Scans',
-        assetCount: 76,
-        types: ['RAW', 'JPEG'],
-      },
-    ],
-  },
-]
-
-type HubAggregate = { count: number; types: ImgType[] }
-
-function buildHubData(nodes: HubNode[]) {
-  const nodeMap = new Map<string, HubNode>()
-  const parentMap = new Map<string, string | null>()
-  const aggregateMap = new Map<string, HubAggregate>()
-
-  const visit = (node: HubNode, parent: string | null) => {
-    nodeMap.set(node.id, node)
-    parentMap.set(node.id, parent)
-    let count = node.assetCount ?? 0
-    const typeSet = new Set<ImgType>(node.types ?? [])
-    node.children?.forEach((child) => {
-      visit(child, node.id)
-      const agg = aggregateMap.get(child.id)
-      if (agg) {
-        count += agg.count
-        agg.types.forEach((t) => typeSet.add(t))
-      }
-    })
-    aggregateMap.set(node.id, { count, types: Array.from(typeSet) as ImgType[] })
-  }
-
-  nodes.forEach((node) => visit(node, null))
-
-  return { nodeMap, parentMap, aggregateMap }
-}
-
-const HUB_DATA = buildHubData(IMAGE_HUB_TREE)
-
-type HubAsset = { id: string; name: string; type: ImgType; folderPath: string }
-
-const HUB_LEAF_ASSET_CACHE = new Map<string, HubAsset[]>()
-const HUB_ALL_ASSET_CACHE = new Map<string, HubAsset[]>()
-
-function getHubNodePath(id: string): string[] {
-  const path: string[] = []
-  let current: string | null = id
-  while (current) {
-    const node = HUB_DATA.nodeMap.get(current)
-    if (!node) break
-    path.unshift(node.name)
-    current = HUB_DATA.parentMap.get(current) ?? null
-  }
-  return path
-}
-
-function ensureLeafAssets(node: HubNode): HubAsset[] {
-  if (!node.assetCount) return []
-  if (!HUB_LEAF_ASSET_CACHE.has(node.id)) {
-    const path = getHubNodePath(node.id)
-    const baseName = path[path.length - 1] || node.name
-    const types = node.types && node.types.length ? node.types : (['JPEG'] as ImgType[])
-    const assets: HubAsset[] = []
-    for (let i = 0; i < node.assetCount; i++) {
-      const type = types[i % types.length]
-      const suffix = type === 'RAW' ? 'ARW' : 'JPG'
-      const index = String(i + 1).padStart(4, '0')
-      assets.push({
-        id: `${node.id}::${index}`,
-        name: `${baseName.replace(/\s+/g, '_')}_${index}.${suffix}`,
-        type,
-        folderPath: path.join(' / ') || baseName,
-      })
-    }
-    HUB_LEAF_ASSET_CACHE.set(node.id, assets)
-  }
-  return HUB_LEAF_ASSET_CACHE.get(node.id)!
-}
-
-function getAssetsForNode(node: HubNode): HubAsset[] {
-  if (HUB_ALL_ASSET_CACHE.has(node.id)) return HUB_ALL_ASSET_CACHE.get(node.id)!
-  let assets: HubAsset[] = []
-  if (node.assetCount) {
-    assets = ensureLeafAssets(node)
-  } else {
-    node.children?.forEach((child) => {
-      assets = assets.concat(getAssetsForNode(child))
-    })
-  }
-  HUB_ALL_ASSET_CACHE.set(node.id, assets)
-  return assets
-}
-
 function PendingMiniGrid({ items, onToggle, className }: { items: PendingItem[]; onToggle: (id: string, opts?: ToggleOptions) => void; className?: string }) {
   const extra = className ? ` ${className}` : ''
   if (!items.length) {
@@ -1961,23 +2276,6 @@ function PendingMiniGrid({ items, onToggle, className }: { items: PendingItem[];
   )
 }
 
-function collectDescendantIds(node: HubNode, acc: string[] = []) {
-  node.children?.forEach((child) => {
-    acc.push(child.id)
-    collectDescendantIds(child, acc)
-  })
-  return acc
-}
-
-function hasAncestorSelected(id: string, selection: Set<string>, parentMap: Map<string, string | null>) {
-  let parent = parentMap.get(id) ?? null
-  while (parent) {
-    if (selection.has(parent)) return true
-    parent = parentMap.get(parent) ?? null
-  }
-  return false
-}
-
 export function ImportSheet({
   projectId,
   onClose,
@@ -1985,6 +2283,7 @@ export function ImportSheet({
   onProgressSnapshot,
   folderMode,
   customFolder,
+  onInfoMessage,
 }: {
   projectId?: string
   onClose: () => void
@@ -1992,17 +2291,23 @@ export function ImportSheet({
   onProgressSnapshot?: (snapshot: UploadProgressSnapshot) => void
   folderMode: 'date' | 'custom'
   customFolder: string
+  onInfoMessage?: (message: string) => void
 }) {
   const [mode, setMode] = useState<'choose' | 'local' | 'hub' | 'upload'>('choose')
   const [localItems, setLocalItems] = useState<PendingItem[]>([])
-  const [hubSelected, setHubSelected] = useState<Set<string>>(() => new Set())
-  const [expandedHub, setExpandedHub] = useState<Set<string>>(() => new Set(IMAGE_HUB_TREE.map((node) => node.id)))
+  const [hubSelection, setHubSelection] = useState<PendingItem[]>([])
+  const [hubStatusSnapshot, setHubStatusSnapshot] = useState<Record<string, ImageHubAssetStatus>>({})
+  const hubStatusRef = useRef<Record<string, ImageHubAssetStatus>>({})
+  const [hubProjectDirectory, setHubProjectDirectory] = useState<Record<string, string>>({})
+  const [hubResetSignal, setHubResetSignal] = useState(0)
+  const [hubImporting, setHubImporting] = useState(false)
+  const [hubImportError, setHubImportError] = useState<string | null>(null)
+  const [inheritancePrompt, setInheritancePrompt] = useState<InheritancePromptState | null>(null)
+  const [selectedInheritanceProject, setSelectedInheritanceProject] = useState('')
   const [ignoreDup, setIgnoreDup] = useState(true)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const folderInputRef = useRef<HTMLInputElement | null>(null)
-  const [hubItems, setHubItems] = useState<PendingItem[]>([])
   const lastLocalToggleIdRef = useRef<string | null>(null)
-  const lastHubToggleIdRef = useRef<string | null>(null)
   const localPreviewUrlsRef = useRef<string[]>([])
   const dragDepthRef = useRef(0)
   const [isDragging, setIsDragging] = useState(false)
@@ -2018,6 +2323,30 @@ export function ImportSheet({
     totalBytes: 0,
     processedBytes: 0,
   })
+
+  const { data: hubSettingsData } = useQuery({
+    queryKey: ['image-hub-settings'],
+    queryFn: getImageHubSettings,
+    staleTime: 5 * 60 * 1000,
+  })
+  const metadataInheritance = hubSettingsData?.metadata_inheritance ?? 'ask'
+
+  useEffect(() => {
+    hubStatusRef.current = hubStatusSnapshot
+  }, [hubStatusSnapshot])
+
+  useEffect(() => {
+    setHubImportError(null)
+  }, [hubSelection])
+
+  const handleStatusSnapshot = useCallback((snapshot: Record<string, ImageHubAssetStatus>) => {
+    setHubStatusSnapshot(snapshot)
+  }, [])
+
+  const handleProjectDirectoryChange = useCallback((directory: Record<string, string>) => {
+    setHubProjectDirectory(directory)
+  }, [])
+
 
   const derivedDest = folderMode === 'date' ? 'YYYY/MM/DD' : customFolder.trim() || 'Custom'
   const [uploadDestination, setUploadDestination] = useState(derivedDest)
@@ -2059,34 +2388,6 @@ export function ImportSheet({
     localPreviewUrlsRef.current = []
   }, [])
 
-  useEffect(() => {
-    setHubItems((prev) => {
-      const prevSelectionMap = new Map(prev.map((item) => [item.id, item.selected]))
-      const rootIds = Array.from(hubSelected).filter((id) => !hasAncestorSelected(id, hubSelected, HUB_DATA.parentMap))
-      const items: PendingItem[] = []
-      rootIds.forEach((id) => {
-        const node = HUB_DATA.nodeMap.get(id)
-        if (!node) return
-        const assets = getAssetsForNode(node)
-        assets.forEach((asset) => {
-          const itemId = `hub-${asset.id}`
-          const size = asset.type === 'RAW' ? 48 * 1024 * 1024 : 12 * 1024 * 1024
-          items.push({
-            id: itemId,
-            name: asset.name,
-            type: asset.type,
-            previewUrl: null,
-            source: 'hub',
-            selected: prevSelectionMap.get(itemId) ?? true,
-            size,
-            meta: { folder: asset.folderPath },
-          })
-        })
-      })
-      return items
-    })
-  }, [hubSelected])
-
   const isUploadMode = mode === 'upload'
   const isHubMode = mode === 'hub'
   const isLocalMode = mode === 'local'
@@ -2094,7 +2395,6 @@ export function ImportSheet({
   const effectiveDest = isUploadMode ? uploadDestination : derivedDest
 
   const localSelectedItems = useMemo(() => localItems.filter((item) => item.selected), [localItems])
-  const hubSelectedItems = useMemo(() => hubItems.filter((item) => item.selected), [hubItems])
   const selectedItems = useMemo<PendingItem[]>(() => {
     if (isUploadMode) {
       return uploadTasks.map((task) => ({
@@ -2109,8 +2409,8 @@ export function ImportSheet({
         meta: task.meta,
       }))
     }
-    return isHubMode ? hubSelectedItems : localSelectedItems
-  }, [isUploadMode, uploadTasks, isHubMode, hubSelectedItems, localSelectedItems])
+    return isHubMode ? hubSelection : localSelectedItems
+  }, [isUploadMode, uploadTasks, isHubMode, hubSelection, localSelectedItems])
   const selectedTypes = useMemo(() => Array.from(new Set(selectedItems.map((item) => item.type))) as ImgType[], [selectedItems])
   const totalSelectedBytes = useMemo(() => selectedItems.reduce((acc, item) => acc + (item.size || 0), 0), [selectedItems])
   const selectedFolders = useMemo(() => {
@@ -2118,6 +2418,128 @@ export function ImportSheet({
     selectedItems.forEach((item) => folders.add(item.meta?.folder ?? 'Selection'))
     return folders
   }, [selectedItems])
+
+  const formatProjectName = useCallback((projectId: string) => (
+    hubProjectDirectory[projectId]
+    || `Project ${projectId.slice(0, 8).toUpperCase()}`
+  ), [hubProjectDirectory])
+
+  const ensureHubStatusEntries = useCallback(async (assetIds: string[]) => {
+    if (!projectId) {
+      throw new Error('Missing project context.')
+    }
+    let snapshot = hubStatusRef.current
+    const missing = assetIds.filter((assetId) => !snapshot[assetId])
+    if (missing.length) {
+      const fetched = await Promise.all(
+        missing.map(async (assetId) => {
+          const status = await fetchImageHubAssetStatus(assetId, projectId)
+          return [assetId, status] as const
+        }),
+      )
+      snapshot = { ...snapshot }
+      fetched.forEach(([assetId, status]) => {
+        snapshot[assetId] = status
+      })
+      hubStatusRef.current = snapshot
+      setHubStatusSnapshot(snapshot)
+    }
+    return snapshot
+  }, [projectId])
+
+  const buildAutomaticInheritance = useCallback((assetsWithOptions: string[], statuses: Record<string, ImageHubAssetStatus>) => {
+    const inheritance: Record<string, string> = {}
+    assetsWithOptions.forEach((assetId) => {
+      const source = statuses[assetId]?.other_projects?.[0]
+      if (source) {
+        inheritance[assetId] = source
+      }
+    })
+    return inheritance
+  }, [])
+
+  const finalizeHubLink = useCallback(async (assetIds: string[], inheritance: Record<string, string | null> = {}) => {
+    if (!projectId) {
+      throw new Error('Missing project context.')
+    }
+    await linkAssetsToProject(projectId, { assetIds, inheritance })
+    setHubSelection([])
+    setHubResetSignal((token) => token + 1)
+    const fallbackTypes = selectedTypes.length ? selectedTypes : (['JPEG'] as ImgType[])
+    onImport({ count: assetIds.length, types: fallbackTypes, dest: effectiveDest })
+  }, [projectId, onImport, selectedTypes, effectiveDest])
+
+  const handleHubImport = useCallback(async () => {
+    if (hubImporting) return
+    if (!projectId) {
+      setHubImportError('Missing project context. Close this dialog and reopen the project.')
+      return
+    }
+    if (!hubSelection.length) return
+    setHubImportError(null)
+    setHubImporting(true)
+    try {
+      const assetIds = Array.from(new Set(hubSelection.map((item) => item.id)))
+      const statuses = await ensureHubStatusEntries(assetIds)
+      const assetsWithOptions = assetIds.filter((assetId) => (statuses[assetId]?.other_projects?.length))
+      if (metadataInheritance === 'ask' && assetsWithOptions.length) {
+        const candidateIds = Array.from(new Set(assetsWithOptions.flatMap((assetId) => statuses[assetId]?.other_projects ?? [])))
+        if (candidateIds.length) {
+          const candidateProjects = candidateIds.map((id) => ({ id, name: formatProjectName(id) }))
+          setInheritancePrompt({ assetIds, assetsWithOptions, statuses, candidateProjects })
+          setSelectedInheritanceProject(candidateProjects[0]?.id ?? '')
+          setHubImporting(false)
+          return
+        }
+      }
+      let inheritance: Record<string, string | null> = {}
+      if (metadataInheritance === 'always' && assetsWithOptions.length) {
+        inheritance = buildAutomaticInheritance(assetsWithOptions, statuses)
+      }
+      await finalizeHubLink(assetIds, inheritance)
+    } catch (err) {
+      setHubImportError(err instanceof Error ? err.message : 'Failed to import from Image Hub')
+    } finally {
+      setHubImporting(false)
+    }
+  }, [hubImporting, projectId, hubSelection, ensureHubStatusEntries, metadataInheritance, formatProjectName, buildAutomaticInheritance, finalizeHubLink])
+
+  const handleInheritanceConfirm = useCallback(async () => {
+    if (!inheritancePrompt || !selectedInheritanceProject) return
+    setInheritancePrompt(null)
+    setHubImportError(null)
+    setHubImporting(true)
+    try {
+      const inheritance: Record<string, string> = {}
+      inheritancePrompt.assetsWithOptions.forEach((assetId) => {
+        const options = inheritancePrompt.statuses[assetId]?.other_projects ?? []
+        if (options.includes(selectedInheritanceProject)) {
+          inheritance[assetId] = selectedInheritanceProject
+        }
+      })
+      await finalizeHubLink(inheritancePrompt.assetIds, inheritance)
+    } catch (err) {
+      setHubImportError(err instanceof Error ? err.message : 'Failed to import from Image Hub')
+    } finally {
+      setSelectedInheritanceProject('')
+      setHubImporting(false)
+    }
+  }, [inheritancePrompt, selectedInheritanceProject, finalizeHubLink])
+
+  const handleInheritanceSkip = useCallback(async () => {
+    if (!inheritancePrompt) return
+    setInheritancePrompt(null)
+    setSelectedInheritanceProject('')
+    setHubImportError(null)
+    setHubImporting(true)
+    try {
+      await finalizeHubLink(inheritancePrompt.assetIds, {})
+    } catch (err) {
+      setHubImportError(err instanceof Error ? err.message : 'Failed to import from Image Hub')
+    } finally {
+      setHubImporting(false)
+    }
+  }, [inheritancePrompt, finalizeHubLink])
 
   const uploadUploadedBytes = useMemo(() => uploadTasks.reduce((acc, task) => acc + task.bytesUploaded, 0), [uploadTasks])
   const uploadTotalBytes = useMemo(() => uploadTasks.reduce((acc, task) => acc + task.size, 0), [uploadTasks])
@@ -2176,14 +2598,12 @@ export function ImportSheet({
   const localSelectedFolderCount = useMemo(() => (
     localSelectedItems.length ? new Set(localSelectedItems.map((item) => item.meta?.folder ?? 'Selection')).size : 0
   ), [localSelectedItems])
-  const hubSelectedFolderCount = useMemo(() => (
-    hubSelectedItems.length ? new Set(hubSelectedItems.map((item) => item.meta?.folder ?? 'Selection')).size : 0
-  ), [hubSelectedItems])
   const hubSelectionList = useMemo(() => {
-    if (!hubSelected.size) return []
-    const ids = Array.from(hubSelected).filter((id) => !hasAncestorSelected(id, hubSelected, HUB_DATA.parentMap))
-    return ids.map((id) => HUB_DATA.nodeMap.get(id)?.name).filter(Boolean) as string[]
-  }, [hubSelected])
+    if (!hubSelection.length) return []
+    const folders = new Set<string>()
+    hubSelection.forEach((item) => folders.add(item.meta?.folder ?? 'Selection'))
+    return Array.from(folders)
+  }, [hubSelection])
 
   const localQueuePercent = useMemo(() => {
     if (localQueueProgress.totalBytes > 0) {
@@ -2222,6 +2642,8 @@ export function ImportSheet({
   const canSubmit = !isUploadMode
     && selectedItems.length > 0
     && !(isLocalMode && localQueueProgress.active)
+    && !(isHubMode && (hubImporting || Boolean(inheritancePrompt)))
+  const primaryButtonLabel = isHubMode ? (hubImporting ? 'Importing…' : 'Import selected') : 'Start upload'
 
   const isPreparingLocalSelection = mode !== 'upload'
     && !hasLocalItems
@@ -2524,99 +2946,6 @@ function openLocalPicker(kind: 'files' | 'folder' = 'files') {
     })
   }
 
-  function toggleHubItem(id: string, opts: ToggleOptions = {}) {
-    const anchorId = opts.shiftKey ? lastHubToggleIdRef.current : null
-    setHubItems((prev) => {
-      const targetIndex = prev.findIndex((item) => item.id === id)
-      if (targetIndex === -1) return prev
-      const nextSelected = !prev[targetIndex].selected
-      if (opts.shiftKey && anchorId) {
-        const anchorIndex = prev.findIndex((item) => item.id === anchorId)
-        if (anchorIndex !== -1 && anchorIndex !== targetIndex) {
-          const start = Math.min(anchorIndex, targetIndex)
-          const end = Math.max(anchorIndex, targetIndex)
-          let changed = false
-          const next = prev.map((item, index) => {
-            if (index >= start && index <= end) {
-              if (item.selected === nextSelected) return item
-              changed = true
-              return { ...item, selected: nextSelected }
-            }
-            return item
-          })
-          lastHubToggleIdRef.current = id
-          return changed ? next : prev
-        }
-      }
-      lastHubToggleIdRef.current = id
-      return prev.map((item, index) => (index === targetIndex ? { ...item, selected: nextSelected } : item))
-    })
-  }
-
-  function toggleExpand(id: string) {
-    setExpandedHub((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
-
-  function toggleHubNode(id: string) {
-    const node = HUB_DATA.nodeMap.get(id)
-    if (!node) return
-    setHubSelected((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) {
-        next.delete(id)
-      } else {
-        next.add(id)
-        collectDescendantIds(node).forEach((childId) => next.delete(childId))
-        let parent = HUB_DATA.parentMap.get(id) ?? null
-        while (parent) {
-          next.delete(parent)
-          parent = HUB_DATA.parentMap.get(parent) ?? null
-        }
-      }
-      return next
-    })
-  }
-
-  function renderHubNodes(nodes: HubNode[], depth = 0): React.ReactNode {
-    return nodes.map((node) => {
-      const hasChildren = !!node.children?.length
-      const expanded = expandedHub.has(node.id)
-      const selected = hubSelected.has(node.id)
-      const aggregate = HUB_DATA.aggregateMap.get(node.id) ?? { count: node.assetCount ?? 0, types: node.types ?? [] }
-      const typeLabel = aggregate.types.length ? aggregate.types.join(' / ') : 'JPEG'
-      return (
-        <li key={node.id}>
-          <div className="flex items-start gap-2 py-1" style={{ paddingLeft: depth * 16 }}>
-            {hasChildren ? (
-              <button type="button" onClick={() => toggleExpand(node.id)} className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded border border-[var(--border,#E1D3B9)] bg-[var(--sand-50,#FBF7EF)] text-xs font-medium">
-                {expanded ? '-' : '+'}
-              </button>
-            ) : (
-              <span className="inline-flex h-6 w-6 items-center justify-center text-xs text-[var(--text-muted,#6B645B)]">-</span>
-            )}
-            <label className="flex flex-1 cursor-pointer items-start gap-2">
-              <input type="checkbox" checked={selected} onChange={() => toggleHubNode(node.id)} className="mt-1 accent-[var(--text,#1F1E1B)]" />
-              <span className="flex-1">
-                <div className="text-sm font-medium text-[var(--text,#1F1E1B)]">{node.name}</div>
-                <div className="text-xs text-[var(--text-muted,#6B645B)]">{aggregate.count} assets / {typeLabel}</div>
-              </span>
-            </label>
-          </div>
-          {hasChildren && expanded && (
-            <ul className="ml-8">
-              {renderHubNodes(node.children!, depth + 1)}
-            </ul>
-          )}
-        </li>
-      )
-    })
-  }
-
   const mutateTask = useCallback((taskId: string, updater: (task: UploadTaskState) => UploadTaskState) => {
     setUploadTasks((tasks) => tasks.map((task) => (task.id === taskId ? updater(task) : task)))
   }, [])
@@ -2688,6 +3017,10 @@ function openLocalPicker(kind: 'files' | 'folder' = 'files') {
   function submit() {
     if (!canSubmit) {
       if (mode === 'local') openLocalPicker('files')
+      return
+    }
+    if (isHubMode) {
+      void handleHubImport()
       return
     }
     if (!selectedItems.length) return
@@ -2793,7 +3126,11 @@ function openLocalPicker(kind: 'files' | 'folder' = 'files') {
           progress: 1,
         }))
 
-        await completeUpload(init.assetId, init.uploadToken, { ignoreDuplicates: ignoreDup })
+        const completion = await completeUpload(init.assetId, init.uploadToken, { ignoreDuplicates: ignoreDup })
+
+        if (completion.status === 'DUPLICATE') {
+          onInfoMessage?.(`${task.name} was already in Image Hub, so we added the existing asset instead of uploading it again.`)
+        }
 
         mutateTask(taskId, (prev) => ({
           ...prev,
@@ -2922,7 +3259,7 @@ function openLocalPicker(kind: 'files' | 'folder' = 'files') {
     return () => {
       canceled = true
     }
-  }, [ignoreDup, isUploadMode, markBlockedAfter, mutateTask, onImport, projectId, uploadDestination, uploadRunning])
+  }, [ignoreDup, isUploadMode, markBlockedAfter, mutateTask, onImport, projectId, uploadDestination, uploadRunning, onInfoMessage])
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 p-4">
@@ -3108,30 +3445,13 @@ function openLocalPicker(kind: 'files' | 'folder' = 'files') {
 
           {isHubMode && (
             <div className="flex h-full min-h-0 gap-5 overflow-hidden">
-              <div className="flex w-64 flex-shrink-0 flex-col overflow-hidden rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]">
-                <div className="px-4 py-3 text-sm font-semibold">ImageHub projects</div>
-                <div className="flex-1 overflow-y-auto px-3 pb-4">
-                  <ul className="space-y-1">
-                    {renderHubNodes(IMAGE_HUB_TREE)}
-                  </ul>
-                </div>
-              </div>
-              <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
-                <div className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="text-sm font-semibold">Ready to import</div>
-                    <div className="text-xs text-[var(--text-muted,#6B645B)]">{hubSelectedItems.length} selected / {hubItems.length} total</div>
-                  </div>
-                  <div className="mt-1 text-xs text-[var(--text-muted,#6B645B)]">
-                    {hubSelectedItems.length
-                      ? `${hubSelectedItems.length} asset${hubSelectedItems.length === 1 ? '' : 's'} across ${Math.max(1, hubSelectedFolderCount)} folder${Math.max(1, hubSelectedFolderCount) === 1 ? '' : 's'} • ${formatBytes(totalSelectedBytes)} pending`
-                      : 'No assets selected yet. Check thumbnails to include them.'}
-                  </div>
-                  <div className="mt-3 flex-1 min-h-0">
-                    <PendingMiniGrid items={hubItems} onToggle={toggleHubItem} className="h-full" />
-                  </div>
-                </div>
-              </div>
+              <ImageHubImportPane
+                currentProjectId={projectId ?? null}
+                onSelectionChange={setHubSelection}
+                onStatusSnapshot={handleStatusSnapshot}
+                onProjectDirectoryChange={handleProjectDirectoryChange}
+                resetSignal={hubResetSignal}
+              />
               {renderSummaryCard('w-56 flex-shrink-0', true, effectiveDest)}
             </div>
           )}
@@ -3216,13 +3536,54 @@ function openLocalPicker(kind: 'files' | 'folder' = 'files') {
               disabled={!canSubmit}
               className={`px-3 py-1.5 rounded text-[var(--primary-contrast,#FFFFFF)] ${canSubmit ? 'bg-[var(--primary,#A56A4A)]' : 'bg-[var(--sand-300,#E1D3B9)] cursor-not-allowed'}`}
             >
-              Start upload
+              {primaryButtonLabel}
             </button>
           )}
         </div>
+        {isHubMode && hubImportError && (
+          <div className="px-5 pb-4 text-xs text-[#B42318]" role="alert">{hubImportError}</div>
+        )}
       </div>
       <input ref={fileInputRef} type="file" multiple onChange={handleLocalFilesChange} className="hidden" accept="image/*" />
       <input ref={folderInputRef} type="file" multiple onChange={handleLocalFilesChange} className="hidden" accept="image/*" />
+      {inheritancePrompt && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 px-4 py-8">
+          <div className="w-full max-w-md rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-6 shadow-2xl" role="dialog" aria-modal="true">
+            <div className="text-base font-semibold text-[var(--text,#1F1E1B)]">Load settings from another project?</div>
+            <p className="mt-2 text-sm text-[var(--text-muted,#6B645B)]">
+              {inheritancePrompt.assetsWithOptions.length === 1
+                ? 'This asset already exists in another project. Choose where to inherit ratings, labels, and picks from.'
+                : `These ${inheritancePrompt.assetsWithOptions.length} assets already exist in other projects. Choose where to inherit ratings, labels, and picks from.`}
+            </p>
+            <label className="mt-4 flex flex-col gap-2 text-sm">
+              <span className="font-medium text-[var(--text,#1F1E1B)]">Project</span>
+              <select
+                value={selectedInheritanceProject}
+                onChange={(event) => setSelectedInheritanceProject(event.target.value)}
+                className="rounded border border-[var(--border,#E1D3B9)] px-3 py-2 text-sm"
+              >
+                {inheritancePrompt.candidateProjects.map((proj) => (
+                  <option key={proj.id} value={proj.id}>{proj.name}</option>
+                ))}
+              </select>
+            </label>
+            <div className="mt-2 text-[11px] text-[var(--text-muted,#6B645B)]">
+              Assets that are not part of the selected project will import without inheriting metadata.
+            </div>
+            <div className="mt-6 flex flex-wrap justify-end gap-2 text-sm">
+              <button type="button" onClick={handleInheritanceSkip} className="rounded border border-[var(--border,#E1D3B9)] px-3 py-1.5">Don’t inherit</button>
+              <button
+                type="button"
+                onClick={handleInheritanceConfirm}
+                disabled={!selectedInheritanceProject}
+                className={`rounded px-3 py-1.5 text-[var(--primary-contrast,#FFFFFF)] ${selectedInheritanceProject ? 'bg-[var(--primary,#A56A4A)]' : 'bg-[var(--sand-300,#E1D3B9)] cursor-not-allowed'}`}
+              >
+                Choose project to inherit from
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

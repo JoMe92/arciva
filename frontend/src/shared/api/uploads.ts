@@ -23,6 +23,7 @@ export type CompleteUploadOptions = {
 
 export type CompleteUploadResponse = {
   status: string
+  assetId?: string
 }
 
 async function parseJsonSafe<T>(res: Response): Promise<T | null> {
@@ -137,6 +138,6 @@ export async function completeUpload(
     throw new Error(extractErrorMessage(res.status, body, 'Failed to finalize upload'))
   }
 
-  const data = (await res.json()) as { status: string }
-  return { status: data.status }
+  const data = (await res.json()) as { status: string; asset_id?: string }
+  return { status: data.status, assetId: data.asset_id }
 }

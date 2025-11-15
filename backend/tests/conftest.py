@@ -10,6 +10,9 @@ _REPO_ROOT = str(_P(__file__).resolve().parents[2])
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
+_DEFAULT_DB_PATH = Path(tempfile.gettempdir()) / "film_cabinet_test.db"
+os.environ.setdefault("DATABASE_URL", f"sqlite+aiosqlite:///{_DEFAULT_DB_PATH}")
+
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport

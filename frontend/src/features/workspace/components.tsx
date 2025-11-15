@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { RawPlaceholder, RawPlaceholderFrame } from '../../components/RawPlaceholder'
 import StoneTrailLogo from '../../components/StoneTrailLogo'
 import { useTheme } from '../../shared/theme'
@@ -49,6 +50,57 @@ export type GridSelectOptions = {
   ctrlKey?: boolean
 }
 
+type UsedProjectLink = {
+  id: string
+  name: string
+  coverThumb: string | null
+  lastModified: string | null
+  isCurrent: boolean
+}
+
+type InspectorField = {
+  label: string
+  value: string
+}
+
+type KeyMetadataSections = {
+  general: InspectorField[]
+  capture: InspectorField[]
+}
+
+type MetadataSummary = {
+  rating: number
+  colorLabel: ColorTag
+  pickRejectLabel: string
+  picked: boolean
+  rejected: boolean
+  hasEdits: boolean
+}
+
+type MetadataEntry = {
+  key: string
+  normalizedKey: string
+  label: string
+  value: unknown
+}
+
+type MetadataCategory = 'camera' | 'lens' | 'exposure' | 'gps' | 'software' | 'custom'
+
+type MetadataGroup = {
+  id: MetadataCategory
+  label: string
+  entries: MetadataEntry[]
+}
+
+type ProjectOverviewData = {
+  title: string
+  description: string
+  client: string
+  tags: string[]
+  assetCount: number
+  createdAt: string | null
+}
+
 function setsAreEqual<T>(a: Set<T>, b: Set<T>): boolean {
   if (a.size !== b.size) return false
   for (const value of a) {
@@ -85,6 +137,8 @@ export type WorkspaceFilterControls = {
 }
 
 const SHORTCUTS_LEGEND_ID = 'shortcuts-legend'
+const FILTERS_DIALOG_ID = 'workspace-filters-dialog'
+const PROJECT_DATE_FORMAT = typeof Intl !== 'undefined' ? new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }) : null
 
 export function TopBar({
   projectName,
@@ -100,13 +154,9 @@ export function TopBar({
   filters,
   filterCount,
   onResetFilters,
-  visibleCount,
   stackPairsEnabled,
   onToggleStackPairs,
   stackTogglePending,
-  selectedDayLabel,
-  loadingAssets,
-  loadError,
 }: {
   projectName: string
   onBack: () => void
@@ -121,24 +171,66 @@ export function TopBar({
   filters: WorkspaceFilterControls
   filterCount: number
   onResetFilters: () => void
-  visibleCount: number
   stackPairsEnabled: boolean
   onToggleStackPairs: (next: boolean) => void
   stackTogglePending?: boolean
-  selectedDayLabel: string | null
-  loadingAssets: boolean
-  loadError: string | null
 }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(projectName)
   const [filtersOpen, setFiltersOpen] = useState(false)
   const inputRef = useRef<HTMLInputElement | null>(null)
-  const filtersRef = useRef<HTMLDivElement | null>(null)
   const filtersButtonRef = useRef<HTMLButtonElement | null>(null)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const shortcutsButtonRef = useRef<HTMLButtonElement | null>(null)
-  const shortcutsLegendRef = useRef<HTMLDivElement | null>(null)
+  const [filtersAnchorRect, setFiltersAnchorRect] = useState<DOMRect | null>(null)
+  const [shortcutsAnchorRect, setShortcutsAnchorRect] = useState<DOMRect | null>(null)
   const { mode, toggle } = useTheme()
+
+  const syncFiltersAnchor = useCallback(() => {
+    if (!filtersButtonRef.current) return
+    setFiltersAnchorRect(filtersButtonRef.current.getBoundingClientRect())
+  }, [])
+
+  const syncShortcutsAnchor = useCallback(() => {
+    if (!shortcutsButtonRef.current) return
+    setShortcutsAnchorRect(shortcutsButtonRef.current.getBoundingClientRect())
+  }, [])
+
+  const closeFilters = useCallback(() => {
+    setFiltersOpen(false)
+    setFiltersAnchorRect(null)
+    filtersButtonRef.current?.focus()
+  }, [])
+
+  const closeShortcuts = useCallback(() => {
+    setShortcutsOpen(false)
+    setShortcutsAnchorRect(null)
+    shortcutsButtonRef.current?.focus()
+  }, [])
+
+  useLayoutEffect(() => {
+    if (!filtersOpen) return
+    const handle = () => syncFiltersAnchor()
+    handle()
+    window.addEventListener('resize', handle)
+    window.addEventListener('scroll', handle, true)
+    return () => {
+      window.removeEventListener('resize', handle)
+      window.removeEventListener('scroll', handle, true)
+    }
+  }, [filtersOpen, syncFiltersAnchor])
+
+  useLayoutEffect(() => {
+    if (!shortcutsOpen) return
+    const handle = () => syncShortcutsAnchor()
+    handle()
+    window.addEventListener('resize', handle)
+    window.addEventListener('scroll', handle, true)
+    return () => {
+      window.removeEventListener('resize', handle)
+      window.removeEventListener('scroll', handle, true)
+    }
+  }, [shortcutsOpen, syncShortcutsAnchor])
 
   useEffect(() => {
     if (!editing) {
@@ -154,47 +246,6 @@ export function TopBar({
     }
   }, [editing])
 
-  useEffect(() => {
-    if (!filtersOpen) return
-    const handleClick = (event: MouseEvent) => {
-      const target = event.target as Node
-      if (filtersRef.current?.contains(target)) return
-      if (filtersButtonRef.current?.contains(target)) return
-      setFiltersOpen(false)
-    }
-    const handleKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setFiltersOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClick)
-    document.addEventListener('keydown', handleKey)
-    return () => {
-      document.removeEventListener('mousedown', handleClick)
-      document.removeEventListener('keydown', handleKey)
-    }
-  }, [filtersOpen])
-
-  useEffect(() => {
-    if (!shortcutsOpen) return
-    const handleClick = (event: MouseEvent) => {
-      const target = event.target as Node
-      if (shortcutsLegendRef.current?.contains(target)) return
-      if (shortcutsButtonRef.current?.contains(target)) return
-      setShortcutsOpen(false)
-    }
-    const handleKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setShortcutsOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClick)
-    document.addEventListener('keydown', handleKey)
-    return () => {
-      document.removeEventListener('mousedown', handleClick)
-      document.removeEventListener('keydown', handleKey)
-    }
-  }, [shortcutsOpen])
 
   const startEditing = useCallback(() => {
     setDraft(projectName)
@@ -246,19 +297,16 @@ export function TopBar({
   }, [filterCount])
 
   const viewButtonClasses = (mode: 'grid' | 'detail') =>
-    `inline-flex h-9 items-center px-4 text-[12px] font-medium transition-colors ${
+    `inline-flex h-9 w-[88px] items-center justify-center text-[12px] font-medium transition-colors ${
       view === mode ? 'bg-[var(--sand-100,#F3EBDD)] text-[var(--text,#1F1E1B)]' : 'text-[var(--text-muted,#6B645B)]'
     }`
 
-  const photoCountText = `${visibleCount} photos${selectedDayLabel ? ` • ${selectedDayLabel}` : ''}`
+  const sizeControlWidth = 200
 
   return (
     <header className="sticky top-0 z-40 border-b border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]/95 backdrop-blur">
-      <div
-        className="mx-auto grid h-16 max-w-7xl items-center gap-[var(--s-3)] px-4 sm:px-6 lg:px-8"
-        style={{ gridTemplateColumns: 'auto 1fr auto' }}
-      >
-        <div className="flex min-w-0 items-center gap-3">
+      <div className="grid h-16 w-full items-center gap-4" style={{ gridTemplateColumns: 'minmax(0,1fr) auto minmax(0,1fr)' }}>
+        <div className="flex min-w-0 items-center gap-3 pl-2 sm:pl-4">
           <StoneTrailLogo className="hidden lg:inline-flex shrink-0" showLabel={false} mode={mode} onToggleTheme={toggle} />
           <button
             type="button"
@@ -268,209 +316,266 @@ export function TopBar({
           >
             ← Projects
           </button>
-          <nav className="hidden items-center text-sm text-[var(--text-muted,#6B645B)] md:flex">
-            <button type="button" onClick={onBack} className="font-medium text-[var(--text,#1F1E1B)] hover:underline focus:outline-none">
-              Projects
-            </button>
-            <span className="mx-2">›</span>
-            <span className="max-w-[180px] truncate font-medium text-[var(--text,#1F1E1B)]" title={projectName}>
-              {projectName}
-            </span>
-          </nav>
-        </div>
-
-        <div className="flex flex-1 flex-col items-center text-center">
-          {editing ? (
-            <div className="flex items-center gap-2">
-              <input
-                ref={inputRef}
-                value={draft}
-                onChange={(event) => setDraft(event.target.value)}
-                onKeyDown={handleTitleKey}
-                onBlur={handleBlur}
-                disabled={renamePending}
-                className="h-11 min-w-[200px] rounded-xl border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 text-center text-xl font-semibold text-[var(--text,#1F1E1B)] shadow-inner focus:outline-none focus:ring-2 focus:ring-[var(--stone-trail-brand-focus,#4A463F)]"
-              />
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <nav className="flex min-w-0 items-center gap-3 text-sm text-[var(--text-muted,#6B645B)]" aria-label="Breadcrumb">
               <button
                 type="button"
-                onClick={() => void commitRename()}
-                className="h-9 w-9 rounded-full border border-[var(--border,#E1D3B9)] text-sm"
-                disabled={renamePending}
-                aria-label="Save project name"
+                onClick={onBack}
+                className="font-medium text-[var(--text-muted,#6B645B)] transition-colors hover:text-[var(--text,#1F1E1B)]"
               >
-                ✓
+                Projects
               </button>
-              <button
-                type="button"
-                onClick={cancelEditing}
-                className="h-9 w-9 rounded-full border border-[var(--border,#E1D3B9)] text-sm"
-                disabled={renamePending}
-                aria-label="Cancel renaming"
-              >
-                ✕
-              </button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-3">
-              <h1
-                className="text-2xl font-bold leading-tight tracking-tight text-[var(--text,#1F1E1B)]"
-                onDoubleClick={startEditing}
-                title="Double-click to rename"
-              >
-                {projectName}
-              </h1>
+              <span aria-hidden="true" className="text-base leading-none text-[var(--text-muted,#6B645B)]">
+                ›
+              </span>
+              {editing ? (
+                <div className="flex items-center gap-2">
+                  <div className="relative">
+                    <input
+                      ref={inputRef}
+                      value={draft}
+                      onChange={(event) => setDraft(event.target.value)}
+                      onKeyDown={handleTitleKey}
+                      onBlur={handleBlur}
+                      disabled={renamePending}
+                      aria-label="Project name"
+                      className="h-9 min-w-[200px] max-w-[260px] rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-4 text-sm font-semibold text-[var(--text,#1F1E1B)] shadow-inner focus:outline-none focus:ring-2 focus:ring-[var(--stone-trail-brand-focus,#4A463F)]"
+                    />
+                    {renameError ? (
+                      <span className="absolute -bottom-5 left-0 text-xs text-[#B42318]">{renameError}</span>
+                    ) : null}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void commitRename()}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border,#E1D3B9)] text-xs"
+                    disabled={renamePending}
+                    aria-label="Save project name"
+                  >
+                    ✓
+                  </button>
+                  <button
+                    type="button"
+                    onClick={cancelEditing}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border,#E1D3B9)] text-xs"
+                    disabled={renamePending}
+                    aria-label="Cancel renaming"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onDoubleClick={startEditing}
+                  className="truncate text-left text-sm font-semibold text-[var(--text,#1F1E1B)]"
+                  title="Rename project"
+                >
+                  {projectName}
+                </button>
+              )}
+            </nav>
+            {!editing ? (
               <button
                 type="button"
                 onClick={startEditing}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border,#E1D3B9)] text-sm text-[var(--text-muted,#6B645B)] hover:text-[var(--text,#1F1E1B)]"
+                className="inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border border-[var(--border,#E1D3B9)] text-xs text-[var(--text-muted,#6B645B)] hover:text-[var(--text,#1F1E1B)]"
                 aria-label="Rename project"
               >
                 ✎
               </button>
-            </div>
-          )}
-          {renameError ? (
-            <p className="mt-1 text-xs text-[#B42318]">{renameError}</p>
-          ) : null}
-        </div>
-
-        <div className="flex flex-wrap items-center justify-end gap-[var(--s-3)] text-[12px]">
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="inline-flex items-center rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]">
-              <button type="button" className={`${viewButtonClasses('grid')} rounded-l-full`} onClick={() => onChangeView('grid')}>
-                Grid
-              </button>
-              <button type="button" className={`${viewButtonClasses('detail')} rounded-r-full`} onClick={() => onChangeView('detail')}>
-                Detail
-              </button>
-            </div>
-            {view === 'grid' ? (
-              <label className="hidden items-center gap-2 whitespace-nowrap text-[11px] text-[var(--text-muted,#6B645B)] lg:flex">
-                Size
-                <input
-                  type="range"
-                  min={minGridSize}
-                  max={240}
-                  value={gridSize}
-                  onChange={(event) => onGridSizeChange(Number(event.target.value))}
-                  aria-label="Thumbnail size"
-                />
-              </label>
             ) : null}
-            <button
-              type="button"
-              className={`inline-flex h-9 items-center gap-2 rounded-full border px-4 text-[11px] font-medium ${
-                stackPairsEnabled ? 'border-[var(--text,#1F1E1B)] text-[var(--text,#1F1E1B)]' : 'border-[var(--border,#E1D3B9)] text-[var(--text-muted,#6B645B)]'
-              }`}
-              aria-pressed={stackPairsEnabled}
-              onClick={() => onToggleStackPairs(!stackPairsEnabled)}
-              disabled={stackTogglePending}
-            >
-              <span>Stack JPEG+RAW Pairs</span>
-              <span
-                className={`inline-flex h-5 w-9 items-center rounded-full border px-1 ${
-                  stackPairsEnabled ? 'border-[var(--text,#1F1E1B)] bg-[var(--text,#1F1E1B)]' : 'border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]'
-                }`}
-                aria-hidden="true"
-              >
-                <span
-                  className={`h-3 w-3 rounded-full bg-[var(--surface,#FFFFFF)] transition-transform duration-150 ${
-                    stackPairsEnabled ? 'translate-x-4' : ''
-                  }`}
-                />
-              </span>
+          </div>
+        </div>
+        <div className="flex min-w-0 items-center justify-center gap-3 px-4 sm:px-6 lg:px-8">
+          <div className="inline-flex items-center overflow-hidden rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]">
+            <button type="button" className={`${viewButtonClasses('grid')} border-r border-[var(--border,#E1D3B9)]`} onClick={() => onChangeView('grid')}>
+              Grid
             </button>
-            <div className="relative">
-              <button
-                type="button"
-                ref={filtersButtonRef}
-                onClick={() => setFiltersOpen((open) => !open)}
-                className={`inline-flex h-9 items-center rounded-full border px-4 text-[12px] font-medium ${
-                  filterCount ? 'border-[var(--text,#1F1E1B)] text-[var(--text,#1F1E1B)]' : 'border-[var(--border,#E1D3B9)] text-[var(--text-muted,#6B645B)]'
-                }`}
-                aria-haspopup="dialog"
-                aria-expanded={filtersOpen}
-              >
-                {filterLabel}
-              </button>
-              {filtersOpen ? (
-                <FiltersPopover
-                  ref={filtersRef}
-                  controls={filters}
-                  onReset={() => {
-                    onResetFilters()
-                    setFiltersOpen(false)
-                  }}
-                  onClose={() => setFiltersOpen(false)}
-                />
-              ) : null}
-            </div>
-            <button
-              type="button"
-              ref={shortcutsButtonRef}
-              onClick={() => setShortcutsOpen((open) => !open)}
-              className={`inline-flex h-9 items-center rounded-full border px-4 text-[12px] font-medium ${
-                shortcutsOpen ? 'border-[var(--text,#1F1E1B)] text-[var(--text,#1F1E1B)]' : 'border-[var(--border,#E1D3B9)] text-[var(--text-muted,#6B645B)]'
-              }`}
-              aria-expanded={shortcutsOpen}
-              aria-controls={SHORTCUTS_LEGEND_ID}
-            >
-              ⌨ Shortcuts
-            </button>
-            <button
-              type="button"
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border,#E1D3B9)] text-lg text-[var(--text-muted,#6B645B)]"
-              aria-label="More actions"
-            >
-              …
+            <button type="button" className={viewButtonClasses('detail')} onClick={() => onChangeView('detail')}>
+              Detail
             </button>
           </div>
-          <div
-            data-testid="top-bar-status-slot"
-            className="flex flex-col items-end justify-center text-[11px] text-[var(--text-muted,#6B645B)]"
-            style={{ minWidth: 200, maxWidth: 220 }}
+          <button
+            type="button"
+            className={`inline-flex h-9 min-w-[170px] flex-shrink-0 items-center justify-center gap-3 rounded-full border border-[var(--border,#E1D3B9)] px-4 text-[12px] font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--stone-trail-brand-focus,#4A463F)] ${
+              stackPairsEnabled ? 'bg-[var(--sand-100,#F3EBDD)] text-[var(--text,#1F1E1B)]' : 'text-[var(--text-muted,#6B645B)]'
+            } ${stackTogglePending ? 'cursor-not-allowed opacity-60' : ''}`}
+            aria-pressed={stackPairsEnabled}
+            onClick={() => onToggleStackPairs(!stackPairsEnabled)}
+            disabled={stackTogglePending}
           >
-            <div className="flex items-center gap-2 text-right">
-              <span
-                className={`transition-opacity duration-200 ${loadingAssets ? 'opacity-100 visible' : 'opacity-0 invisible'}`}
-                aria-live="polite"
-              >
-                Syncing…
-              </span>
-              <span
-                className={`transition-opacity duration-200 ${loadError ? 'opacity-100 visible text-[#B42318]' : 'opacity-0 invisible'}`}
-                aria-live="polite"
-              >
-                {loadError}
-              </span>
-              <span className="transition-opacity duration-200 opacity-100 visible text-[var(--text,#1F1E1B)]" aria-live="polite" title={photoCountText}>
-                {photoCountText}
-              </span>
-            </div>
+            <span>{stackPairsEnabled ? 'Stacking' : 'Stack'}</span>
+            <span>JPEG + RAW</span>
+          </button>
+          <div
+            data-testid="top-bar-size-control"
+            className="hidden h-9 flex-shrink-0 items-center gap-2 rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 text-[11px] text-[var(--text-muted,#6B645B)] lg:flex"
+            style={{ width: sizeControlWidth }}
+          >
+            <span className="text-[11px] font-medium text-[var(--text-muted,#6B645B)]">Size</span>
+            {view === 'grid' ? (
+              <input
+                type="range"
+                min={minGridSize}
+                max={240}
+                value={gridSize}
+                onChange={(event) => onGridSizeChange(Number(event.target.value))}
+                aria-label="Thumbnail size"
+                className="h-1.5 flex-1 accent-[var(--text,#1F1E1B)]"
+              />
+            ) : (
+              <span className="flex-1 text-right text-[10px] text-[var(--text-muted,#6B645B)]">Unavailable in detail view</span>
+            )}
           </div>
+        </div>
+        <div className="flex min-w-0 items-center justify-end gap-3 px-4 sm:px-6 lg:px-8">
+          <button
+            type="button"
+            ref={filtersButtonRef}
+            onClick={() => {
+              if (filtersOpen) {
+                closeFilters()
+              } else {
+                setFiltersOpen(true)
+                syncFiltersAnchor()
+              }
+            }}
+            className={`inline-flex h-9 min-w-[110px] items-center justify-center gap-2 rounded-full border px-4 text-[12px] font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--stone-trail-brand-focus,#4A463F)] ${
+              filterCount ? 'border-[var(--text,#1F1E1B)] text-[var(--text,#1F1E1B)]' : 'border-[var(--border,#E1D3B9)] text-[var(--text-muted,#6B645B)]'
+            }`}
+            aria-haspopup="dialog"
+            aria-controls={FILTERS_DIALOG_ID}
+            aria-expanded={filtersOpen}
+            title={filterLabel}
+          >
+            <span>Filters</span>
+            {filterCount ? <CountBadge count={filterCount} /> : null}
+          </button>
+          <button
+            type="button"
+            ref={shortcutsButtonRef}
+            onClick={() => {
+              if (shortcutsOpen) {
+                closeShortcuts()
+              } else {
+                setShortcutsOpen(true)
+                syncShortcutsAnchor()
+              }
+            }}
+            className={`inline-flex h-9 min-w-[130px] items-center justify-center gap-2 rounded-full border px-4 text-[12px] font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--stone-trail-brand-focus,#4A463F)] ${
+              shortcutsOpen ? 'border-[var(--text,#1F1E1B)] text-[var(--text,#1F1E1B)]' : 'border-[var(--border,#E1D3B9)] text-[var(--text-muted,#6B645B)]'
+            }`}
+            aria-haspopup="dialog"
+            aria-expanded={shortcutsOpen}
+            aria-controls={SHORTCUTS_LEGEND_ID}
+          >
+            <span aria-hidden="true">⌨</span>
+            <span>Shortcuts</span>
+          </button>
         </div>
       </div>
-      {shortcutsOpen && <ShortcutsLegend ref={shortcutsLegendRef} onClose={() => setShortcutsOpen(false)} />}
+      {filtersOpen ? (
+        <FiltersDialog
+          controls={filters}
+          onReset={() => {
+            onResetFilters()
+            closeFilters()
+          }}
+          onClose={closeFilters}
+          anchorRect={filtersAnchorRect}
+        />
+      ) : null}
+      {shortcutsOpen ? <ShortcutsDialog onClose={closeShortcuts} anchorRect={shortcutsAnchorRect} /> : null}
     </header>
   )
 }
 
-const FiltersPopover = React.forwardRef<HTMLDivElement, {
-  controls: WorkspaceFilterControls
-  onReset: () => void
+type OverlayDialogProps = {
+  id?: string
+  title: string
   onClose: () => void
-}>(({ controls, onReset, onClose }, ref) => {
-  return (
+  headerAction?: React.ReactNode
+  children: React.ReactNode
+  maxWidthClass?: string
+  anchorRect?: DOMRect | null
+}
+
+function OverlayDialog({ id, title, onClose, headerAction, children, maxWidthClass = 'max-w-md', anchorRect }: OverlayDialogProps) {
+  useEffect(() => {
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose()
+      }
+    }
+    document.addEventListener('keydown', handleKey)
+    return () => document.removeEventListener('keydown', handleKey)
+  }, [onClose])
+
+  const anchored = Boolean(anchorRect)
+  const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 0
+  const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 0
+  const anchorStyle = anchorRect
+    ? {
+        position: 'absolute' as const,
+        top: Math.min(anchorRect.bottom + 12, viewportHeight - 24),
+        right: Math.max(16, viewportWidth - anchorRect.right),
+        maxHeight: 'calc(100vh - 48px)',
+      }
+    : undefined
+
+  return createPortal(
     <div
-      ref={ref}
-      className="absolute right-0 top-full z-50 mt-3 w-80 rounded-2xl border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-4 text-[12px] shadow-xl"
+      className={`fixed inset-0 z-[70] bg-black/20 px-4 py-8 ${anchored ? '' : 'flex items-center justify-center'}`}
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) {
+          onClose()
+        }
+      }}
     >
-      <div className="mb-3 flex items-center justify-between">
-        <div className="font-semibold text-[var(--text,#1F1E1B)]">Filters</div>
-        <button type="button" onClick={onReset} className="text-[11px] text-[var(--river-500,#6B7C7A)] hover:underline">
+      <div
+        id={id}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        className={`w-full ${maxWidthClass} rounded-2xl border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-4 text-[12px] shadow-xl`}
+        style={anchorStyle}
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <p className="text-sm font-semibold text-[var(--text,#1F1E1B)]">{title}</p>
+          <div className="flex items-center gap-2">
+            {headerAction}
+            <button
+              type="button"
+              onClick={onClose}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-transparent text-sm text-[var(--text-muted,#6B645B)] transition-colors hover:border-[var(--border,#E1D3B9)] hover:text-[var(--text,#1F1E1B)]"
+              aria-label={`Close ${title}`}
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+        {children}
+      </div>
+    </div>,
+    document.body,
+  )
+}
+
+function FiltersDialog({ controls, onReset, onClose, anchorRect }: { controls: WorkspaceFilterControls; onReset: () => void; onClose: () => void; anchorRect?: DOMRect | null }) {
+  return (
+    <OverlayDialog
+      id={FILTERS_DIALOG_ID}
+      title="Filters"
+      onClose={onClose}
+      headerAction={
+        <button type="button" onClick={onReset} className="text-[11px] font-medium text-[var(--river-500,#6B7C7A)] hover:underline">
           Reset
         </button>
-      </div>
+      }
+      anchorRect={anchorRect}
+    >
       {controls.dateFilterActive ? (
         <div className="mb-3 rounded-xl border border-[var(--border,#E1D3B9)] bg-[var(--sand-50,#FBF7EF)] px-3 py-2">
           <div className="text-[11px] font-semibold text-[var(--text,#1F1E1B)]">Date</div>
@@ -510,10 +615,9 @@ const FiltersPopover = React.forwardRef<HTMLDivElement, {
           </label>
         </div>
       </div>
-    </div>
+    </OverlayDialog>
   )
-})
-FiltersPopover.displayName = 'FiltersPopover'
+}
 
 const SHORTCUTS: Array<{ keys: string; description: string }> = [
   { keys: 'G', description: 'Switch to the grid view' },
@@ -525,37 +629,23 @@ const SHORTCUTS: Array<{ keys: string; description: string }> = [
   { keys: 'Alt + [ / ]', description: 'Collapse or expand the date rail' },
 ]
 
-const ShortcutsLegend = React.forwardRef<HTMLDivElement, { onClose: () => void }>(({ onClose }, ref) => (
-  <div ref={ref} id={SHORTCUTS_LEGEND_ID} role="region" aria-label="Keyboard shortcuts" className="w-full">
-    <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 sm:px-6 lg:px-8 pb-3 pt-2">
-      <div className="rounded-2xl border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-4 shadow-xl">
-        <div className="flex items-center justify-between">
-          <p className="text-sm font-semibold text-[var(--text,#1F1E1B)]">Keyboard shortcuts</p>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close shortcuts legend"
-            className="text-sm text-[var(--text-muted,#6B645B)] transition hover:text-[var(--text,#1F1E1B)]"
+function ShortcutsDialog({ onClose, anchorRect }: { onClose: () => void; anchorRect?: DOMRect | null }) {
+  return (
+    <OverlayDialog id={SHORTCUTS_LEGEND_ID} title="Keyboard shortcuts" onClose={onClose} maxWidthClass="max-w-2xl" anchorRect={anchorRect}>
+      <ul className="grid gap-2 text-[11px] sm:grid-cols-2">
+        {SHORTCUTS.map((shortcut) => (
+          <li
+            key={shortcut.keys}
+            className="flex items-center justify-between gap-3 rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--surface-subtle,#FBF7EF)] px-3 py-2"
           >
-            ✕
-          </button>
-        </div>
-        <ul className="mt-3 grid gap-2 text-[11px] sm:grid-cols-2">
-          {SHORTCUTS.map((shortcut) => (
-            <li
-              key={shortcut.keys}
-              className="flex items-center justify-between gap-3 rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--surface-subtle,#FBF7EF)] px-3 py-2"
-            >
-              <span className="font-mono text-[11px] text-[var(--text-muted,#6B645B)]">{shortcut.keys}</span>
-              <span className="text-right text-[var(--text,#1F1E1B)]">{shortcut.description}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
-    </div>
-  </div>
-))
-ShortcutsLegend.displayName = 'ShortcutsLegend'
+            <span className="font-mono text-[11px] text-[var(--text-muted,#6B645B)]">{shortcut.keys}</span>
+            <span className="text-right text-[var(--text,#1F1E1B)]">{shortcut.description}</span>
+          </li>
+        ))}
+      </ul>
+    </OverlayDialog>
+  )
+}
 
 function MinStarRow({ value, onChange }: { value: 0 | 1 | 2 | 3 | 4 | 5; onChange: (v: 0 | 1 | 2 | 3 | 4 | 5) => void }) {
   const stars = [0, 1, 2, 3, 4, 5] as const
@@ -618,6 +708,7 @@ function CountBadge({ count, className = '' }: { count: number; className?: stri
 
 const LEFT_PANEL_ID = 'workspace-import-panel'
 const LEFT_PANEL_CONTENT_ID = `${LEFT_PANEL_ID}-content`
+const LEFT_IMPORT_SECTION_ID = `${LEFT_PANEL_ID}-import`
 const LEFT_DATE_SECTION_ID = `${LEFT_PANEL_ID}-date`
 const LEFT_FOLDER_SECTION_ID = `${LEFT_PANEL_ID}-folder`
 
@@ -646,10 +737,11 @@ export function Sidebar({
 }) {
   const [expandedYears, setExpandedYears] = useState<Set<string>>(() => new Set())
   const [expandedMonths, setExpandedMonths] = useState<Set<string>>(() => new Set())
+  const [importSectionOpen, setImportSectionOpen] = useState(true)
   const [dateSectionOpen, setDateSectionOpen] = useState(true)
   const [folderSectionOpen, setFolderSectionOpen] = useState(true)
   const [pendingTarget, setPendingTarget] = useState<LeftPanelTarget | null>(null)
-  const importHeaderRef = useRef<HTMLButtonElement | null>(null)
+  const importSectionRef = useRef<HTMLDivElement | null>(null)
   const dateSectionRef = useRef<HTMLDivElement | null>(null)
   const folderSectionRef = useRef<HTMLDivElement | null>(null)
 
@@ -693,38 +785,45 @@ export function Sidebar({
     })
   }, [selectedDay])
 
-  const scrollToTarget = useCallback(
-    (target: LeftPanelTarget) => {
-      if (target === 'import') {
-        importHeaderRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })
-        importHeaderRef.current?.focus({ preventScroll: true })
-        return
+  const ensureSectionOpen = useCallback((target: LeftPanelTarget) => {
+    if (target === 'import') setImportSectionOpen(true)
+    else if (target === 'date') setDateSectionOpen(true)
+    else setFolderSectionOpen(true)
+  }, [])
+
+  const scrollToTarget = useCallback((target: LeftPanelTarget) => {
+    const refMap: Record<LeftPanelTarget, React.RefObject<HTMLDivElement>> = {
+      import: importSectionRef,
+      date: dateSectionRef,
+      folder: folderSectionRef,
+    }
+    const ref = refMap[target]?.current
+    if (ref) {
+      ref.scrollIntoView({ block: 'start', behavior: 'smooth' })
+      if (typeof ref.focus === 'function') {
+        ref.focus({ preventScroll: true })
       }
-      const ref = target === 'date' ? dateSectionRef.current : folderSectionRef.current
-      if (ref) {
-        ref.scrollIntoView({ block: 'start', behavior: 'smooth' })
-        if (typeof ref.focus === 'function') {
-          ref.focus({ preventScroll: true })
-        }
-      }
-    },
-    [],
-  )
+    }
+  }, [])
 
   useEffect(() => {
     if (collapsed || !pendingTarget) return
+    ensureSectionOpen(pendingTarget)
     scrollToTarget(pendingTarget)
     setPendingTarget(null)
-  }, [collapsed, pendingTarget, scrollToTarget])
+  }, [collapsed, ensureSectionOpen, pendingTarget, scrollToTarget])
 
   const handleRailSelect = useCallback(
     (target: LeftPanelTarget) => {
       if (target === 'import') {
         onOpenImport()
+        if (!collapsed) {
+          ensureSectionOpen(target)
+          scrollToTarget(target)
+        }
         return
       }
-      if (target === 'date') setDateSectionOpen(true)
-      if (target === 'folder') setFolderSectionOpen(true)
+      ensureSectionOpen(target)
       if (collapsed) {
         setPendingTarget(target)
         onExpand()
@@ -732,7 +831,7 @@ export function Sidebar({
       }
       scrollToTarget(target)
     },
-    [collapsed, onExpand, onOpenImport, scrollToTarget],
+    [collapsed, ensureSectionOpen, onExpand, onOpenImport, scrollToTarget],
   )
 
   const toggleYear = useCallback((yearId: string) => {
@@ -909,42 +1008,58 @@ export function Sidebar({
         className={`h-full transition-opacity duration-150 ${collapsed ? 'pointer-events-none opacity-0' : 'opacity-100'}`}
       >
         <div className="flex h-full flex-col overflow-hidden rounded-[var(--r-lg,20px)] border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] p-4 shadow-[0_30px_80px_rgba(31,30,27,0.16)]">
-          <header className="sticky top-0 z-10 flex flex-col gap-3 border-b border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] pb-3">
-            <div className="flex items-center justify-between gap-3">
+          <header className="sticky top-0 z-10 border-b border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] pb-3">
+            <div className="flex items-center gap-3">
               <button
                 type="button"
-                ref={importHeaderRef}
-                aria-expanded={!collapsed}
+                aria-label="Collapse Import panel"
                 aria-controls={LEFT_PANEL_CONTENT_ID}
-                onClick={() => {
-                  if (collapsed) onExpand()
-                  else onCollapse()
-                }}
-                className="inline-flex items-center gap-2 text-[15px] font-semibold text-[var(--text,#1F1E1B)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)]"
+                onClick={onCollapse}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border,#EDE1C6)] text-[var(--text,#1F1E1B)] transition hover:border-[var(--text,#1F1E1B)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)]"
               >
-                Import
-                <ChevronDownIcon className={`h-4 w-4 transition-transform ${collapsed ? '' : 'rotate-180'}`} />
+                <ChevronLeftIcon className="h-4 w-4" aria-hidden="true" />
               </button>
-              <button
-                type="button"
-                onClick={onOpenImport}
-                className="inline-flex h-10 min-w-[120px] items-center justify-center gap-2 rounded-full border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] px-4 text-sm font-semibold text-[var(--text,#1F1E1B)] shadow-[0_1px_2px_rgba(31,30,27,0.08)] transition hover:shadow-[0_4px_12px_rgba(31,30,27,0.14)] active:shadow-inner focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--focus-ring,#1A73E8)]"
-              >
-                <PlusIcon className="h-4 w-4" />
-                Import
-              </button>
+              <ImportIcon className="h-4 w-4 text-[var(--text,#1F1E1B)]" aria-hidden="true" />
+              <span className="text-sm font-semibold text-[var(--text,#1F1E1B)]">Import</span>
             </div>
-            <p className="text-xs text-[var(--text-muted,#6B645B)]">The Import flow is the single entry for adding photos. Use the rail icon when collapsed.</p>
           </header>
-          <div id={LEFT_PANEL_CONTENT_ID} className="mt-4 flex-1 space-y-4 overflow-y-auto pr-1">
-            <PanelSection
+          <div id={LEFT_PANEL_CONTENT_ID} className="flex flex-1 flex-col gap-3 overflow-hidden">
+            <InspectorSection
+              id={LEFT_IMPORT_SECTION_ID}
+              ref={importSectionRef}
+              icon={<ImportIcon className="h-4 w-4" aria-hidden="true" />}
+              label="Import"
+              open={importSectionOpen}
+              onToggle={() => setImportSectionOpen((open) => !open)}
+              maxBodyHeight={220}
+            >
+              <div className="space-y-3">
+                <p className="text-xs text-[var(--text-muted,#6B645B)]">
+                  The Import flow is the single entry for adding photos. Use the rail icon when collapsed to jump back here.
+                </p>
+                <button
+                  type="button"
+                  onClick={onOpenImport}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] px-4 py-2 text-sm font-semibold text-[var(--text,#1F1E1B)] shadow-[0_1px_2px_rgba(31,30,27,0.08)] transition hover:shadow-[0_4px_12px_rgba(31,30,27,0.14)] active:shadow-inner focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)]"
+                >
+                  <PlusIcon className="h-4 w-4" aria-hidden="true" />
+                  Open Import Flow
+                </button>
+                <p className="text-[11px] text-[var(--text-muted,#6B645B)]">
+                  Imports create folders per capture date automatically. Switch to a custom destination from the Import flow if you prefer a different structure.
+                </p>
+              </div>
+            </InspectorSection>
+            <InspectorSection
               id={LEFT_DATE_SECTION_ID}
               ref={dateSectionRef}
+              icon={<CalendarIcon className="h-4 w-4" aria-hidden="true" />}
               label="Date"
               open={dateSectionOpen}
               onToggle={() => setDateSectionOpen((open) => !open)}
+              grow
             >
-              <div className="flex flex-col gap-3">
+              <div className="flex min-h-0 flex-col gap-3">
                 <div className="rounded-xl border border-[var(--border,#EDE1C6)] bg-[var(--surface-subtle,#FBF7EF)] px-3 py-2 text-[11px] text-[var(--text,#1F1E1B)]">
                   {selectedDay ? (
                     <div className="flex items-center justify-between gap-2">
@@ -959,13 +1074,15 @@ export function Sidebar({
                 </div>
                 <div className="flex-1 min-h-0 overflow-y-auto pr-1">{renderTree()}</div>
               </div>
-            </PanelSection>
-            <PanelSection
+            </InspectorSection>
+            <InspectorSection
               id={LEFT_FOLDER_SECTION_ID}
               ref={folderSectionRef}
+              icon={<FolderIcon className="h-4 w-4" aria-hidden="true" />}
               label="Folders"
               open={folderSectionOpen}
               onToggle={() => setFolderSectionOpen((open) => !open)}
+              maxBodyHeight={240}
             >
               <div className="space-y-3 text-left text-[12px] text-[var(--text,#1F1E1B)]">
                 <div className="flex items-center justify-between gap-2">
@@ -986,82 +1103,50 @@ export function Sidebar({
                   </div>
                 </dl>
               </div>
-            </PanelSection>
+            </InspectorSection>
           </div>
         </div>
       </div>
       <div
         data-panel="rail"
         aria-hidden={!collapsed}
-        className={`absolute inset-0 flex items-center justify-center px-1 py-2 transition-opacity duration-150 ${collapsed ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
+        className={`pointer-events-none absolute inset-0 flex items-center justify-center px-1 py-2 transition-opacity duration-150 ${collapsed ? 'opacity-100' : 'opacity-0'}`}
       >
-        <LeftRail
-          dateExpanded={!collapsed && dateSectionOpen}
-          folderExpanded={!collapsed && folderSectionOpen}
-          hasDateFilter={Boolean(selectedDayKey)}
-          onImport={() => handleRailSelect('import')}
-          onDate={() => handleRailSelect('date')}
-          onFolder={() => handleRailSelect('folder')}
-        />
+        {collapsed ? (
+          <LeftRail
+            onExpand={onExpand}
+            onImport={() => handleRailSelect('import')}
+            onDate={() => handleRailSelect('date')}
+            onFolder={() => handleRailSelect('folder')}
+            onSettings={() => handleRailSelect('folder')}
+            importExpanded={importSectionOpen}
+            dateExpanded={dateSectionOpen}
+            folderExpanded={folderSectionOpen}
+            hasDateFilter={Boolean(selectedDayKey)}
+          />
+        ) : null}
       </div>
     </aside>
   )
 }
 
-type PanelSectionProps = {
-  id: string
-  label: string
-  open: boolean
-  onToggle: () => void
-  children: React.ReactNode
-  className?: string
-  contentClassName?: string
-}
-
-const PanelSection = React.forwardRef<HTMLDivElement, PanelSectionProps>(function PanelSectionComponent(
-  { id, label, open, onToggle, children, className = '', contentClassName },
-  ref,
-) {
-  return (
-    <section
-      id={id}
-      ref={ref}
-      tabIndex={-1}
-      className={`flex flex-col rounded-[var(--r-lg,20px)] border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] shadow-[0_18px_40px_rgba(31,30,27,0.12)]${className ? ` ${className}` : ''}`}
-      data-open={open}
-    >
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-controls={`${id}-content`}
-        onClick={onToggle}
-        className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] px-4 py-2 text-sm font-semibold text-[var(--text,#1F1E1B)]"
-      >
-        <span>{label}</span>
-        <ChevronDownIcon className={`h-4 w-4 transition-transform ${open ? 'rotate-180' : ''}`} />
-      </button>
-      <div
-        id={`${id}-content`}
-        aria-hidden={!open}
-        className={`transition-[max-height,opacity] duration-200 ease-out ${open ? 'max-h-[999px] opacity-100' : 'pointer-events-none max-h-0 opacity-0'}`}
-      >
-        <div className={contentClassName ? contentClassName : 'px-4 py-3'}>{children}</div>
-      </div>
-    </section>
-  )
-})
-
 function LeftRail({
+  onExpand,
   onImport,
   onDate,
   onFolder,
+  onSettings,
+  importExpanded,
   dateExpanded,
   folderExpanded,
   hasDateFilter,
 }: {
+  onExpand: () => void
   onImport: () => void
   onDate: () => void
   onFolder: () => void
+  onSettings?: () => void
+  importExpanded: boolean
   dateExpanded: boolean
   folderExpanded: boolean
   hasDateFilter: boolean
@@ -1070,72 +1155,43 @@ function LeftRail({
     <div
       role="toolbar"
       aria-label="Import panel rail"
-      className="flex h-full w-full flex-col items-center gap-4 rounded-[var(--r-lg,20px)] border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] px-2 py-4 text-[10px] shadow-[0_20px_40px_rgba(31,30,27,0.18)]"
+      className="pointer-events-auto flex h-full w-full flex-col items-center rounded-[var(--r-lg,20px)] border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] px-1 py-3 shadow-[0_20px_40px_rgba(31,30,27,0.18)]"
     >
-      <RailAction id="import-rail" label="Import" icon={<PlusIcon className="h-4 w-4" />} onClick={onImport} />
-      <div className="h-px w-10 rounded-full bg-[var(--border,#EDE1C6)]" />
-      <div className="flex flex-1 flex-col items-center gap-3">
-        <RailAction
-          id="date-rail"
+      <div className="flex flex-col items-center gap-2">
+        <InspectorRailButton icon={<ChevronRightIcon className="h-4 w-4" aria-hidden="true" />} label="Expand Import panel" onClick={onExpand} />
+        <RailDivider />
+      </div>
+      <div className="mt-3 flex flex-1 flex-col items-center gap-2">
+        <InspectorRailButton
+          icon={<ImportIcon className="h-4 w-4" aria-hidden="true" />}
+          label="Import"
+          onClick={onImport}
+          ariaControls={LEFT_IMPORT_SECTION_ID}
+          ariaExpanded={importExpanded}
+        />
+        <InspectorRailButton
+          icon={<CalendarIcon className="h-4 w-4" aria-hidden="true" />}
           label="Date"
-          icon={<CalendarIcon className="h-4 w-4" />}
           onClick={onDate}
           ariaControls={LEFT_DATE_SECTION_ID}
           ariaExpanded={dateExpanded}
           isActive={hasDateFilter}
         />
-        <RailAction
-          id="folder-rail"
-          label="Folder"
-          icon={<FolderIcon className="h-4 w-4" />}
+        <InspectorRailButton
+          icon={<FolderIcon className="h-4 w-4" aria-hidden="true" />}
+          label="Folders"
           onClick={onFolder}
           ariaControls={LEFT_FOLDER_SECTION_ID}
           ariaExpanded={folderExpanded}
         />
       </div>
-    </div>
-  )
-}
-
-type RailActionProps = {
-  id: string
-  label: string
-  icon: React.ReactNode
-  onClick: () => void
-  ariaControls?: string
-  ariaExpanded?: boolean
-  isActive?: boolean
-}
-
-function RailAction({ id, label, icon, onClick, ariaControls, ariaExpanded, isActive = false }: RailActionProps) {
-  const [tooltipOpen, setTooltipOpen] = useState(false)
-  const tooltipId = `${id}-tooltip`
-  return (
-    <div className="relative">
-      <button
-        type="button"
-        aria-describedby={tooltipId}
-        aria-controls={ariaControls}
-        aria-expanded={ariaExpanded}
-        aria-label={label}
-        onClick={onClick}
-        onMouseEnter={() => setTooltipOpen(true)}
-        onMouseLeave={() => setTooltipOpen(false)}
-        onFocus={() => setTooltipOpen(true)}
-        onBlur={() => setTooltipOpen(false)}
-        className={`flex h-11 w-11 items-center justify-center rounded-full border border-transparent text-[var(--ink,#4A463F)] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)] ${
-          isActive ? 'border-[var(--border,#EDE1C6)] bg-[var(--surface-subtle,#FBF7EF)] text-[var(--text,#1F1E1B)]' : 'hover:bg-[var(--surface-subtle,#FBF7EF)] hover:text-[var(--text,#1F1E1B)]'
-        }`}
-      >
-        {icon}
-      </button>
-      <div
-        role="tooltip"
-        id={tooltipId}
-        aria-hidden={!tooltipOpen}
-        className={`pointer-events-none absolute left-[calc(100%+8px)] top-1/2 -translate-y-1/2 whitespace-nowrap rounded-md border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] px-2 py-1 text-[11px] text-[var(--text,#1F1E1B)] shadow-lg transition-opacity ${tooltipOpen ? 'opacity-100' : 'opacity-0'}`}
-      >
-        {label}
+      <div className="mt-auto flex flex-col items-center gap-2">
+        <RailDivider />
+        <InspectorRailButton
+          icon={<SettingsIcon className="h-4 w-4" aria-hidden="true" />}
+          label="Import settings"
+          onClick={onSettings ?? onFolder}
+        />
       </div>
     </div>
   )
@@ -1143,17 +1199,33 @@ function RailAction({ id, label, icon, onClick, ariaControls, ariaExpanded, isAc
 
 const RIGHT_PANEL_ID = 'workspace-inspector-panel'
 const RIGHT_PANEL_CONTENT_ID = `${RIGHT_PANEL_ID}-content`
-const RIGHT_INSPECTOR_SECTION_ID = `${RIGHT_PANEL_ID}-inspector`
+const RIGHT_OVERVIEW_SECTION_ID = `${RIGHT_PANEL_ID}-overview`
+const RIGHT_KEY_SECTION_ID = `${RIGHT_PANEL_ID}-key-data`
+const RIGHT_PROJECT_SECTION_ID = `${RIGHT_PANEL_ID}-projects`
 const RIGHT_METADATA_SECTION_ID = `${RIGHT_PANEL_ID}-metadata`
 
-type RightPanelTarget = 'inspector' | 'metadata'
+type RightPanelTarget = 'overview' | 'keyData' | 'projects' | 'metadata'
 
 export function InspectorPanel({
   collapsed,
   onCollapse,
   onExpand,
-  summaryRows,
+  projectOverview,
+  onRenameProject,
+  renamePending,
+  renameError,
+  onProjectOverviewChange,
+  projectOverviewPending,
+  projectOverviewError,
   hasSelection,
+  usedProjects,
+  usedProjectsLoading,
+  usedProjectsError,
+  metadataSourceProjectId,
+  onSelectMetadataSource,
+  metadataCopyBusy,
+  keyMetadataSections,
+  metadataSummary,
   metadataEntries,
   metadataWarnings,
   metadataLoading,
@@ -1162,21 +1234,85 @@ export function InspectorPanel({
   collapsed: boolean
   onCollapse: () => void
   onExpand: () => void
-  summaryRows: { label: string; value: string }[]
+  projectOverview: ProjectOverviewData | null
+  onRenameProject: (next: string) => Promise<void> | void
+  renamePending?: boolean
+  renameError?: string | null
+  onProjectOverviewChange: (patch: { note?: string | null; client?: string | null; tags?: string[] }) => Promise<void> | void
+  projectOverviewPending?: boolean
+  projectOverviewError?: string | null
   hasSelection: boolean
-  metadataEntries: { key: string; value: string }[]
+  usedProjects: UsedProjectLink[]
+  usedProjectsLoading: boolean
+  usedProjectsError: string | null
+  metadataSourceProjectId: string | null
+  onSelectMetadataSource: (projectId: string, projectName: string) => void
+  metadataCopyBusy: boolean
+  keyMetadataSections: KeyMetadataSections | null
+  metadataSummary: MetadataSummary | null
+  metadataEntries: MetadataEntry[]
   metadataWarnings: string[]
   metadataLoading: boolean
   metadataError: string | null
 }) {
-  const inspectorSectionRef = useRef<HTMLDivElement | null>(null)
+  const overviewSectionRef = useRef<HTMLDivElement | null>(null)
+  const keyDataSectionRef = useRef<HTMLDivElement | null>(null)
+  const projectsSectionRef = useRef<HTMLDivElement | null>(null)
   const metadataSectionRef = useRef<HTMLDivElement | null>(null)
-  const [inspectorOpen, setInspectorOpen] = useState(true)
+  const [overviewOpen, setOverviewOpen] = useState(true)
+  const [keyDataOpen, setKeyDataOpen] = useState(true)
+  const [projectsOpen, setProjectsOpen] = useState(true)
   const [metadataOpen, setMetadataOpen] = useState(true)
   const [pendingTarget, setPendingTarget] = useState<RightPanelTarget | null>(null)
+  const generalFields = keyMetadataSections?.general ?? []
+  const captureFields = keyMetadataSections?.capture ?? []
+  const metadataGroups = useMemo(() => groupMetadataEntries(metadataEntries), [metadataEntries])
+  const [metadataAccordion, setMetadataAccordion] = useState<Record<string, boolean>>(() => makeMetadataAccordionState(metadataGroups))
+
+  useEffect(() => {
+    setMetadataAccordion(makeMetadataAccordionState(metadataGroups))
+  }, [metadataGroups])
+
+  const mergedInspectorFields = useMemo(() => {
+    const map = new Map<string, string>()
+    generalFields.forEach((field) => {
+      if (!map.has(field.label)) map.set(field.label, field.value)
+    })
+    captureFields.forEach((field) => {
+      if (!map.has(field.label)) map.set(field.label, field.value)
+    })
+    return map
+  }, [generalFields, captureFields])
+
+  const keyDataRows = useMemo(() => {
+    const colorLabel = metadataSummary?.colorLabel ?? 'None'
+    return [
+      { label: 'File Name', value: mergedInspectorFields.get('File Name') ?? '—' },
+      { label: 'File Type', value: mergedInspectorFields.get('File Type') ?? '—' },
+      { label: 'Import Date', value: mergedInspectorFields.get('Import Date') ?? '—' },
+      { label: 'Capture Date', value: mergedInspectorFields.get('Capture Date') ?? '—' },
+      { label: 'Dimensions', value: mergedInspectorFields.get('Dimensions') ?? '—' },
+      { label: 'Rating', value: formatRatingValue(metadataSummary?.rating) },
+      { label: 'Color Label', value: <ColorLabelValue value={colorLabel as ColorTag} /> },
+      { label: 'Pick/Reject', value: metadataSummary?.pickRejectLabel ?? '—' },
+    ]
+  }, [metadataSummary, mergedInspectorFields])
+
+  const ensureSectionOpen = useCallback((target: RightPanelTarget) => {
+    if (target === 'overview') setOverviewOpen(true)
+    else if (target === 'keyData') setKeyDataOpen(true)
+    else if (target === 'projects') setProjectsOpen(true)
+    else setMetadataOpen(true)
+  }, [])
 
   const scrollToTarget = useCallback((target: RightPanelTarget) => {
-    const ref = target === 'inspector' ? inspectorSectionRef.current : metadataSectionRef.current
+    const refMap: Record<RightPanelTarget, React.RefObject<HTMLDivElement>> = {
+      overview: overviewSectionRef,
+      keyData: keyDataSectionRef,
+      projects: projectsSectionRef,
+      metadata: metadataSectionRef,
+    }
+    const ref = refMap[target]?.current
     if (ref) {
       ref.scrollIntoView({ block: 'start', behavior: 'smooth' })
       if (typeof ref.focus === 'function') {
@@ -1187,14 +1323,14 @@ export function InspectorPanel({
 
   useEffect(() => {
     if (collapsed || !pendingTarget) return
+    ensureSectionOpen(pendingTarget)
     scrollToTarget(pendingTarget)
     setPendingTarget(null)
-  }, [collapsed, pendingTarget, scrollToTarget])
+  }, [collapsed, ensureSectionOpen, pendingTarget, scrollToTarget])
 
   const handleRailSelect = useCallback(
     (target: RightPanelTarget) => {
-      if (target === 'inspector') setInspectorOpen(true)
-      else setMetadataOpen(true)
+      ensureSectionOpen(target)
       if (collapsed) {
         setPendingTarget(target)
         onExpand()
@@ -1202,10 +1338,12 @@ export function InspectorPanel({
       }
       scrollToTarget(target)
     },
-    [collapsed, onExpand, scrollToTarget],
+    [collapsed, ensureSectionOpen, onExpand, scrollToTarget],
   )
 
-  const showSummaryRows = hasSelection && summaryRows.length > 0
+  const toggleMetadataGroup = useCallback((groupId: string) => {
+    setMetadataAccordion((prev) => ({ ...prev, [groupId]: !prev[groupId] }))
+  }, [])
 
   return (
     <aside
@@ -1221,151 +1359,792 @@ export function InspectorPanel({
         className={`h-full transition-opacity duration-150 ${collapsed ? 'pointer-events-none opacity-0' : 'opacity-100'}`}
       >
         <div className="flex h-full flex-col overflow-hidden rounded-[var(--r-lg,20px)] border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] p-4 shadow-[0_30px_80px_rgba(31,30,27,0.16)]">
-          <header className="sticky top-0 z-10 flex flex-col gap-3 border-b border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] pb-3">
-            <div className="flex items-center justify-between gap-3">
+          <header className="sticky top-0 z-10 border-b border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] pb-3">
+            <div className="flex items-center gap-3">
               <button
                 type="button"
-                aria-expanded={!collapsed}
+                aria-label="Collapse Inspector"
                 aria-controls={RIGHT_PANEL_CONTENT_ID}
-                onClick={() => {
-                  if (collapsed) onExpand()
-                  else onCollapse()
-                }}
-                className="inline-flex items-center gap-2 text-[15px] font-semibold text-[var(--text,#1F1E1B)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)]"
+                onClick={onCollapse}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border,#EDE1C6)] text-[var(--text,#1F1E1B)] transition hover:border-[var(--text,#1F1E1B)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)]"
               >
-                Inspector
-                <ChevronDownIcon className={`h-4 w-4 transition-transform ${collapsed ? '' : 'rotate-180'}`} />
+                <ChevronRightIcon className="h-4 w-4" aria-hidden="true" />
               </button>
+              <InspectorIcon className="h-4 w-4 text-[var(--text,#1F1E1B)]" aria-hidden="true" />
+              <span className="text-sm font-semibold text-[var(--text,#1F1E1B)]">Inspector</span>
             </div>
-            <p className="text-xs text-[var(--text-muted,#6B645B)]">Check selection details and raw metadata. Use the rail when the panel is collapsed.</p>
           </header>
-          <div id={RIGHT_PANEL_CONTENT_ID} className="mt-4 flex-1 min-h-0 space-y-4 overflow-hidden">
-            <PanelSection
-              id={RIGHT_INSPECTOR_SECTION_ID}
-              ref={inspectorSectionRef}
-              label="Inspector"
-              open={inspectorOpen}
-              onToggle={() => setInspectorOpen((open) => !open)}
-              className="flex-1 min-h-0"
-              contentClassName="px-4 py-3 flex flex-col gap-2 overflow-y-auto"
+          <div id={RIGHT_PANEL_CONTENT_ID} className="flex flex-1 flex-col gap-3 overflow-hidden">
+            <InspectorSection
+              id={RIGHT_OVERVIEW_SECTION_ID}
+              ref={overviewSectionRef}
+              icon={<LayoutListIcon className="h-4 w-4" aria-hidden="true" />}
+              label="Project Overview"
+              open={overviewOpen}
+              onToggle={() => setOverviewOpen((open) => !open)}
+              maxBodyHeight={320}
             >
-              {showSummaryRows ? (
-                summaryRows.map((row) => <SummaryRow key={row.label} label={row.label} value={row.value} />)
+              {projectOverview ? (
+                <ProjectOverviewDetails
+                  data={projectOverview}
+                  onRename={onRenameProject}
+                  renamePending={renamePending}
+                  renameError={renameError}
+                  onUpdate={onProjectOverviewChange}
+                  updatePending={projectOverviewPending}
+                  updateError={projectOverviewError}
+                />
+              ) : (
+                <p className="text-sm text-[var(--text-muted,#6B645B)]">Project details unavailable.</p>
+              )}
+            </InspectorSection>
+            <InspectorSection
+              id={RIGHT_KEY_SECTION_ID}
+              ref={keyDataSectionRef}
+              icon={<InfoIcon className="h-4 w-4" aria-hidden="true" />}
+              label="Key Data"
+              open={keyDataOpen}
+              onToggle={() => setKeyDataOpen((open) => !open)}
+              maxBodyHeight={240}
+            >
+              {hasSelection ? (
+                <KeyDataGrid rows={keyDataRows} />
               ) : (
                 <p className="text-sm text-[var(--text-muted,#6B645B)]">Select a photo from the gallery to inspect its details.</p>
               )}
-            </PanelSection>
-            <PanelSection
+            </InspectorSection>
+            <InspectorSection
+              id={RIGHT_PROJECT_SECTION_ID}
+              ref={projectsSectionRef}
+              icon={<FolderIcon className="h-4 w-4" aria-hidden="true" />}
+              label="Used in Projects"
+              open={projectsOpen}
+              onToggle={() => setProjectsOpen((open) => !open)}
+              maxBodyHeight={280}
+            >
+              {hasSelection ? (
+                <UsedProjectsSection
+                  projects={usedProjects}
+                  loading={usedProjectsLoading}
+                  error={usedProjectsError}
+                  metadataSourceProjectId={metadataSourceProjectId}
+                  onSelectMetadataSource={onSelectMetadataSource}
+                  metadataCopyBusy={metadataCopyBusy}
+                />
+              ) : (
+                <p className="text-sm text-[var(--text-muted,#6B645B)]">Select a photo to see where it is used.</p>
+              )}
+            </InspectorSection>
+            <InspectorSection
               id={RIGHT_METADATA_SECTION_ID}
               ref={metadataSectionRef}
+              icon={<CameraIcon className="h-4 w-4" aria-hidden="true" />}
               label="Metadata"
               open={metadataOpen}
               onToggle={() => setMetadataOpen((open) => !open)}
-              className="flex-1 min-h-0"
-              contentClassName="px-4 py-3 flex flex-col gap-3 overflow-hidden"
+              grow
             >
-              {metadataLoading ? <p className="text-xs text-[var(--text-muted,#6B645B)]">Loading metadata…</p> : null}
-              {metadataError ? <p className="text-xs text-[#B42318]">{metadataError}</p> : null}
-              {metadataWarnings.length ? (
-                <ul className="space-y-1 rounded-[12px] border border-[#F59E0B]/40 bg-[#FFF7ED] px-3 py-2 text-[11px] text-[#B45309]">
-                  {metadataWarnings.map((warning) => (
-                    <li key={warning} className="flex items-start gap-2">
-                      <span className="mt-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full border border-[#F59E0B] text-[10px]">!</span>
-                      <span className="flex-1 break-words">{warning}</span>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-              {hasSelection ? (
-                metadataEntries.length ? (
-                  <dl className="flex-1 min-h-0 overflow-auto rounded-[12px] border border-[var(--border,#EDE1C6)]">
-                    {metadataEntries.map(({ key, value }, index) => (
-                      <div key={`${key}-${index}`} className="flex items-start gap-3 border-b border-[var(--border,#EDE1C6)] px-3 py-2 text-[11px] last:border-b-0">
-                        <dt className="w-28 shrink-0 font-semibold text-[var(--text,#1F1E1B)]">{key}</dt>
-                        <dd className="flex-1 break-words text-[var(--text-muted,#6B645B)]">{value}</dd>
-                      </div>
+              <div className="flex min-h-0 flex-col gap-3">
+                {metadataLoading ? <p className="text-xs text-[var(--text-muted,#6B645B)]">Loading metadata…</p> : null}
+                {metadataError ? <p className="text-xs text-[#B42318]">{metadataError}</p> : null}
+                {metadataWarnings.length ? (
+                  <ul className="space-y-1 rounded-[12px] border border-[#F59E0B]/40 bg-[#FFF7ED] px-3 py-2 text-[11px] text-[#B45309]">
+                    {metadataWarnings.map((warning) => (
+                      <li key={warning} className="flex items-start gap-2">
+                        <span className="mt-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full border border-[#F59E0B] text-[10px]">!</span>
+                        <span className="flex-1 break-words">{warning}</span>
+                      </li>
                     ))}
-                  </dl>
+                  </ul>
+                ) : null}
+                {hasSelection ? (
+                  metadataEntries.length ? (
+                    <MetadataAccordion groups={metadataGroups} openState={metadataAccordion} onToggle={toggleMetadataGroup} />
+                  ) : (
+                    <p className="text-sm text-[var(--text-muted,#6B645B)]">No metadata available for this asset.</p>
+                  )
                 ) : (
-                  <p className="text-sm text-[var(--text-muted,#6B645B)]">No metadata available for this asset.</p>
-                )
-              ) : (
-                <p className="text-sm text-[var(--text-muted,#6B645B)]">Select a photo to review metadata.</p>
-              )}
-            </PanelSection>
+                  <p className="text-sm text-[var(--text-muted,#6B645B)]">Select a photo to review metadata.</p>
+                )}
+              </div>
+            </InspectorSection>
           </div>
         </div>
       </div>
       <div
         data-panel="rail"
         aria-hidden={!collapsed}
-        className={`absolute inset-0 flex items-center justify-center px-1 py-2 transition-opacity duration-150 ${collapsed ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
+        className={`pointer-events-none absolute inset-0 flex items-center justify-center px-1 py-2 transition-opacity duration-150 ${collapsed ? 'opacity-100' : 'opacity-0'}`}
       >
-        <RightRail
-          inspectorExpanded={!collapsed && inspectorOpen}
-          metadataExpanded={!collapsed && metadataOpen}
-          onInspector={() => handleRailSelect('inspector')}
-          onMetadata={() => handleRailSelect('metadata')}
-          inspectorActive={hasSelection}
-          metadataActive={metadataEntries.length > 0 || metadataWarnings.length > 0}
-        />
+        {collapsed ? (
+          <InspectorRail
+            onExpand={onExpand}
+            onOverview={() => handleRailSelect('overview')}
+            onKeyData={() => handleRailSelect('keyData')}
+            onProjects={() => handleRailSelect('projects')}
+            onMetadata={() => handleRailSelect('metadata')}
+          />
+        ) : null}
       </div>
     </aside>
   )
 }
 
-function SummaryRow({ label, value }: { label: string; value: string }) {
+type InspectorSectionProps = {
+  id: string
+  icon: React.ReactNode
+  label: string
+  open: boolean
+  onToggle: () => void
+  children: React.ReactNode
+  grow?: boolean
+  maxBodyHeight?: number
+}
+
+const InspectorSection = React.forwardRef<HTMLDivElement, InspectorSectionProps>(function InspectorSection(
+  { id, icon, label, open, onToggle, children, grow = false, maxBodyHeight },
+  ref,
+) {
+  const bodyStyle = maxBodyHeight ? { maxHeight: `${maxBodyHeight}px` } : undefined
   return (
-    <div className="flex items-center justify-between gap-3 border-b border-[var(--border,#EDE1C6)] py-1.5 last:border-b-0">
-      <span className="text-[11px] text-[var(--text-muted,#6B645B)]">{label}</span>
-      <span className="max-w-[60%] truncate text-[12px] font-semibold text-[var(--text,#1F1E1B)]">{value || '—'}</span>
+    <section
+      id={id}
+      ref={ref}
+      tabIndex={-1}
+      className={`flex flex-col rounded-[18px] border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] shadow-[0_18px_40px_rgba(31,30,27,0.12)] ${
+        grow ? 'flex-1 min-h-0' : ''
+      }`}
+    >
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={`${id}-content`}
+        onClick={onToggle}
+        className="flex items-center gap-3 px-4 py-2 text-sm font-semibold text-[var(--text,#1F1E1B)]"
+      >
+        <span className="inline-flex items-center gap-2">
+          <span className="text-[var(--text-muted,#6B645B)]">{icon}</span>
+          {label}
+        </span>
+        <span className="ml-auto text-[11px] font-medium uppercase tracking-wide text-[var(--text-muted,#6B645B)]">{open ? 'Hide' : 'Show'}</span>
+      </button>
+      <div
+        id={`${id}-content`}
+        aria-hidden={!open}
+        className={`flex-1 ${open ? 'flex flex-col px-4 pb-4 pt-1' : 'hidden'}`}
+      >
+        <div className={`flex-1 overflow-auto overscroll-contain pr-2 ${grow ? 'min-h-0' : ''}`} style={bodyStyle}>
+          {children}
+        </div>
+      </div>
+    </section>
+  )
+})
+
+type ProjectOverviewDetailsProps = {
+  data: ProjectOverviewData
+  onRename: (next: string) => Promise<void> | void
+  renamePending?: boolean
+  renameError?: string | null
+  onUpdate: (patch: { note?: string | null; client?: string | null; tags?: string[] }) => Promise<void> | void
+  updatePending?: boolean
+  updateError?: string | null
+}
+
+function ProjectOverviewDetails({ data, onRename, renamePending, renameError, onUpdate, updatePending, updateError }: ProjectOverviewDetailsProps) {
+  const [name, setName] = useState(data.title)
+  const [description, setDescription] = useState(data.description ?? '')
+  const [client, setClient] = useState(data.client ?? '')
+  const [tags, setTags] = useState<string[]>(data.tags ?? [])
+  const [tagDraft, setTagDraft] = useState('')
+
+  useEffect(() => setName(data.title), [data.title])
+  useEffect(() => setDescription(data.description ?? ''), [data.description])
+  useEffect(() => setClient(data.client ?? ''), [data.client])
+  useEffect(() => setTags(data.tags ?? []), [data.tags])
+
+  const commitName = useCallback(() => {
+    const trimmed = name.trim()
+    if (!trimmed) {
+      setName(data.title)
+      return
+    }
+    if (trimmed === data.title) return
+    void onRename(trimmed)
+  }, [name, data.title, onRename])
+
+  const handleNameBlur = useCallback(() => {
+    if (renamePending) return
+    commitName()
+  }, [commitName, renamePending])
+
+  const handleNameKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLInputElement>) => {
+      if (event.key === 'Enter') {
+        event.preventDefault()
+        commitName()
+      } else if (event.key === 'Escape') {
+        event.preventDefault()
+        setName(data.title)
+      }
+    },
+    [commitName, data.title],
+  )
+
+  const commitDescription = useCallback(() => {
+    const normalized = description.trim()
+    const baseline = data.description ?? ''
+    if (normalized === baseline) return
+    void onUpdate({ note: normalized ? normalized : null })
+  }, [description, data.description, onUpdate])
+
+  const commitClient = useCallback(() => {
+    const normalized = client.trim()
+    const baseline = data.client ?? ''
+    if (normalized === baseline) return
+    void onUpdate({ client: normalized || null })
+  }, [client, data.client, onUpdate])
+
+  const handleDescriptionBlur = useCallback(() => {
+    if (updatePending) return
+    commitDescription()
+  }, [commitDescription, updatePending])
+
+  const handleClientBlur = useCallback(() => {
+    if (updatePending) return
+    commitClient()
+  }, [commitClient, updatePending])
+
+  const handleAddTag = useCallback(() => {
+    if (updatePending) return
+    const trimmed = tagDraft.trim()
+    if (!trimmed) return
+    if (tags.includes(trimmed)) {
+      setTagDraft('')
+      return
+    }
+    const nextTags = [...tags, trimmed]
+    setTags(nextTags)
+    setTagDraft('')
+    void onUpdate({ tags: nextTags })
+  }, [tagDraft, tags, onUpdate, updatePending])
+
+  const handleRemoveTag = useCallback(
+    (tag: string) => {
+      if (updatePending) return
+      if (!tags.includes(tag)) return
+      const nextTags = tags.filter((t) => t !== tag)
+      setTags(nextTags)
+      void onUpdate({ tags: nextTags })
+    },
+    [tags, onUpdate, updatePending],
+  )
+
+  const createdLabel = useMemo(() => {
+    if (!data.createdAt) return '—'
+    const parsed = new Date(data.createdAt)
+    if (Number.isNaN(parsed.getTime())) return '—'
+    return PROJECT_DATE_FORMAT ? PROJECT_DATE_FORMAT.format(parsed) : parsed.toLocaleDateString()
+  }, [data.createdAt])
+
+  return (
+    <div className="space-y-4 text-sm">
+      <label className="block text-xs text-[var(--text-muted,#6B645B)]">
+        Project name
+        <input
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          onBlur={handleNameBlur}
+          onKeyDown={handleNameKeyDown}
+          disabled={renamePending}
+          className="mt-1 w-full rounded-full border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] px-4 py-2 text-sm font-semibold text-[var(--text,#1F1E1B)] focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring,#1A73E8)]"
+        />
+        {renameError ? <span className="mt-1 block text-[11px] text-[#B42318]">{renameError}</span> : null}
+      </label>
+      <label className="block text-xs text-[var(--text-muted,#6B645B)]">
+        Description
+        <textarea
+          value={description}
+          onChange={(event) => setDescription(event.target.value)}
+          onBlur={handleDescriptionBlur}
+          disabled={updatePending}
+          rows={2}
+          className="mt-1 w-full rounded-[16px] border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] px-4 py-2 text-sm text-[var(--text,#1F1E1B)] focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring,#1A73E8)]"
+        />
+      </label>
+      <label className="block text-xs text-[var(--text-muted,#6B645B)]">
+        Client
+        <input
+          value={client}
+          onChange={(event) => setClient(event.target.value)}
+          onBlur={handleClientBlur}
+          disabled={updatePending}
+          className="mt-1 w-full rounded-full border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] px-4 py-2 text-sm text-[var(--text,#1F1E1B)] focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring,#1A73E8)]"
+        />
+      </label>
+      <div>
+        <p className="text-xs text-[var(--text-muted,#6B645B)]">Tags</p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {tags.length ? (
+            tags.map((tag) => (
+              <button
+                key={tag}
+                type="button"
+                onClick={() => handleRemoveTag(tag)}
+                disabled={updatePending}
+                aria-label={`Remove tag ${tag}`}
+                className="inline-flex items-center gap-1 rounded-full border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] px-3 py-0.5 text-[11px] text-[var(--text,#1F1E1B)] transition hover:border-[var(--text,#1F1E1B)]"
+              >
+                <span>{tag}</span>
+                <span aria-hidden="true">✕</span>
+              </button>
+            ))
+          ) : (
+            <span className="text-[12px] text-[var(--text-muted,#6B645B)]">No tags</span>
+          )}
+        </div>
+        <div className="mt-2 flex items-center gap-2">
+          <input
+            value={tagDraft}
+            onChange={(event) => setTagDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault()
+                handleAddTag()
+              }
+            }}
+            disabled={updatePending}
+            placeholder="Add tag"
+            className="h-9 flex-1 rounded-full border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] px-3 text-[12px] text-[var(--text,#1F1E1B)] focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring,#1A73E8)]"
+          />
+          <button
+            type="button"
+            onClick={handleAddTag}
+            disabled={updatePending}
+            className="inline-flex h-9 items-center rounded-full border border-[var(--border,#EDE1C6)] px-4 text-[12px] font-semibold text-[var(--text,#1F1E1B)]"
+          >
+            Add
+          </button>
+        </div>
+      </div>
+      <div className="grid gap-2 rounded-[18px] border border-[var(--border,#EDE1C6)] bg-[var(--surface-subtle,#FBF7EF)] p-3 text-[12px] text-[var(--text-muted,#6B645B)] sm:grid-cols-2">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wide">Total images</p>
+          <p className="mt-1 text-base font-semibold text-[var(--text,#1F1E1B)]">{data.assetCount}</p>
+        </div>
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wide">Created</p>
+          <p className="mt-1 text-sm text-[var(--text,#1F1E1B)]">{createdLabel}</p>
+        </div>
+      </div>
+      {updateError ? <p className="text-[11px] text-[#B42318]">{updateError}</p> : null}
     </div>
   )
 }
 
-function RightRail({
-  onInspector,
-  onMetadata,
-  inspectorExpanded,
-  metadataExpanded,
-  inspectorActive,
-  metadataActive,
-}: {
-  onInspector: () => void
+type KeyDataRow = { label: string; value: React.ReactNode }
+
+function KeyDataGrid({ rows }: { rows: KeyDataRow[] }) {
+  return (
+    <dl className="space-y-3">
+      {rows.map((row) => (
+        <div key={row.label} className="flex items-start gap-4 text-sm">
+          <dt className="w-32 flex-shrink-0 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">
+            {row.label}
+          </dt>
+          <dd className="flex-1 text-right text-sm font-semibold text-[var(--text,#1F1E1B)]">{row.value}</dd>
+        </div>
+      ))}
+    </dl>
+  )
+}
+
+function ColorLabelValue({ value }: { value: ColorTag }) {
+  const swatch = COLOR_MAP[value] ?? COLOR_MAP.None
+  return (
+    <span className="inline-flex w-full items-center justify-end gap-2 text-right">
+      <span className="h-3 w-3 rounded-full border border-[var(--border,#EDE1C6)]" style={{ backgroundColor: swatch }} />
+      {value}
+    </span>
+  )
+}
+
+function formatRatingValue(value?: number | null): string {
+  if (typeof value !== 'number' || Number.isNaN(value) || value <= 0) return 'Unrated'
+  return `${value} / 5`
+}
+
+function InspectorRail({ onExpand, onOverview, onKeyData, onProjects, onMetadata }: {
+  onExpand: () => void
+  onOverview: () => void
+  onKeyData: () => void
+  onProjects: () => void
   onMetadata: () => void
-  inspectorExpanded: boolean
-  metadataExpanded: boolean
-  inspectorActive: boolean
-  metadataActive: boolean
 }) {
   return (
     <div
       role="toolbar"
       aria-label="Inspector rail"
-      className="flex h-full w-full flex-col items-center gap-4 rounded-[var(--r-lg,20px)] border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] px-2 py-4 text-[10px] shadow-[0_20px_40px_rgba(31,30,27,0.18)]"
+      className="pointer-events-auto flex h-full w-full flex-col items-center rounded-[var(--r-lg,20px)] border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] px-1 py-3 shadow-[0_20px_40px_rgba(31,30,27,0.18)]"
     >
-      <RailAction
-        id="inspector-rail"
-        label="Inspector"
-        icon={<InspectorIcon className="h-4 w-4" />}
-        onClick={onInspector}
-        ariaControls={RIGHT_INSPECTOR_SECTION_ID}
-        ariaExpanded={inspectorExpanded}
-        isActive={inspectorActive}
-      />
-      <RailAction
-        id="metadata-rail"
-        label="Metadata"
-        icon={<MetadataIcon className="h-4 w-4" />}
-        onClick={onMetadata}
-        ariaControls={RIGHT_METADATA_SECTION_ID}
-        ariaExpanded={metadataExpanded}
-        isActive={metadataActive}
-      />
+      <div className="flex flex-col items-center gap-2">
+        <InspectorRailButton icon={<ChevronLeftIcon className="h-4 w-4" />} label="Expand Inspector" onClick={onExpand} />
+        <RailDivider />
+      </div>
+      <div className="mt-3 flex flex-1 flex-col items-center gap-2">
+        <InspectorRailButton icon={<LayoutListIcon className="h-4 w-4" />} label="Overview" onClick={onOverview} />
+        <InspectorRailButton icon={<InfoIcon className="h-4 w-4" />} label="Key data" onClick={onKeyData} />
+        <InspectorRailButton icon={<FolderIcon className="h-4 w-4" />} label="Projects" onClick={onProjects} />
+        <InspectorRailButton icon={<CameraIcon className="h-4 w-4" />} label="Metadata" onClick={onMetadata} />
+        <InspectorRailButton icon={<CalendarClockIcon className="h-4 w-4" />} label="Dates" onClick={onMetadata} />
+      </div>
+      <div className="mt-auto flex flex-col items-center gap-2">
+        <RailDivider />
+        <InspectorRailButton icon={<SettingsIcon className="h-4 w-4" />} label="Inspector settings" onClick={onMetadata} />
+      </div>
     </div>
   )
 }
 
+function InspectorRailButton({
+  icon,
+  label,
+  onClick,
+  ariaControls,
+  ariaExpanded,
+  isActive = false,
+}: {
+  icon: React.ReactNode
+  label: string
+  onClick: () => void
+  ariaControls?: string
+  ariaExpanded?: boolean
+  isActive?: boolean
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      aria-controls={ariaControls}
+      aria-expanded={ariaExpanded}
+      className={`inline-flex h-10 w-10 items-center justify-center rounded-[12px] border border-transparent text-[var(--text,#1F1E1B)] transition hover:bg-[var(--surface-subtle,#FBF7EF)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)] ${
+        isActive ? 'border-[var(--border,#EDE1C6)] bg-[var(--surface-subtle,#FBF7EF)]' : ''
+      }`}
+    >
+      {icon}
+    </button>
+  )
+}
+
+function RailDivider() {
+  return <div className="h-px w-8 rounded-full bg-[var(--border,#EDE1C6)]" aria-hidden="true" />
+}
+
+function UsedProjectsSection({
+  projects,
+  loading,
+  error,
+  metadataSourceProjectId,
+  onSelectMetadataSource,
+  metadataCopyBusy,
+}: {
+  projects: UsedProjectLink[]
+  loading: boolean
+  error: string | null
+  metadataSourceProjectId: string | null
+  onSelectMetadataSource: (projectId: string, projectName: string) => void
+  metadataCopyBusy: boolean
+}) {
+  if (loading) {
+    return <p className="text-sm text-[var(--text-muted,#6B645B)]">Loading project memberships…</p>
+  }
+  if (error) {
+    return <p className="text-sm text-[#B42318]">{error}</p>
+  }
+  if (!projects.length) {
+    return <p className="text-sm text-[var(--text-muted,#6B645B)]">Linked only to the current project.</p>
+  }
+  const effectiveSourceId = metadataSourceProjectId ?? projects.find((project) => project.isCurrent)?.id ?? null
+  return (
+    <div className="flex flex-col gap-3">
+      {projects.map((project) => {
+        const title = project.lastModified ? `${project.name} • ${formatProjectTimestamp(project.lastModified)}` : project.name
+        return (
+          <div
+            key={project.id}
+            className={`flex items-center gap-3 rounded-[16px] border px-2 py-2 transition-colors ${
+              project.isCurrent ? 'border-[var(--charcoal-500,#4A4235)] bg-[var(--surface-subtle,#FBF7EF)]' : 'border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)]'
+            }`}
+            title={title}
+          >
+            <ProjectThumbnail cover={project.coverThumb} name={project.name} />
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-[var(--text,#1F1E1B)]">
+                <span className="truncate">{project.name}</span>
+                {effectiveSourceId === project.id ? <InspectorBadge tone="primary">Metadata source</InspectorBadge> : null}
+              </div>
+              <div className="text-[11px] text-[var(--text-muted,#6B645B)]">
+                {project.isCurrent ? 'Current project' : formatProjectTimestamp(project.lastModified)}
+              </div>
+            </div>
+            {!project.isCurrent ? (
+              <button
+                type="button"
+                className="ml-auto shrink-0 rounded-full border border-[var(--border,#EDE1C6)] px-3 py-1 text-[11px] font-medium text-[var(--text,#1F1E1B)] transition hover:border-[var(--text,#1F1E1B)] disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={() => onSelectMetadataSource(project.id, project.name)}
+                disabled={metadataCopyBusy}
+              >
+                Set as Metadata Source
+              </button>
+            ) : null}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function ProjectThumbnail({ cover, name }: { cover: string | null; name: string }) {
+  if (cover) {
+    return <img src={cover} alt="" className="h-8 w-8 rounded-lg object-cover" loading="lazy" />
+  }
+  return (
+    <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border,#EDE1C6)] bg-[var(--surface-subtle,#FBF7EF)] text-xs font-semibold text-[var(--text,#1F1E1B)]">
+      {projectInitials(name)}
+    </div>
+  )
+}
+
+function InspectorBadge({ children, tone = 'neutral' }: { children: React.ReactNode; tone?: 'neutral' | 'primary' | 'success' | 'danger' }) {
+  const tones: Record<string, string> = {
+    neutral: 'border border-[var(--border,#EDE1C6)] text-[var(--text-muted,#6B645B)]',
+    primary: 'bg-[var(--river-100,#E3F2F4)] text-[var(--river-700,#2F5F62)]',
+    success: 'bg-[#ECFDF3] text-[#027A48]',
+    danger: 'bg-[#FEF3F2] text-[#B42318]',
+  }
+  return (
+    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${tones[tone] || tones.neutral}`}>
+      {children}
+    </span>
+  )
+}
+
+function MetadataAccordion({
+  groups,
+  openState,
+  onToggle,
+}: {
+  groups: MetadataGroup[]
+  openState: Record<string, boolean>
+  onToggle: (groupId: string) => void
+}) {
+  if (!groups.length) {
+    return <p className="text-sm text-[var(--text-muted,#6B645B)]">No technical metadata captured.</p>
+  }
+  return (
+    <div className="flex-1 min-h-0 overflow-hidden rounded-[16px] border border-[var(--border,#EDE1C6)]">
+      <div className="max-h-[360px] overflow-auto">
+        {groups.map((group) => {
+          const open = openState[group.id] ?? true
+          return (
+            <div key={group.id} className="border-b border-[var(--border,#EDE1C6)] last:border-b-0">
+              <button
+                type="button"
+                className="sticky top-0 z-10 flex w-full items-center justify-between gap-2 bg-[var(--surface,#FFFFFF)] px-3 py-2 text-left text-[12px] font-semibold text-[var(--text,#1F1E1B)]"
+                aria-expanded={open}
+                onClick={() => onToggle(group.id)}
+              >
+                <span>{group.label}</span>
+                <ChevronDownIcon className={`h-4 w-4 transition-transform ${open ? 'rotate-180' : ''}`} />
+              </button>
+              <div className={`overflow-hidden transition-[max-height] duration-200 ease-out ${open ? 'max-h-[999px]' : 'max-h-0'}`}>
+                <dl>
+                  {group.entries.map((entry, index) => (
+                    <div key={`${group.id}-${entry.key}-${index}`} className="grid grid-cols-[minmax(140px,35%)_minmax(0,1fr)] gap-3 px-3 py-2 text-[11px] odd:bg-[var(--surface-subtle,#FBF7EF)]">
+                      <dt className="font-semibold text-[var(--text,#1F1E1B)]">{entry.label}</dt>
+                      <dd className="break-words text-[var(--text-muted,#6B645B)]">{formatMetadataEntryValue(entry.value)}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function makeMetadataAccordionState(groups: MetadataGroup[]): Record<string, boolean> {
+  const state: Record<string, boolean> = {}
+  groups.forEach((group, index) => {
+    state[group.id] = index < 2
+  })
+  return state
+}
+
+const METADATA_GROUP_ORDER: { id: MetadataCategory; label: string }[] = [
+  { id: 'camera', label: 'Camera' },
+  { id: 'lens', label: 'Lens' },
+  { id: 'exposure', label: 'Exposure' },
+  { id: 'gps', label: 'GPS' },
+  { id: 'software', label: 'Software' },
+  { id: 'custom', label: 'Custom' },
+]
+
+function groupMetadataEntries(entries: MetadataEntry[]): MetadataGroup[] {
+  if (!entries.length) return []
+  const buckets: Record<MetadataCategory, MetadataEntry[]> = {
+    camera: [],
+    lens: [],
+    exposure: [],
+    gps: [],
+    software: [],
+    custom: [],
+  }
+  entries.forEach((entry) => {
+    const category = categorizeMetadataKey(entry.normalizedKey)
+    buckets[category].push(entry)
+  })
+  return METADATA_GROUP_ORDER
+    .map((category) => ({
+      id: category.id,
+      label: category.label,
+      entries: buckets[category.id].sort((a, b) => a.label.localeCompare(b.label)),
+    }))
+    .filter((group) => group.entries.length > 0)
+}
+
+function categorizeMetadataKey(normalizedKey: string): MetadataCategory {
+  const key = normalizedKey.split(':').pop() ?? normalizedKey
+  if (key.includes('lens')) return 'lens'
+  if (key.includes('camera') || key.includes('model') || key.includes('body')) return 'camera'
+  if (key.includes('exposure') || key.includes('aperture') || key.includes('shutter') || key.includes('iso') || key.includes('speed')) return 'exposure'
+  if (key.includes('gps') || key.includes('latitude') || key.includes('longitude') || key.includes('location')) return 'gps'
+  if (key.includes('software') || key.includes('firmware') || key.includes('application') || key.includes('program') || key.includes('version')) return 'software'
+  return 'custom'
+}
+
+function formatMetadataEntryValue(value: unknown): string {
+  if (value === null || value === undefined) return '—'
+  if (Array.isArray(value)) {
+    if (!value.length) return '[]'
+    return value.map((item) => formatMetadataEntryValue(item)).join(', ')
+  }
+  if (typeof value === 'object') {
+    try {
+      return JSON.stringify(value)
+    } catch {
+      return '[object]'
+    }
+  }
+  if (typeof value === 'boolean') {
+    return value ? 'true' : 'false'
+  }
+  if (typeof value === 'number') {
+    return formatMetadataEntryNumber(value)
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (!trimmed) return '—'
+    const decimalMatch = trimmed.match(/^-?\d+\.(\d{4,})/)
+    if (decimalMatch) {
+      const [whole] = trimmed.split('.')
+      return `${whole}.${decimalMatch[1].slice(0, 4)}`
+    }
+    return trimmed
+  }
+  return String(value)
+}
+
+function formatMetadataEntryNumber(value: number): string {
+  if (!Number.isFinite(value)) return '—'
+  const magnitude = Math.abs(value)
+  const decimals = magnitude >= 100 ? 0 : magnitude >= 10 ? 1 : 2
+  const fixed = value.toFixed(decimals)
+  return fixed.replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1')
+}
+
+function formatProjectTimestamp(timestamp: string | null): string {
+  if (!timestamp) return 'Last updated —'
+  const parsed = new Date(timestamp)
+  if (Number.isNaN(parsed.getTime())) return 'Last updated —'
+  return `Last updated ${parsed.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`
+}
+
+function projectInitials(name: string): string {
+  const parts = name.split(/\s+/).filter(Boolean)
+  if (!parts.length) return 'P'
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  return `${parts[0][0]}${parts[1][0]}`.toUpperCase()
+}
+
+function ChevronLeftIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M10 3 5 8l5 5" />
+    </svg>
+  )
+}
+
+function ChevronRightIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="m6 3 5 5-5 5" />
+    </svg>
+  )
+}
+
+function InfoIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <circle cx="8" cy="8" r="5.5" />
+      <path d="M8 7v4" />
+      <path d="M8 5.25h.01" />
+    </svg>
+  )
+}
+
+function LayoutListIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <rect x="2.5" y="3" width="11" height="10" rx="2" />
+      <path d="M5 6.5h6M5 9.5h6M5 12.5h3" />
+    </svg>
+  )
+}
+
+function CameraIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M3 5.5h10a1.5 1.5 0 0 1 1.5 1.5v4.5A1.5 1.5 0 0 1 13 13h-10A1.5 1.5 0 0 1 1.5 11.5V7a1.5 1.5 0 0 1 1.5-1.5Z" />
+      <path d="M5.5 5.5 6.8 3.8a1 1 0 0 1 .8-.3h0.8a1 1 0 0 1 .8.3l1.3 1.7" />
+      <circle cx="8" cy="9" r="2" />
+    </svg>
+  )
+}
+
+function CalendarClockIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M4 2v2m8-2v2m-9 2h10" />
+      <rect x="2.5" y="3" width="11" height="10" rx="2" />
+      <circle cx="10.5" cy="10" r="2.25" />
+      <path d="M10.5 8.75V10l.8.8" />
+    </svg>
+  )
+}
+
+function SettingsIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="m6.5 2.5 3 .01.4 1.6a4.6 4.6 0 0 1 1.2.7l1.56-.5 1.5 2.6-1.2 1a4.7 4.7 0 0 1 0 .8l1.2 1-1.5 2.6-1.56-.5a4.6 4.6 0 0 1-1.2.7l-.4 1.6-3 .01-.4-1.6a4.6 4.6 0 0 1-1.2-.7l-1.56.5-1.5-2.6 1.2-1a4.7 4.7 0 0 1 0-.8l-1.2-1 1.5-2.6 1.56.5a4.6 4.6 0 0 1 1.2-.7Z" />
+      <circle cx="8" cy="8" r="1.7" />
+    </svg>
+  )
+}
 function PlusIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" {...props}>
@@ -1399,11 +2178,12 @@ function InspectorIcon(props: React.SVGProps<SVGSVGElement>) {
   )
 }
 
-function MetadataIcon(props: React.SVGProps<SVGSVGElement>) {
+function ImportIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <rect x="2.5" y="3" width="11" height="10" rx="2" />
-      <path d="M5 6.5h6M5 9.5h3" />
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M3.25 9.5h9.5a1.25 1.25 0 0 1 1.25 1.25V12a2 2 0 0 1-2 2h-8a2 2 0 0 1-2-2v-1.25A1.25 1.25 0 0 1 3.25 9.5Z" />
+      <path d="M8 2v6.5" />
+      <path d="m5.75 6.25 2.25 2.25 2.25-2.25" />
     </svg>
   )
 }

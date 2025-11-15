@@ -95,13 +95,19 @@ async def sync_project_pairs(db: AsyncSession, project_id: UUID) -> None:
         )
     ).scalars().all()
     existing_by_key = {pair.basename.lower(): pair for pair in existing_pairs}
+    existing_by_asset: Dict[UUID, models.ProjectAssetPair] = {}
+    for pair in existing_pairs:
+        existing_by_asset[pair.jpeg_asset_id] = pair
+        existing_by_asset[pair.raw_asset_id] = pair
 
     asset_pair_map: Dict[UUID, UUID] = {}
     seen_pair_ids: set[UUID] = set()
     changed = False
 
     for key, ((jpeg_link, jpeg_asset), (raw_link, raw_asset)) in targets.items():
-        pair = existing_by_key.get(key)
+        pair = existing_by_key.get(key) or existing_by_asset.get(jpeg_asset.id) or existing_by_asset.get(raw_asset.id)
+        if pair and key not in existing_by_key:
+            existing_by_key[key] = pair
         basename = display_names.get(key, jpeg_asset.original_filename or raw_asset.original_filename or key)
         if pair is None:
             pair = models.ProjectAssetPair(
@@ -113,16 +119,29 @@ async def sync_project_pairs(db: AsyncSession, project_id: UUID) -> None:
             db.add(pair)
             await db.flush()
             existing_by_key[key] = pair
+            existing_by_asset[jpeg_asset.id] = pair
+            existing_by_asset[raw_asset.id] = pair
             changed = True
         else:
             if pair.jpeg_asset_id != jpeg_asset.id:
+                old_jpeg = pair.jpeg_asset_id
                 pair.jpeg_asset_id = jpeg_asset.id
+                if old_jpeg in existing_by_asset:
+                    existing_by_asset.pop(old_jpeg, None)
+                existing_by_asset[jpeg_asset.id] = pair
                 changed = True
             if pair.raw_asset_id != raw_asset.id:
+                old_raw = pair.raw_asset_id
                 pair.raw_asset_id = raw_asset.id
+                if old_raw in existing_by_asset:
+                    existing_by_asset.pop(old_raw, None)
+                existing_by_asset[raw_asset.id] = pair
                 changed = True
             if pair.basename != basename:
+                old_key = pair.basename.lower()
                 pair.basename = basename
+                existing_by_key.pop(old_key, None)
+                existing_by_key[key] = pair
                 changed = True
         asset_pair_map[jpeg_asset.id] = pair.id
         asset_pair_map[raw_asset.id] = pair.id

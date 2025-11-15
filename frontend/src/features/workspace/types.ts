@@ -29,4 +29,5 @@ export type Photo = {
   stackPrimaryAssetId?: string | null
   displayType?: string
   isStacked?: boolean
+  metadataSourceProjectId?: string | null
 }

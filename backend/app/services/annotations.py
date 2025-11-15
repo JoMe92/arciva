@@ -16,8 +16,8 @@ logger = logging.getLogger("arciva.annotations")
 
 
 def _resolve_asset_path(asset: models.Asset, storage: PosixStorage) -> Path | None:
-    if asset.storage_key:
-        path = Path(asset.storage_key)
+    if asset.storage_uri:
+        path = Path(asset.storage_uri)
         if path.exists():
             return path
     if asset.sha256:
@@ -28,16 +28,22 @@ def _resolve_asset_path(asset: models.Asset, storage: PosixStorage) -> Path | No
     return None
 
 
-def _pick_label_value(asset: models.Asset) -> str | None:
-    if asset.rejected:
+def _pick_label_value(state: models.MetadataState) -> str | None:
+    if state.rejected:
         return "-1"
-    if asset.picked:
+    if state.picked:
         return "1"
     return None
 
 
-def _color_value(asset: models.Asset) -> str | None:
-    label = asset.color_label.value if isinstance(asset.color_label, models.ColorLabel) else str(asset.color_label)
+def _color_value(state: models.MetadataState) -> str | None:
+    label_value = state.color_label
+    if isinstance(label_value, models.ColorLabel):
+        label = label_value.value
+    elif isinstance(label_value, str):
+        label = label_value
+    else:
+        label = "None"
     return None if not label or label == "None" else label
 
 
@@ -52,10 +58,10 @@ def _sidecar_path(path: Path) -> Path:
     return path.with_suffix(f"{path.suffix}.xmp")
 
 
-def _render_sidecar_xml(asset: models.Asset) -> str:
-    rating_value = max(0, min(int(asset.rating or 0), 5))
-    pick_value = _pick_label_value(asset)
-    color_value = _color_value(asset)
+def _render_sidecar_xml(state: models.MetadataState) -> str:
+    rating_value = max(0, min(int(state.rating or 0), 5))
+    pick_value = _pick_label_value(state)
+    color_value = _color_value(state)
 
     entries: list[str] = []
     if rating_value:
@@ -87,21 +93,21 @@ def _render_sidecar_xml(asset: models.Asset) -> str:
     ).strip()
 
 
-def _write_with_exiftool(path: Path, asset: models.Asset, *, sidecar: Path | None) -> bool:
+def _write_with_exiftool(path: Path, state: models.MetadataState, *, sidecar: Path | None) -> bool:
     cmd = _get_exiftool_cmd() + ["-overwrite_original"]
     if sidecar is not None:
         cmd += ["-o", str(sidecar)]
 
-    rating_value = max(0, min(int(asset.rating or 0), 5))
+    rating_value = max(0, min(int(state.rating or 0), 5))
     cmd.append(f"-XMP:Rating={rating_value}")
 
-    color_value = _color_value(asset)
+    color_value = _color_value(state)
     if color_value:
         cmd.append(f"-XMP:Label={color_value}")
     else:
         cmd.append("-XMP:Label=")
 
-    pick_value = _pick_label_value(asset)
+    pick_value = _pick_label_value(state)
     if pick_value is not None:
         cmd.append(f"-XMP:PickLabel={pick_value}")
     else:
@@ -114,45 +120,45 @@ def _write_with_exiftool(path: Path, asset: models.Asset, *, sidecar: Path | Non
         run(cmd, check=True, capture_output=True)
         return True
     except FileNotFoundError:
-        logger.warning("annotations: exiftool missing for asset=%s path=%s", asset.id, path)
+        logger.warning("annotations: exiftool missing path=%s", path)
         return False
     except CalledProcessError as exc:  # pragma: no cover - best effort logging
-        logger.warning("annotations: exiftool failed asset=%s path=%s error=%s", asset.id, path, exc)
+        logger.warning("annotations: exiftool failed path=%s error=%s", path, exc)
         return False
 
 
-def _write_sidecar(path: Path, asset: models.Asset, *, explicit_path: Path | None = None) -> None:
+def _write_sidecar(path: Path, state: models.MetadataState, *, explicit_path: Path | None = None) -> None:
     target = explicit_path or _sidecar_path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
-    xml = _render_sidecar_xml(asset)
+    xml = _render_sidecar_xml(state)
     target.write_text(xml, encoding="utf-8")
 
 
-def _write_annotations_sync(path: Path, asset: models.Asset) -> None:
+def _write_annotations_sync(path: Path, asset: models.Asset, state: models.MetadataState) -> None:
     prefer_sidecar = _should_use_sidecar(path)
     sidecar_target = _sidecar_path(path) if prefer_sidecar else None
 
     if not prefer_sidecar:
-        wrote = _write_with_exiftool(path, asset, sidecar=None)
+        wrote = _write_with_exiftool(path, state, sidecar=None)
         if wrote:
             return
         logger.info("annotations: falling back to sidecar for asset=%s", asset.id)
-        _write_sidecar(path, asset, explicit_path=sidecar_target)
+        _write_sidecar(path, state, explicit_path=sidecar_target)
         return
 
     # sidecar preferred
-    if _write_with_exiftool(path, asset, sidecar=sidecar_target):
+    if _write_with_exiftool(path, state, sidecar=sidecar_target):
         return
-    _write_sidecar(path, asset, explicit_path=sidecar_target)
+    _write_sidecar(path, state, explicit_path=sidecar_target)
 
 
-async def write_annotations_for_assets(assets: Sequence[models.Asset]) -> None:
-    if not assets:
+async def write_annotations_for_assets(items: Sequence[tuple[models.Asset, models.MetadataState]]) -> None:
+    if not items:
         return
     storage = PosixStorage.from_env()
     processed: set[UUID] = set()
     tasks: list[asyncio.Task[None]] = []
-    for asset in assets:
+    for asset, state in items:
         if asset.id in processed:
             continue
         processed.add(asset.id)
@@ -160,7 +166,7 @@ async def write_annotations_for_assets(assets: Sequence[models.Asset]) -> None:
         if not path:
             logger.warning("annotations: missing source path for asset=%s", asset.id)
             continue
-        tasks.append(asyncio.to_thread(_write_annotations_sync, path, asset))
+        tasks.append(asyncio.to_thread(_write_annotations_sync, path, asset, state))
 
     if tasks:
         await asyncio.gather(*tasks, return_exceptions=True)

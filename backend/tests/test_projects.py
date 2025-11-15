@@ -138,13 +138,16 @@ async def test_delete_project_keep_assets(client, TestSessionLocal):
             mime="image/jpeg",
             size_bytes=123,
             status=models.AssetStatus.READY,
-            storage_key=str(original_path),
+            storage_uri=str(original_path),
             sha256=sha,
             reference_count=1,
         )
         session.add(asset)
         await session.flush()
-        session.add(models.ProjectAsset(project_id=uuid.UUID(proj_id), asset_id=asset.id, is_preview=True, preview_order=0))
+        link = models.ProjectAsset(project_id=uuid.UUID(proj_id), asset_id=asset.id, is_preview=True, preview_order=0)
+        session.add(link)
+        await session.flush()
+        session.add(models.MetadataState(link_id=link.id))
         await session.commit()
         asset_id = asset.id
 
@@ -194,13 +197,16 @@ async def test_delete_project_remove_assets(client, TestSessionLocal):
             mime="image/jpeg",
             size_bytes=321,
             status=models.AssetStatus.READY,
-            storage_key=str(original_path),
+            storage_uri=str(original_path),
             sha256=sha,
             reference_count=1,
         )
         session.add(asset)
         await session.flush()
-        session.add(models.ProjectAsset(project_id=uuid.UUID(proj_id), asset_id=asset.id, is_preview=False, preview_order=None))
+        link = models.ProjectAsset(project_id=uuid.UUID(proj_id), asset_id=asset.id, is_preview=False, preview_order=None)
+        session.add(link)
+        await session.flush()
+        session.add(models.MetadataState(link_id=link.id))
         await session.commit()
         asset_id = asset.id
 

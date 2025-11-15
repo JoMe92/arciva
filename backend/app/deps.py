@@ -12,7 +12,8 @@ class Settings(BaseSettings):
     app_env: str = "dev"
     secret_key: str = "changeme"
 
-    allowed_origins: List[str] = ["http://localhost:5173"]
+    # Default to both localhost and loopback since browsers treat them as different origins.
+    allowed_origins: List[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
 
     database_url: str
     redis_url: str = "redis://127.0.0.1:6379/0"

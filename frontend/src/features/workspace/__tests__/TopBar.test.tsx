@@ -22,7 +22,7 @@ const createFilterControls = (): WorkspaceFilterControls => ({
 })
 
 describe('TopBar layout', () => {
-  it('keeps the status slot width stable', () => {
+  it('keeps the size control width stable across view modes', () => {
     Object.defineProperty(window, 'matchMedia', {
       writable: true,
       value: vi.fn().mockImplementation((query) => ({
@@ -36,37 +36,38 @@ describe('TopBar layout', () => {
       })),
     })
 
-    render(
+    const baseProps = {
+      projectName: 'Test Project',
+      onBack: vi.fn(),
+      onRename: vi.fn(),
+      renamePending: false,
+      renameError: null,
+      onChangeView: vi.fn(),
+      gridSize: 160,
+      minGridSize: 120,
+      onGridSizeChange: vi.fn(),
+      filters: createFilterControls(),
+      filterCount: 0,
+      onResetFilters: vi.fn(),
+      stackPairsEnabled: false,
+      onToggleStackPairs: vi.fn(),
+      stackTogglePending: false,
+    } as const
+
+    const { rerender } = render(
       <ThemeProvider>
-        <TopBar
-          projectName="Test Project"
-          onBack={vi.fn()}
-          onRename={vi.fn()}
-          renamePending={false}
-          renameError={null}
-          view="grid"
-          onChangeView={vi.fn()}
-          gridSize={160}
-          minGridSize={120}
-          onGridSizeChange={vi.fn()}
-          filters={createFilterControls()}
-          filterCount={0}
-          onResetFilters={vi.fn()}
-          visibleCount={12}
-          stackPairsEnabled={false}
-          onToggleStackPairs={vi.fn()}
-          stackTogglePending={false}
-          selectedDayLabel="2024-07-22"
-          loadingAssets={false}
-          loadError={null}
-        />
+        <TopBar {...baseProps} view="grid" />
       </ThemeProvider>,
     )
+    const sizeControl = screen.getByTestId('top-bar-size-control')
+    expect(sizeControl).toHaveStyle({ width: '200px' })
 
-    const slot = screen.getByTestId('top-bar-status-slot')
-    expect(slot).toHaveStyle({
-      minWidth: '200px',
-      maxWidth: '220px',
-    })
+    rerender(
+        <ThemeProvider>
+          <TopBar {...baseProps} view="detail" />
+        </ThemeProvider>,
+      )
+    expect(sizeControl).toHaveStyle({ width: '200px' })
+    expect(sizeControl).toHaveTextContent('Unavailable in detail view')
   })
 })

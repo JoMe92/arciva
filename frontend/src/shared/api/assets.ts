@@ -13,6 +13,7 @@ export type ColorLabelValue = 'None' | 'Red' | 'Green' | 'Blue' | 'Yellow' | 'Pu
 
 export type AssetListItem = {
   id: string
+  link_id: string
   status: AssetStatus
   thumb_url?: string | null
   preview_url?: string | null
@@ -38,6 +39,8 @@ export type AssetListItem = {
   color_label?: ColorLabelValue
   picked?: boolean
   rejected?: boolean
+  metadata_state_id?: string | null
+  metadata_source_project_id?: string | null
 }
 
 export type AssetDerivative = {
@@ -56,7 +59,7 @@ export type AssetDetail = {
   width?: number | null
   height?: number | null
   taken_at?: string | null
-  storage_key?: string | null
+  storage_uri?: string | null
   sha256?: string | null
   reference_count: number
   queued_at?: string | null
@@ -72,6 +75,32 @@ export type AssetDetail = {
   color_label?: ColorLabelValue
   picked?: boolean
   rejected?: boolean
+  metadata_state?: MetadataState | null
+  format?: string | null
+  pixel_format?: string | null
+  pixel_hash?: string | null
+  projects?: AssetProjectUsage[] | null
+}
+
+export type MetadataState = {
+  id: string
+  link_id: string
+  project_id: string
+  rating: number
+  color_label: ColorLabelValue
+  picked: boolean
+  rejected: boolean
+  edits?: Record<string, unknown> | null
+  source_project_id?: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type AssetProjectUsage = {
+  project_id: string
+  name: string
+  cover_thumb?: string | null
+  last_modified?: string | null
 }
 
 type LinkResponse = {
@@ -103,12 +132,22 @@ export async function listProjectAssets(projectId: string): Promise<AssetListIte
   return (await res.json()) as AssetListItem[]
 }
 
-export async function linkAssetsToProject(projectId: string, assetIds: string[]): Promise<LinkResponse> {
+export async function linkAssetsToProject(
+  projectId: string,
+  payload: { assetIds: string[]; inheritance?: Record<string, string | null | undefined> },
+): Promise<LinkResponse> {
+  const body: Record<string, unknown> = { asset_ids: payload.assetIds }
+  if (payload.inheritance) {
+    const entries = Object.entries(payload.inheritance).filter(([, value]) => typeof value === 'string' && value)
+    if (entries.length) {
+      body.inheritance = Object.fromEntries(entries)
+    }
+  }
   const res = await fetch(withBase(`/v1/projects/${projectId}/assets:link`)!, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
-    body: JSON.stringify({ asset_ids: assetIds }),
+    body: JSON.stringify(body),
   })
   if (!res.ok) {
     throw new Error(await res.text())
@@ -116,8 +155,9 @@ export async function linkAssetsToProject(projectId: string, assetIds: string[])
   return (await res.json()) as LinkResponse
 }
 
-export async function getAsset(assetId: string): Promise<AssetDetail> {
-  const res = await fetch(withBase(`/v1/assets/${assetId}`)!, {
+export async function getAsset(assetId: string, options: { projectId?: string } = {}): Promise<AssetDetail> {
+  const query = options.projectId ? `?project_id=${encodeURIComponent(options.projectId)}` : ''
+  const res = await fetch(withBase(`/v1/assets/${assetId}${query}`)!, {
     credentials: 'include',
   })
   if (!res.ok) {
@@ -169,4 +209,41 @@ export async function updateAssetInteractions(
     throw new Error(await res.text())
   }
   return (await res.json()) as AssetInteractionUpdateResponse
+}
+
+export async function listAssetProjects(assetId: string): Promise<AssetProjectUsage[]> {
+  const res = await fetch(withBase(`/imagehub/asset/${assetId}/projects`)!, {
+    credentials: 'include',
+  })
+  if (!res.ok) {
+    throw new Error(await res.text())
+  }
+  return (await res.json()) as AssetProjectUsage[]
+}
+
+export type LoadMetadataFromProjectPayload = {
+  assetId: string
+  sourceProjectId: string
+  targetProjectId: string
+}
+
+export type LoadMetadataFromProjectResponse = {
+  asset: AssetListItem
+  metadata_state: MetadataState
+}
+
+export async function loadMetadataFromProject(payload: LoadMetadataFromProjectPayload): Promise<LoadMetadataFromProjectResponse> {
+  const res = await fetch(withBase(`/imagehub/asset/${payload.assetId}/load-metadata`)!, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({
+      source_project_id: payload.sourceProjectId,
+      target_project_id: payload.targetProjectId,
+    }),
+  })
+  if (!res.ok) {
+    throw new Error(await res.text())
+  }
+  return (await res.json()) as LoadMetadataFromProjectResponse
 }

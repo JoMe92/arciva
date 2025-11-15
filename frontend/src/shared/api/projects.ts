@@ -2,6 +2,7 @@ export type ProjectCreatePayload = {
   title: string
   client?: string
   note?: string
+  tags?: string[]
 }
 
 export type ProjectApiResponse = {
@@ -9,10 +10,12 @@ export type ProjectApiResponse = {
   title: string
   client: string | null
   note: string | null
+  tags?: string[] | null
   asset_count: number
   created_at: string
   updated_at: string
   preview_images: ProjectPreviewImageApi[]
+  stack_pairs_enabled?: boolean
 }
 
 export type ProjectPreviewImageApi = {
@@ -27,6 +30,8 @@ export type ProjectUpdatePayload = {
   title?: string
   client?: string | null
   note?: string | null
+  tags?: string[]
+  stack_pairs_enabled?: boolean
 }
 
 function getBaseUrl() {

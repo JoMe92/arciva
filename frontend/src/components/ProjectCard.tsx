@@ -176,6 +176,12 @@ const ProjectCard: React.FC<{
     setHovered(false)
   }
 
+  const tags = React.useMemo(() => {
+    if (!Array.isArray(p.tags)) return []
+    return p.tags.map((tag) => tag.trim()).filter((tag) => Boolean(tag.length))
+  }, [p.tags])
+  const hasTags = tags.length > 0
+
   return (
     <div className="relative">
       {/* Bildbereich: nur Navigation/Preview */}
@@ -263,6 +269,23 @@ const ProjectCard: React.FC<{
 
       {/* white footer at the bottom */}
       <div className="rounded-b-xl border border-[var(--border,#E1D3B9)] border-t-0 bg-[var(--surface,#FFFFFF)] px-1.5 sm:px-2 md:px-3 pt-2 pb-3">
+        {hasTags && (
+          <div className="mb-2">
+            <div className="project-card-tags rounded-xl border border-[var(--border,#E1D3B9)]/80 bg-[var(--surface-subtle,#FBF7EF)] px-2 py-1.5 min-h-[52px]">
+              <div className="tag-strip flex flex-nowrap gap-1.5 text-[11px] text-[var(--text-muted,#6B645B)]" role="list" aria-label="Project tags">
+                {tags.map((tag, index) => (
+                  <span
+                    key={`${tag}-${index}`}
+                    className="project-card-tag-pill inline-flex shrink-0 items-center rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-2 py-0.5 text-[11px] leading-tight"
+                    role="listitem"
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
         <div className="flex items-start justify-between gap-3">
           <div>
             <div className="text-[13px] font-medium tracking-tight text-[var(--text,#1F1E1B)]">{p.title}</div>

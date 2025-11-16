@@ -12,6 +12,7 @@ export interface ProjectFieldsProps {
   newTag: string;
   setNewTag: (v: string) => void;
   existingTags: string[];
+  titleError?: string | null;
 }
 
 /**
@@ -31,6 +32,7 @@ const ProjectFields: React.FC<ProjectFieldsProps> = ({
   newTag,
   setNewTag,
   existingTags,
+  titleError,
 }) => {
   const toggleTag = (t: string) => {
     setSelTags(selTags.includes(t) ? selTags.filter(x => x !== t) : [...selTags, t]);
@@ -49,80 +51,100 @@ const ProjectFields: React.FC<ProjectFieldsProps> = ({
   };
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <label className="block text-xs text-[var(--text-muted,#6B645B)] md:col-span-2">
-        Project name
-        <input
-          value={title}
-          onChange={e => setTitle(e.target.value)}
-          className="mt-1 w-full rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 py-2 text-sm"
-          placeholder="Untitled project"
-        />
-      </label>
-      <label className="block text-xs text-[var(--text-muted,#6B645B)] md:col-span-2">
-        Description (optional)
-        <input
-          value={desc}
-          onChange={e => setDesc(e.target.value)}
-          className="mt-1 w-full rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 py-2 text-sm"
-          placeholder="Short note"
-        />
-      </label>
-      <label className="block text-xs text-[var(--text-muted,#6B645B)]">
-        Client
-        <input
-          value={client}
-          onChange={e => setClient(e.target.value)}
-          className="mt-1 w-full rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 py-2 text-sm"
-          placeholder="Client name"
-        />
-      </label>
-      <div className="text-xs text-[var(--text-muted,#6B645B)]">
-        <div className="mb-1">Tags</div>
-        <div className="aspect-square rounded-xl border border-[var(--border,#E1D3B9)] p-2 overflow-auto">
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            {existingTags.map(t => (
-              <button
-                key={t}
-                onClick={() => toggleTag(t)}
-                className={`px-2 py-1 rounded-full text-[11px] border ${
-                  selTags.includes(t)
-                    ? 'bg-[var(--primary,#A56A4A)] text-[var(--primary-contrast,#FFFFFF)] border-[var(--primary,#A56A4A)]'
-                    : 'border-[var(--border,#E1D3B9)] text-[var(--text-muted,#6B645B)] hover:border-[var(--text-muted,#6B645B)]'
-                }`}
-              >
-                {t}
-              </button>
-            ))}
-          </div>
+    <div className="space-y-8">
+      <section>
+        <header className="mb-3">
+          <p className="text-[12px] font-medium uppercase tracking-wide text-[var(--text-muted,#6B645B)]">Project details</p>
+        </header>
+        <div className="space-y-4">
+          <label className="block text-[13px] font-medium text-[var(--text,#1F1E1B)]">
+            Project name
+            <input
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+              required
+              autoFocus
+              className={`mt-1 w-full rounded-2xl border bg-[var(--surface,#FFFFFF)] px-4 py-3 text-[14px] outline-none transition-colors ${
+                titleError ? 'border-red-300 focus-visible:border-red-400 focus-visible:ring-1 focus-visible:ring-red-200' : 'border-[var(--border,#E1D3B9)] focus-visible:border-[var(--text,#1F1E1B)] focus-visible:ring-1 focus-visible:ring-[var(--text-muted,#6B645B)]/30'
+              }`}
+              placeholder="Project name"
+            />
+          </label>
+          {titleError && <p className="text-[12px] text-red-600">{titleError}</p>}
+          <label className="block text-[13px] font-medium text-[var(--text,#1F1E1B)]">
+            Description <span className="text-[var(--text-muted,#6B645B)] font-normal">(optional)</span>
+            <textarea
+              value={desc}
+              onChange={e => setDesc(e.target.value)}
+              rows={3}
+              className="mt-1 w-full resize-none rounded-2xl border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-4 py-3 text-[14px] outline-none focus-visible:border-[var(--text,#1F1E1B)] focus-visible:ring-1 focus-visible:ring-[var(--text-muted,#6B645B)]/30"
+              placeholder="What makes this project special?"
+            />
+          </label>
+          <label className="block text-[13px] font-medium text-[var(--text,#1F1E1B)]">
+            Client
+            <input
+              value={client}
+              onChange={e => setClient(e.target.value)}
+              className="mt-1 w-full rounded-2xl border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-4 py-3 text-[14px] outline-none focus-visible:border-[var(--text,#1F1E1B)] focus-visible:ring-1 focus-visible:ring-[var(--text-muted,#6B645B)]/30"
+              placeholder="Client name"
+            />
+          </label>
         </div>
-        <div className="mt-2 flex items-center gap-2">
-          <input
-            value={newTag}
-            onChange={e => setNewTag(e.target.value)}
-            onKeyDown={e => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                addTag();
-              }
-            }}
-            placeholder="Add new tag"
-            className="h-8 flex-1 rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 text-[12px] outline-none"
-          />
-          <button onClick={addTag} className="h-8 px-3 rounded-full border border-[var(--border,#E1D3B9)] text-[12px]">
+      </section>
+
+      <section>
+        <header className="mb-3">
+          <p className="text-[12px] font-medium uppercase tracking-wide text-[var(--text-muted,#6B645B)]">Tags</p>
+          <p className="text-[12px] text-[var(--text-muted,#6B645B)]">Add tags to categorize and find this project faster.</p>
+        </header>
+        <div className="rounded-2xl border border-[var(--border,#E1D3B9)] bg-[var(--surface-subtle,#FBF7EF)] p-3">
+          {existingTags.length ? (
+            <div className="flex flex-wrap gap-2">
+              {existingTags.map(t => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => toggleTag(t)}
+                  className={`rounded-full border px-3 py-1 text-[12px] font-medium transition-colors ${
+                    selTags.includes(t)
+                      ? 'border-[var(--primary,#A56A4A)] bg-[var(--primary,#A56A4A)] text-[var(--primary-contrast,#FFFFFF)]'
+                      : 'border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] text-[var(--text-muted,#6B645B)] hover:border-[var(--text,#1F1E1B)]'
+                  }`}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="text-[12px] text-[var(--text-muted,#6B645B)]">No tags yet.</p>
+          )}
+        </div>
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+          <label className="flex-1 text-[12px] font-medium text-[var(--text,#1F1E1B)] sm:font-normal">
+            <span className="sr-only">New tag</span>
+            <input
+              value={newTag}
+              onChange={e => setNewTag(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  addTag();
+                }
+              }}
+              placeholder="Add new tag"
+              className="h-10 w-full rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-4 text-[13px] outline-none focus-visible:border-[var(--text,#1F1E1B)] focus-visible:ring-1 focus-visible:ring-[var(--text-muted,#6B645B)]/30"
+            />
+          </label>
+          <button
+            type="button"
+            onClick={addTag}
+            className="h-10 rounded-full border border-[var(--border,#E1D3B9)] px-4 text-[12px] font-medium text-[var(--text,#1F1E1B)] hover:border-[var(--text,#1F1E1B)]"
+          >
             Add
           </button>
         </div>
-        {selTags.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-1">
-            {selTags.map(t => (
-              <span key={t} className="px-2 py-0.5 rounded-full bg-[var(--sand-500,#D7C5A6)] text-[11px]">
-                {t}
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
+      </section>
     </div>
   );
 };

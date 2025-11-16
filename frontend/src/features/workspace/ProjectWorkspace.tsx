@@ -35,12 +35,13 @@ import {
   type DateTreeMonthNode,
   type DateTreeDayNode,
   type GridSelectOptions,
+  CURRENT_CONFIG_SOURCE_ID,
+  type MetadataSourceId,
 } from './components'
 import ImageHubImportPane from './ImageHubImportPane'
 import ErrorBoundary from '../../components/ErrorBoundary'
 import { fetchImageHubAssetStatus, type ImageHubAssetStatus } from '../../shared/api/hub'
 import { getImageHubSettings } from '../../shared/api/settings'
-import ModalShell from '../../components/modals/ModalShell'
 import ExportDialog from './ExportDialog'
 
 const LEFT_MIN_WIDTH = 300
@@ -493,7 +494,6 @@ export default function ProjectWorkspace() {
   const selectionAnchorRef = useRef<string | null>(null)
   const suppressSelectionSyncRef = useRef(false)
   const [exportDialogOpen, setExportDialogOpen] = useState(false)
-  const [metadataSourceCandidate, setMetadataSourceCandidate] = useState<{ id: string; name: string } | null>(null)
   const resolveActionTargetIds = useCallback((primaryId: string | null) => {
     if (primaryId && selectedPhotoIds.has(primaryId)) {
       return new Set(selectedPhotoIds)
@@ -615,7 +615,6 @@ export default function ProjectWorkspace() {
       }
       queryClient.invalidateQueries({ queryKey: ['asset-detail', variables.assetId, projectId] })
       queryClient.invalidateQueries({ queryKey: ['asset-projects', variables.assetId] })
-      setMetadataSourceCandidate(null)
     },
     onError: (error) => {
       console.error('Failed to adopt metadata from source project', error)
@@ -1326,19 +1325,13 @@ export default function ProjectWorkspace() {
     staleTime: 1000 * 60 * 5,
   })
   const metadataSyncPending = metadataSyncMutation.isPending
-  const handleMetadataSourceRequest = useCallback((sourceProjectId: string, sourceProjectName: string) => {
-    metadataSyncMutation.reset()
-    setMetadataSourceCandidate({ id: sourceProjectId, name: sourceProjectName })
-  }, [metadataSyncMutation])
-  const handleConfirmMetadataCopy = useCallback(() => {
-    if (!metadataSourceCandidate || !currentAssetId) return
-    metadataSyncMutation.mutate({ assetId: currentAssetId, sourceProjectId: metadataSourceCandidate.id })
-  }, [metadataSourceCandidate, currentAssetId, metadataSyncMutation])
-  const handleCancelMetadataCopy = useCallback(() => {
-    if (metadataSyncPending) return
-    metadataSyncMutation.reset()
-    setMetadataSourceCandidate(null)
-  }, [metadataSyncPending, metadataSyncMutation])
+  const handleMetadataSourceChange = useCallback((nextId: MetadataSourceId) => {
+    if (!currentAssetId) return
+    if (nextId === CURRENT_CONFIG_SOURCE_ID) {
+      return
+    }
+    metadataSyncMutation.mutate({ assetId: currentAssetId, sourceProjectId: nextId })
+  }, [currentAssetId, metadataSyncMutation])
   const metadataEntries = useMemo(() => {
     if (!currentAssetDetail?.metadata) return []
     return Object.entries(currentAssetDetail.metadata)
@@ -1398,6 +1391,7 @@ export default function ProjectWorkspace() {
     }
   }, [currentPhoto, currentAssetDetail?.metadata_state?.edits])
   const metadataSourceProjectId = currentPhoto?.metadataSourceProjectId ?? currentAssetDetail?.metadata_state?.source_project_id ?? null
+  const metadataSourceId: MetadataSourceId = metadataSourceProjectId ?? CURRENT_CONFIG_SOURCE_ID
   const projectOverview = useMemo(() => {
     if (!projectDetail) return null
     return {
@@ -1412,20 +1406,30 @@ export default function ProjectWorkspace() {
   const usedProjects = useMemo(() => {
     const source = assetProjects ?? currentAssetDetail?.projects ?? []
     if (!Array.isArray(source)) return []
+    const formatLabel = (label?: string | null, timestamp?: string | null) => {
+      if (label?.trim()) return label
+      if (!timestamp) return 'Last updated —'
+      const parsed = new Date(timestamp)
+      if (Number.isNaN(parsed.getTime())) return 'Last updated —'
+      return `Last updated ${parsed.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`
+    }
     return source
-      .map((proj) => ({
-        id: proj.project_id,
-        name: proj.name,
-        coverThumb: proj.cover_thumb ?? null,
-        lastModified: proj.last_modified ?? null,
-        isCurrent: Boolean(projectId && proj.project_id === projectId),
-      }))
-      .sort((a, b) => {
-        if (a.isCurrent !== b.isCurrent) return a.isCurrent ? -1 : 1
-        const aTs = a.lastModified ? new Date(a.lastModified).getTime() : 0
-        const bTs = b.lastModified ? new Date(b.lastModified).getTime() : 0
-        return bTs - aTs
+      .map((proj) => {
+        const lastModified = proj.last_modified ?? null
+        return {
+          id: proj.project_id,
+          name: proj.name,
+          previewImageUrl: proj.preview_image_url ?? proj.cover_thumb ?? null,
+          lastUpdatedLabel: formatLabel(proj.last_updated_label, lastModified),
+          isCurrentProject: Boolean(projectId && proj.project_id === projectId),
+          __sortValue: lastModified ? new Date(lastModified).getTime() : 0,
+        }
       })
+      .sort((a, b) => {
+        if (a.isCurrentProject !== b.isCurrentProject) return a.isCurrentProject ? -1 : 1
+        return b.__sortValue - a.__sortValue
+      })
+      .map(({ __sortValue, ...project }) => project)
   }, [assetProjects, currentAssetDetail?.projects, projectId])
   const usedProjectsErrorMessage = useMemo(() => {
     if (!assetProjectsError) return null
@@ -1434,7 +1438,7 @@ export default function ProjectWorkspace() {
     return 'Unable to load project usage'
   }, [assetProjectsError])
   const metadataSyncError = (metadataSyncMutation as { error?: unknown }).error
-  const metadataCopyErrorMessage = useMemo(() => {
+  const metadataSourceActionError = useMemo(() => {
     if (!metadataSyncError) return null
     if (metadataSyncError instanceof Error) return metadataSyncError.message
     if (typeof metadataSyncError === 'string') return metadataSyncError
@@ -1553,6 +1557,13 @@ export default function ProjectWorkspace() {
       >
         <Sidebar
           dateTree={dateTree}
+          projectOverview={projectOverview}
+          onRenameProject={handleRename}
+          renamePending={renameMutation.isPending}
+          renameError={renameErrorMessage}
+          onProjectOverviewChange={handleProjectInfoChange}
+          projectOverviewPending={projectInfoMutation.isPending}
+          projectOverviewError={projectInfoErrorMessage}
           onOpenImport={() => setImportOpen(true)}
           onSelectDay={handleDaySelect}
           selectedDayKey={selectedDayKey}
@@ -1571,7 +1582,7 @@ export default function ProjectWorkspace() {
           aria-valuemax={LEFT_MAX_WIDTH}
           aria-valuenow={leftPanelCollapsed ? LEFT_COLLAPSED_WIDTH : leftPanelWidth}
           aria-valuetext={leftPanelCollapsed ? 'Collapsed' : `${Math.round(leftPanelWidth)} pixels`}
-          aria-label="Resize Import panel"
+          aria-label="Resize Project Overview panel"
           tabIndex={0}
           className="group flex h-full w-full cursor-col-resize items-center justify-center border-x border-[var(--border,#EDE1C6)] bg-[var(--sand-50,#FBF7EF)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)]"
           onPointerDown={handleLeftHandlePointerDown}
@@ -1625,7 +1636,7 @@ export default function ProjectWorkspace() {
           aria-valuemax={RIGHT_MAX_WIDTH}
           aria-valuenow={rightPanelCollapsed ? RIGHT_COLLAPSED_WIDTH : rightPanelWidth}
           aria-valuetext={rightPanelCollapsed ? 'Collapsed' : `${Math.round(rightPanelWidth)} pixels`}
-          aria-label="Resize Inspector panel"
+          aria-label="Resize Image Details panel"
           tabIndex={0}
           className="group flex h-full w-full cursor-col-resize items-center justify-center border-x border-[var(--border,#EDE1C6)] bg-[var(--sand-50,#FBF7EF)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)]"
           onPointerDown={handleRightHandlePointerDown}
@@ -1639,20 +1650,14 @@ export default function ProjectWorkspace() {
           collapsed={rightPanelCollapsed}
           onCollapse={() => setRightPanelCollapsed(true)}
           onExpand={() => setRightPanelCollapsed(false)}
-          projectOverview={projectOverview}
-          onRenameProject={handleRename}
-          renamePending={renameMutation.isPending}
-          renameError={renameErrorMessage}
-          onProjectOverviewChange={handleProjectInfoChange}
-          projectOverviewPending={projectInfoMutation.isPending}
-          projectOverviewError={projectInfoErrorMessage}
           hasSelection={Boolean(currentPhoto)}
           usedProjects={usedProjects}
           usedProjectsLoading={assetProjectsLoading}
           usedProjectsError={usedProjectsErrorMessage}
-          metadataSourceProjectId={metadataSourceProjectId}
-          onSelectMetadataSource={handleMetadataSourceRequest}
-          metadataCopyBusy={metadataSyncPending}
+          metadataSourceId={metadataSourceId}
+          onChangeMetadataSource={handleMetadataSourceChange}
+          metadataSourceBusy={metadataSyncPending}
+          metadataSourceError={metadataSourceActionError}
           keyMetadataSections={{ general: generalInspectorFields, capture: captureInspectorFields }}
           metadataSummary={metadataSummary}
           metadataEntries={metadataEntries}
@@ -1661,16 +1666,6 @@ export default function ProjectWorkspace() {
           metadataError={metadataErrorMessage}
         />
       </div>
-
-      {metadataSourceCandidate ? (
-        <MetadataCopyConfirmModal
-          projectName={metadataSourceCandidate.name}
-          pending={metadataSyncPending}
-          error={metadataCopyErrorMessage}
-          onCancel={handleCancelMetadataCopy}
-          onConfirm={handleConfirmMetadataCopy}
-        />
-      ) : null}
 
       {importOpen && (
         <ErrorBoundary fallback={(
@@ -1699,29 +1694,6 @@ export default function ProjectWorkspace() {
       )}
       <ExportDialog isOpen={exportDialogOpen} photos={selectedPhotos} projectId={projectId ?? null} onClose={() => setExportDialogOpen(false)} />
     </div>
-  )
-}
-
-type MetadataCopyConfirmModalProps = {
-  projectName: string
-  pending: boolean
-  error: string | null
-  onCancel: () => void
-  onConfirm: () => void
-}
-
-function MetadataCopyConfirmModal({ projectName, pending, error, onCancel, onConfirm }: MetadataCopyConfirmModalProps) {
-  return (
-    <ModalShell title="Replace metadata?" onClose={onCancel} onPrimary={onConfirm} primaryLabel="Replace" primaryDisabled={pending}>
-      <p className="text-sm text-[var(--text,#1F1E1B)]">
-        Replace current metadata with values from project <span className="font-semibold">{projectName}</span>?
-      </p>
-      <p className="mt-2 text-xs text-[var(--text-muted,#6B645B)]">Rating, color label, pick/reject, and edits will be overwritten in this project.</p>
-      {error ? (
-        <p className="mt-3 rounded-md border border-[#F97066] bg-[#FEF3F2] px-3 py-2 text-[12px] text-[#B42318]">{error}</p>
-      ) : null}
-      {pending ? <p className="mt-3 text-[11px] text-[var(--text-muted,#6B645B)]">Replacing metadata…</p> : null}
-    </ModalShell>
   )
 }
 

@@ -507,13 +507,22 @@ export function ExportDialog({ isOpen, photos, projectId, onClose }: ExportDialo
                   type="button"
                   disabled={!canExport}
                   onClick={handleExport}
-                  className={`inline-flex h-10 items-center rounded-full px-5 text-sm font-semibold ${
-                    !canExport
-                      ? 'cursor-not-allowed border border-[var(--border,#E1D3B9)] text-[var(--text-muted,#6B645B)]'
-                      : 'bg-[var(--charcoal-800,#1F1E1B)] text-white shadow-lg'
+                  className={`inline-flex h-10 items-center justify-center rounded-full border border-[var(--border,#E1D3B9)] px-4 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--stone-trail-brand-focus,#4A463F)] ${
+                    canExport
+                      ? 'bg-[var(--sand-100,#F3EBDD)] text-[var(--text,#1F1E1B)]'
+                      : 'bg-[var(--surface,#FFFFFF)] text-[var(--text-muted,#6B645B)] cursor-not-allowed opacity-60'
                   }`}
                 >
-                  Export {totalSelected} photo{totalSelected === 1 ? '' : 's'}
+                  {canExport ? (
+                    <>
+                      <span className="text-base" aria-hidden="true">
+                        ⇣
+                      </span>
+                      <span>Export images</span>
+                    </>
+                  ) : (
+                    <span>Export images</span>
+                  )}
                 </button>
               </div>
             </footer>

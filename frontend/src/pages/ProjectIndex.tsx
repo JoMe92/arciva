@@ -6,7 +6,7 @@ import StoneTrailLogo from '../components/StoneTrailLogo'
 import { useTheme } from '../shared/theme'
 import Splash from '../components/Splash'
 import { Project } from '../features/projects/types'
-import { unique } from '../features/projects/utils'
+import { unique, projectFromApi } from '../features/projects/utils'
 import { PROJECTS } from '../features/projects/data'
 import { useArchive } from '../features/projects/archive'
 import { useLastOpened } from '../features/projects/useLastOpened'
@@ -14,11 +14,14 @@ import ProjectGrid from '../components/ProjectGrid'
 import ProjectGridSkeleton from '../components/ProjectGridSkeleton'
 import StateHint from '../components/StateHint'
 import CreateModal from '../components/modals/CreateModal'
-import EditModal from '../components/modals/EditModal'
+import ProjectSettingsDialog from '../components/modals/ProjectSettingsDialog'
+import GeneralSettingsDialog from '../components/modals/GeneralSettingsDialog'
 import { createProject, deleteProject, listProjects, type ProjectApiResponse } from '../shared/api/projects'
 import { updateAssetPreview } from '../shared/api/assets'
-import { withBase } from '../shared/api/base'
 import DeleteModal from '../components/modals/DeleteModal'
+import ProjectSettingsButton from '../components/ProjectSettingsButton'
+import { useGeneralSettings } from '../shared/settings/general'
+import type { GeneralSettings } from '../shared/settings/general'
 
 const MONTHS = [
   'January',
@@ -35,8 +38,14 @@ const MONTHS = [
   'December',
 ]
 
-const AppBar: React.FC<{ onCreate: () => void; onToggleArchive: () => void; archiveMode: boolean }> = ({ onCreate, onToggleArchive, archiveMode }) => {
+const AppBar: React.FC<{
+  onCreate: () => void
+  onToggleArchive: () => void
+  archiveMode: boolean
+  onOpenSettings: () => void
+}> = ({ onCreate, onToggleArchive, archiveMode, onOpenSettings }) => {
   const { mode, toggle } = useTheme()
+
   return (
     <div className="sticky top-0 z-40 border-b border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]/90 backdrop-blur">
       <div className="mx-auto max-w-7xl px-4 py-2 flex items-center gap-3">
@@ -49,6 +58,7 @@ const AppBar: React.FC<{ onCreate: () => void; onToggleArchive: () => void; arch
             <span className="mr-1">＋</span> New project
             <kbd className="ml-2 hidden lg:inline text-[10px] text-[var(--text-muted,#6B645B)]">⌘/Ctrl+N</kbd>
           </button>
+          <ProjectSettingsButton onClick={onOpenSettings} label="Open application settings" title="Application settings" />
         </div>
       </div>
     </div>
@@ -347,6 +357,14 @@ export default function ProjectIndex() {
   const [archiveMode, setArchiveMode] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<Project | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const { settings: generalSettings, setSettings: setGeneralSettings } = useGeneralSettings()
+  const [generalSettingsOpen, setGeneralSettingsOpen] = useState(false)
+  const openGeneralSettings = useCallback(() => setGeneralSettingsOpen(true), [])
+  const closeGeneralSettings = useCallback(() => setGeneralSettingsOpen(false), [])
+  const handleGeneralSettingsSave = useCallback((nextSettings: GeneralSettings) => {
+    setGeneralSettings(nextSettings)
+    setGeneralSettingsOpen(false)
+  }, [setGeneralSettings])
 
   useEffect(() => { const t = setTimeout(() => setReady(true), 400); return () => clearTimeout(t) }, [])
 
@@ -360,49 +378,7 @@ export default function ProjectIndex() {
 
   const dynamicProjects = useMemo<Project[]>(() => {
     if (!apiProjects) return []
-    return apiProjects.map((proj) => {
-      const previewImages = (proj.preview_images || [])
-        .slice()
-        .sort((a, b) => a.order - b.order)
-        .map((img, idx) => {
-          const url = withBase(img.thumb_url)
-          if (!url) return null
-          return {
-            assetId: img.asset_id,
-            url,
-            order: idx,
-            width: img.width ?? null,
-            height: img.height ?? null,
-          }
-        })
-        .filter((img): img is NonNullable<typeof img> => Boolean(img))
-
-      const primaryPreview = previewImages[0]?.url ?? null
-
-      const derivedAspect = (() => {
-        const candidate = previewImages.find((img) => (img.width ?? 0) > 0 && (img.height ?? 0) > 0)
-        if (!candidate) return 'portrait' as Project['aspect']
-        const w = candidate.width ?? 0
-        const h = candidate.height ?? 0
-        if (w === h) return 'square'
-        return w > h ? 'landscape' : 'portrait'
-      })()
-
-      return {
-        id: proj.id,
-        title: proj.title,
-        client: proj.client ?? 'Unassigned',
-        note: proj.note,
-        aspect: derivedAspect,
-        image: primaryPreview,
-        previewImages,
-        tags: [],
-        assetCount: proj.asset_count,
-        createdAt: proj.created_at,
-        updatedAt: proj.updated_at,
-        source: 'api',
-      }
-    })
+    return apiProjects.map((proj) => projectFromApi(proj))
   }, [apiProjects])
 
   const baseProjects = useMemo(() => {
@@ -561,13 +537,19 @@ export default function ProjectIndex() {
     window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey)
   }, [openCreateModal])
 
-  const onOpen = (id: string) => { update(id); navigate(`/projects/${id}`) }
+  const onOpen = useCallback((id: string) => {
+    update(id)
+    navigate(`/projects/${id}`)
+  }, [navigate, update])
   const onArchive = (id: string) => archive(id)
   const onUnarchive = (id: string) => unarchive(id)
 
   const [editOpen, setEditOpen] = useState(false)
   const [editProject, setEditProject] = useState<Project | null>(null)
-  const openEditor = (p: Project) => { setEditProject(p); setEditOpen(true) }
+  const openEditor = useCallback((p: Project) => {
+    setEditProject(p)
+    setEditOpen(true)
+  }, [])
   const closeEditor = () => { setEditOpen(false) }
 
   // Apply edits locally so the grid reflects changes immediately.
@@ -637,7 +619,7 @@ export default function ProjectIndex() {
   return (
     <div className="min-h-screen bg-[var(--surface-subtle,#FBF7EF)]">
       <div className="sticky top-0 z-40">
-        <AppBar onCreate={openCreateModal} onToggleArchive={handleToggleArchive} archiveMode={archiveMode} />
+        <AppBar onCreate={openCreateModal} onToggleArchive={handleToggleArchive} archiveMode={archiveMode} onOpenSettings={openGeneralSettings} />
         <AnimatePresence>{!ready && <Splash />}</AnimatePresence>
       </div>
       <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-10">
@@ -695,7 +677,7 @@ export default function ProjectIndex() {
           />
         )}
 
-        <EditModal
+        <ProjectSettingsDialog
           open={editOpen}
           project={editProject}
           onClose={closeEditor}
@@ -724,6 +706,7 @@ export default function ProjectIndex() {
         busy={deleteMutation.isPending}
         error={deleteError}
       />
+      <GeneralSettingsDialog open={generalSettingsOpen} settings={generalSettings} onClose={closeGeneralSettings} onSave={handleGeneralSettingsSave} />
     </div>
   )
 }

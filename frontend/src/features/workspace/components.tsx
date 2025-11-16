@@ -1,10 +1,12 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { RawPlaceholder, RawPlaceholderFrame } from '../../components/RawPlaceholder'
+import ProjectSettingsButton from '../../components/ProjectSettingsButton'
 import StoneTrailLogo from '../../components/StoneTrailLogo'
 import { useTheme } from '../../shared/theme'
 import { TOKENS } from './utils'
 import type { Photo, ImgType, ColorTag } from './types'
+import SettingsIcon from '../../shared/icons/SettingsIcon'
 
 const COLOR_MAP: Record<ColorTag, string> = {
   None: '#E5E7EB',
@@ -162,6 +164,7 @@ export function TopBar({
   stackTogglePending,
   selectedCount,
   onOpenExport,
+  onOpenSettings,
 }: {
   projectName: string
   onBack: () => void
@@ -181,6 +184,7 @@ export function TopBar({
   stackTogglePending?: boolean
   selectedCount: number
   onOpenExport: () => void
+  onOpenSettings: () => void
 }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(projectName)
@@ -452,6 +456,7 @@ export function TopBar({
           </div>
         </div>
         <div className="flex min-w-0 items-center justify-end gap-3 px-4 sm:px-6 lg:px-8">
+          <ProjectSettingsButton onClick={onOpenSettings} label="Open application settings" title="Application settings" />
           <button
             type="button"
             ref={filtersButtonRef}
@@ -2264,14 +2269,6 @@ function CalendarClockIcon(props: React.SVGProps<SVGSVGElement>) {
   )
 }
 
-function SettingsIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <path d="m6.5 2.5 3 .01.4 1.6a4.6 4.6 0 0 1 1.2.7l1.56-.5 1.5 2.6-1.2 1a4.7 4.7 0 0 1 0 .8l1.2 1-1.5 2.6-1.56-.5a4.6 4.6 0 0 1-1.2.7l-.4 1.6-3 .01-.4-1.6a4.6 4.6 0 0 1-1.2-.7l-1.56.5-1.5-2.6 1.2-1a4.7 4.7 0 0 1 0-.8l-1.2-1 1.5-2.6 1.56.5a4.6 4.6 0 0 1 1.2-.7Z" />
-      <circle cx="8" cy="8" r="1.7" />
-    </svg>
-  )
-}
 function PlusIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" {...props}>

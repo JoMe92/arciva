@@ -1,4 +1,6 @@
 import type { Project } from './types'
+import type { ProjectApiResponse } from '../../shared/api/projects'
+import { withBase } from '../../shared/api/base'
 export { placeholderRatioForAspect } from '../../shared/placeholder'
 export type { PlaceholderRatio } from '../../shared/placeholder'
 
@@ -86,4 +88,56 @@ export function composeRows<T>(arr: T[]): T[][] {
     p++
   }
   return rows
+}
+
+/**
+ * Normalize an API response object into the richer Project shape used in the UI.
+ * Preview image ordering and aspect detection mirror the original dashboard logic.
+ */
+export function projectFromApi(proj: ProjectApiResponse): Project {
+  const previewImages = (proj.preview_images || [])
+    .slice()
+    .sort((a, b) => a.order - b.order)
+    .map((img, idx) => {
+      const url = withBase(img.thumb_url)
+      if (!url) return null
+      return {
+        assetId: img.asset_id,
+        url,
+        order: idx,
+        width: img.width ?? null,
+        height: img.height ?? null,
+      }
+    })
+    .filter((img): img is NonNullable<typeof img> => Boolean(img))
+
+  const primaryPreview = previewImages[0]?.url ?? null
+
+  const derivedAspect = (() => {
+    const candidate = previewImages.find((img) => (img.width ?? 0) > 0 && (img.height ?? 0) > 0)
+    if (!candidate) return 'portrait' as Project['aspect']
+    const w = candidate.width ?? 0
+    const h = candidate.height ?? 0
+    if (w === h) return 'square'
+    return w > h ? 'landscape' : 'portrait'
+  })()
+
+  const description = proj.note ?? undefined
+  const normalizedTags = Array.isArray(proj.tags) ? proj.tags.filter((tag): tag is string => typeof tag === 'string') : []
+
+  return {
+    id: proj.id,
+    title: proj.title,
+    client: proj.client ?? 'Unassigned',
+    note: proj.note,
+    blurb: description,
+    aspect: derivedAspect,
+    image: primaryPreview,
+    previewImages,
+    tags: normalizedTags,
+    assetCount: proj.asset_count,
+    createdAt: proj.created_at,
+    updatedAt: proj.updated_at,
+    source: 'api',
+  }
 }

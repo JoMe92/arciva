@@ -20,6 +20,21 @@ import { updateAssetPreview } from '../shared/api/assets'
 import { withBase } from '../shared/api/base'
 import DeleteModal from '../components/modals/DeleteModal'
 
+const MONTHS = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+]
+
 const AppBar: React.FC<{ onCreate: () => void; onToggleArchive: () => void; archiveMode: boolean }> = ({ onCreate, onToggleArchive, archiveMode }) => {
   const { mode, toggle } = useTheme()
   return (
@@ -41,73 +56,273 @@ const AppBar: React.FC<{ onCreate: () => void; onToggleArchive: () => void; arch
 }
 
 const FilterBar: React.FC<{
-  projects: Project[]; q: string; setQ: (s: string) => void; client: string; setClient: (s: string) => void; tags: string[]; setTags: (t: string[]) => void;
-}> = ({ projects, q, setQ, client, setClient, tags, setTags }) => {
+  projects: Project[]
+  q: string
+  setQ: (s: string) => void
+  client: string
+  setClient: (s: string) => void
+  year: string
+  setYear: (value: string) => void
+  month: string
+  setMonth: (value: string) => void
+  tags: string[]
+  setTags: (t: string[]) => void
+  onClearFilters: () => void
+}> = ({ projects, q, setQ, client, setClient, year, setYear, month, setMonth, tags, setTags, onClearFilters }) => {
   const clients = useMemo(() => unique(projects.map((p) => p.client)), [projects])
   const allTags = useMemo(() => unique(projects.flatMap((p) => p.tags || [])), [projects])
+  const years = useMemo(() => {
+    const collected: number[] = []
+    projects.forEach((p) => {
+      if (!p.createdAt) return
+      const parsed = new Date(p.createdAt)
+      if (Number.isNaN(parsed.getTime())) return
+      collected.push(parsed.getFullYear())
+    })
+    const set = Array.from(new Set(collected))
+    return set.sort((a, b) => b - a).map(String)
+  }, [projects])
+  const [tagPickerOpen, setTagPickerOpen] = React.useState(false)
   const [tagSearch, setTagSearch] = React.useState('')
-  const visibleTags = useMemo(() => {
+  const tagButtonRef = React.useRef<HTMLButtonElement | null>(null)
+  const popoverRef = React.useRef<HTMLDivElement | null>(null)
+  const filteredTags = useMemo(() => {
     if (!tagSearch) return allTags
-    const s = tagSearch.toLowerCase()
-    return allTags.filter((t) => t.toLowerCase().includes(s))
+    const lower = tagSearch.toLowerCase()
+    return allTags.filter((tag) => tag.toLowerCase().includes(lower))
   }, [allTags, tagSearch])
+  const toggleTag = React.useCallback(
+    (value: string) => {
+      setTags(tags.includes(value) ? tags.filter((t) => t !== value) : [...tags, value])
+    },
+    [setTags, tags],
+  )
+  const closePicker = React.useCallback(() => setTagPickerOpen(false), [])
+
+  React.useEffect(() => {
+    if (!tagPickerOpen) return
+    const handleClick = (event: MouseEvent) => {
+      const target = event.target as Node | null
+      if (
+        target &&
+        popoverRef.current &&
+        !popoverRef.current.contains(target) &&
+        tagButtonRef.current &&
+        !tagButtonRef.current.contains(target)
+      ) {
+        closePicker()
+      }
+    }
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        closePicker()
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    document.addEventListener('keydown', handleKey)
+    return () => {
+      document.removeEventListener('mousedown', handleClick)
+      document.removeEventListener('keydown', handleKey)
+    }
+  }, [closePicker, tagPickerOpen])
+
+  const handleClearAll = React.useCallback(() => {
+    onClearFilters()
+    setTagPickerOpen(false)
+    setTagSearch('')
+  }, [onClearFilters])
+
+  const monthLabel = month ? MONTHS[Number(month) - 1] ?? null : null
+  const hasFilterSelections = Boolean(client || year || month || tags.length)
+  const activePills: Array<{ label: string; onClear: () => void }> = []
+  if (client) activePills.push({ label: `Client: ${client}`, onClear: () => setClient('') })
+  if (year) activePills.push({ label: `Year: ${year}`, onClear: () => setYear('') })
+  if (month && monthLabel) activePills.push({ label: `Month: ${monthLabel}`, onClear: () => setMonth('') })
 
   return (
-    <div className="mb-8">
-      {/* Single row with compact tag area and improved tag search */}
-      <div className="flex items-center gap-2 overflow-x-auto flex-nowrap">
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search by title…"
-          className="h-9 rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 text-[12px] outline-none placeholder:text-[var(--text-muted,#6B645B)]"
-        />
-        <select
-          value={client}
-          onChange={(e) => setClient(e.target.value)}
-          className="h-9 rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 text-[12px] outline-none"
-        >
-          <option value="">All clients</option>
-          {clients.map((c) => (
-            <option key={c} value={c}>{c}</option>
-          ))}
-        </select>
-
-        {/* Better looking tag search */}
-        <div className="relative">
-          <input
-            value={tagSearch}
-            onChange={(e) => setTagSearch(e.target.value)}
-            placeholder="Find tag…"
-            className="h-9 w-[160px] rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 pr-6 text-[12px] outline-none placeholder:text-[var(--text-muted,#6B645B)]"
-          />
-          {tagSearch && (
-            <button
-              onClick={() => setTagSearch('')}
-              aria-label="Clear tag search"
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-[12px] text-[var(--text-muted,#6B645B)]"
-            >
-              ×
-            </button>
-          )}
+    <div className="mb-8 rounded-3xl border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-4 py-4 shadow-[0_8px_26px_rgba(31,30,27,0.05)]">
+      <div className="flex flex-wrap gap-4">
+        <div className="flex-1 min-w-[220px]">
+          <label className="block text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">
+            <span className="mb-1 block">Search</span>
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Search projects…"
+              className="w-full rounded-2xl border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 py-2 text-[13px] outline-none placeholder:text-[var(--text-muted,#6B645B)]"
+            />
+          </label>
         </div>
 
-        {/* Compact, horizontally scrollable tag strip (expanded) */}
-        <div className="flex-1 min-w-[200px] rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-2 h-9 flex items-center">
-          <div className="flex gap-1 overflow-x-auto w-full whitespace-nowrap py-1">
-            {visibleTags.length ? (
-              visibleTags.map((t) => (
+        <div className="w-[160px]">
+          <label className="block text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">
+            <span className="mb-1 block">Client</span>
+            <select
+              value={client}
+              onChange={(e) => setClient(e.target.value)}
+              className="w-full rounded-2xl border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 py-2 text-[13px] outline-none"
+            >
+              <option value="">All clients</option>
+              {clients.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <div className="w-[140px]">
+          <label className="block text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">
+            <span className="mb-1 block">Year</span>
+            <select
+              value={year}
+              onChange={(e) => setYear(e.target.value)}
+              className="w-full rounded-2xl border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 py-2 text-[13px] outline-none"
+            >
+              <option value="">All years</option>
+              {years.map((optionYear) => (
+                <option key={optionYear} value={optionYear}>
+                  {optionYear}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <div className="w-[150px]">
+          <label className="block text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">
+            <span className="mb-1 block">Month</span>
+            <select
+              value={month}
+              onChange={(e) => setMonth(e.target.value)}
+              className="w-full rounded-2xl border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 py-2 text-[13px] outline-none"
+            >
+              <option value="">All months</option>
+              {MONTHS.map((label, idx) => {
+                const value = String(idx + 1)
+                return (
+                  <option key={label} value={value}>
+                    {label}
+                  </option>
+                )
+              })}
+            </select>
+          </label>
+        </div>
+
+        <div className="relative w-[160px]">
+          <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">Tags</span>
+          <button
+            type="button"
+            ref={tagButtonRef}
+            onClick={() => setTagPickerOpen((open) => !open)}
+            className="flex w-full items-center justify-between rounded-2xl border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 py-2 text-left text-[13px] text-[var(--text,#1F1E1B)] shadow-sm"
+            aria-haspopup="dialog"
+            aria-expanded={tagPickerOpen}
+          >
+            <span className="flex items-center gap-2">
+              <svg width="14" height="14" viewBox="0 0 20 20" fill="none" aria-hidden className="text-[var(--text-muted,#6B645B)]">
+                <path
+                  d="M5 3h10a1 1 0 0 1 .94.66l2.5 7a1 1 0 0 1-.94 1.34H2.5a1 1 0 0 1-.95-1.31l2.5-7A1 1 0 0 1 5 3zm5 12.5a1.5 1.5 0 1 1-1.5 1.5A1.5 1.5 0 0 1 10 15.5z"
+                  stroke="currentColor"
+                  strokeWidth="1.4"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              <span>{tags.length ? `${tags.length} selected` : 'Choose tags'}</span>
+            </span>
+            <span className="text-[var(--text-muted,#6B645B)]">{tagPickerOpen ? '▲' : '▼'}</span>
+          </button>
+          {tagPickerOpen && (
+            <div
+              ref={popoverRef}
+              className="absolute right-0 z-30 mt-2 w-64 rounded-2xl border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-3 shadow-xl"
+            >
+              <div className="mb-2">
+                <input
+                  value={tagSearch}
+                  onChange={(e) => setTagSearch(e.target.value)}
+                  placeholder="Find tag…"
+                  className="w-full rounded-xl border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-2 py-1.5 text-[12px] outline-none placeholder:text-[var(--text-muted,#6B645B)]"
+                  autoFocus
+                />
+              </div>
+              <div className="max-h-56 overflow-y-auto pr-1">
+                {filteredTags.length ? (
+                  filteredTags.map((tag) => (
+                    <label
+                      key={tag}
+                      className="flex cursor-pointer items-center gap-2 rounded-lg px-1.5 py-1 text-[13px] text-[var(--text,#1F1E1B)] hover:bg-[var(--surface-subtle,#FBF7EF)]"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={tags.includes(tag)}
+                        onChange={() => toggleTag(tag)}
+                        className="accent-[var(--primary,#A56A4A)]"
+                      />
+                      <span className="flex-1">{tag}</span>
+                    </label>
+                  ))
+                ) : (
+                  <div className="px-1.5 py-2 text-[12px] text-[var(--text-muted,#6B645B)]">No tags found</div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-start gap-4">
+        <div className="flex-1 min-w-[240px] rounded-2xl border border-[var(--border,#E1D3B9)] bg-[var(--surface-subtle,#FBF7EF)] px-3 py-2">
+          <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">Selected tags</div>
+          <div className="tag-strip flex w-full flex-nowrap gap-1.5">
+            {tags.length ? (
+              tags.map((tag) => (
                 <button
-                  key={t}
-                  onClick={() => setTags(tags.includes(t) ? tags.filter((x) => x !== t) : [...tags, t])}
-                  className={`inline-block px-2 py-0.5 rounded-full text-[11px] border ${tags.includes(t) ? 'bg-[var(--primary,#A56A4A)] text-[var(--primary-contrast,#FFFFFF)] border-[var(--primary,#A56A4A)]' : 'border-[var(--border,#E1D3B9)] text-[var(--text-muted,#6B645B)] hover:border-[var(--text-muted,#6B645B)]'}`}
+                  key={tag}
+                  type="button"
+                  onClick={() => toggleTag(tag)}
+                  className="inline-flex shrink-0 items-center gap-1 rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-2.5 py-0.5 text-[11px] text-[var(--text,#1F1E1B)]"
                 >
-                  {t}
+                  <span>{tag}</span>
+                  <span aria-hidden>×</span>
                 </button>
               ))
             ) : (
-              <span className="text-[12px] text-[var(--text-muted,#6B645B)]">No tags</span>
+              <span className="inline-flex items-center text-[12px] text-[var(--text-muted,#6B645B)]">No tags selected</span>
             )}
+          </div>
+        </div>
+
+        <div className="flex min-w-[200px] flex-1 flex-col gap-2">
+          <div className="flex flex-wrap gap-2">
+            {activePills.length ? (
+              activePills.map((pill) => (
+                <button
+                  key={pill.label}
+                  type="button"
+                  onClick={pill.onClear}
+                  className="inline-flex items-center gap-1 rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface-subtle,#FBF7EF)] px-3 py-1 text-[11px] text-[var(--text,#1F1E1B)]"
+                >
+                  <span>{pill.label}</span>
+                  <span aria-hidden>×</span>
+                </button>
+              ))
+            ) : (
+              <span className="text-[12px] text-[var(--text-muted,#6B645B)]">No additional filters</span>
+            )}
+          </div>
+          <div>
+            <button
+              type="button"
+              onClick={handleClearAll}
+              disabled={!hasFilterSelections}
+              className="inline-flex items-center gap-2 rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 py-1.5 text-[12px] text-[var(--text,#1F1E1B)] disabled:opacity-60"
+            >
+              Clear filters
+            </button>
           </div>
         </div>
       </div>
@@ -121,7 +336,11 @@ export default function ProjectIndex() {
   const { update } = useLastOpened()
   const queryClient = useQueryClient()
 
-  const [q, setQ] = useState(''); const [client, setClient] = useState(''); const [tags, setTags] = useState<string[]>([])
+  const [q, setQ] = useState('')
+  const [client, setClient] = useState('')
+  const [year, setYear] = useState('')
+  const [month, setMonth] = useState('')
+  const [tags, setTags] = useState<string[]>([])
   const [modalOpen, setModalOpen] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
   const { archived, isArchived, archive, unarchive } = useArchive()
@@ -267,9 +486,29 @@ export default function ProjectIndex() {
 
   const allTags = useMemo(() => unique(baseProjects.flatMap((p) => p.tags || [])), [baseProjects])
   const visible = useMemo(() => baseProjects.filter((p) => (archiveMode ? isArchived(p.id) : !isArchived(p.id))), [archiveMode, baseProjects, isArchived])
-  const filtered = useMemo(() => visible.filter((p) =>
-      (!q || p.title.toLowerCase().includes(q.toLowerCase())) && (!client || p.client === client) && (!tags.length || (p.tags || []).some((t) => tags.includes(t)))),
-    [q, client, tags, visible])
+  const filtered = useMemo(
+    () =>
+      visible.filter((p) => {
+        const title = p.title || ''
+        const matchesSearch = !q || title.toLowerCase().includes(q.toLowerCase())
+        const matchesClient = !client || p.client === client
+        const projectTags = p.tags || []
+        const matchesTags = !tags.length || projectTags.some((t) => tags.includes(t))
+        let createdYear: string | null = null
+        let createdMonth: string | null = null
+        if (p.createdAt) {
+          const parsed = new Date(p.createdAt)
+          if (!Number.isNaN(parsed.getTime())) {
+            createdYear = String(parsed.getFullYear())
+            createdMonth = String(parsed.getMonth() + 1)
+          }
+        }
+        const matchesYear = !year || (createdYear !== null && createdYear === year)
+        const matchesMonth = !month || (createdMonth !== null && createdMonth === month)
+        return matchesSearch && matchesClient && matchesYear && matchesMonth && matchesTags
+      }),
+    [client, month, q, tags, visible, year],
+  )
 
   const closeCreateModal = useCallback(() => {
     setModalOpen(false)
@@ -371,8 +610,8 @@ export default function ProjectIndex() {
   }
 
   const handleToggleArchive = () => setArchiveMode(a => !a)
-  const hasAnyFilters = Boolean(q || client || tags.length)
-  const clearFilters = () => { setQ(''); setClient(''); setTags([]) }
+  const hasAnyFilters = Boolean(q || client || year || month || tags.length)
+  const clearFilters = () => { setQ(''); setClient(''); setYear(''); setMonth(''); setTags([]) }
   const handleRequestDelete = useCallback((project: Project) => {
     setDeleteTarget(project)
     setDeleteError(null)
@@ -411,7 +650,22 @@ export default function ProjectIndex() {
           </p>
         </header>
 
-        {!archiveMode && <FilterBar projects={baseProjects} q={q} setQ={setQ} client={client} setClient={setClient} tags={tags} setTags={setTags} />}
+        {!archiveMode && (
+          <FilterBar
+            projects={baseProjects}
+            q={q}
+            setQ={setQ}
+            client={client}
+            setClient={setClient}
+            year={year}
+            setYear={setYear}
+            month={month}
+            setMonth={setMonth}
+            tags={tags}
+            setTags={setTags}
+            onClearFilters={clearFilters}
+          />
+        )}
         {projectsError && (
           <StateHint message={`Could not load projects from server: ${projectsErrorObj?.message ?? 'Unknown error'}`} />
         )}

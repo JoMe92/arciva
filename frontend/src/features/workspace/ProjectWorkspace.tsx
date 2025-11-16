@@ -43,6 +43,9 @@ import ErrorBoundary from '../../components/ErrorBoundary'
 import { fetchImageHubAssetStatus, type ImageHubAssetStatus } from '../../shared/api/hub'
 import { getImageHubSettings } from '../../shared/api/settings'
 import ExportDialog from './ExportDialog'
+import GeneralSettingsDialog from '../../components/modals/GeneralSettingsDialog'
+import { useGeneralSettings } from '../../shared/settings/general'
+import type { GeneralSettings } from '../../shared/settings/general'
 
 const LEFT_MIN_WIDTH = 300
 const LEFT_MAX_WIDTH = 560
@@ -494,6 +497,14 @@ export default function ProjectWorkspace() {
   const selectionAnchorRef = useRef<string | null>(null)
   const suppressSelectionSyncRef = useRef(false)
   const [exportDialogOpen, setExportDialogOpen] = useState(false)
+  const { settings: generalSettings, setSettings: setGeneralSettings } = useGeneralSettings()
+  const [generalSettingsOpen, setGeneralSettingsOpen] = useState(false)
+  const openGeneralSettings = useCallback(() => setGeneralSettingsOpen(true), [])
+  const closeGeneralSettings = useCallback(() => setGeneralSettingsOpen(false), [])
+  const handleGeneralSettingsSave = useCallback((nextSettings: GeneralSettings) => {
+    setGeneralSettings(nextSettings)
+    setGeneralSettingsOpen(false)
+  }, [setGeneralSettings])
   const resolveActionTargetIds = useCallback((primaryId: string | null) => {
     if (primaryId && selectedPhotoIds.has(primaryId)) {
       return new Set(selectedPhotoIds)
@@ -1491,6 +1502,7 @@ export default function ProjectWorkspace() {
         stackTogglePending={stackToggleMutation.isPending}
         selectedCount={selectedPhotoIds.size}
         onOpenExport={() => setExportDialogOpen(true)}
+        onOpenSettings={openGeneralSettings}
       />
       {uploadBanner && (
         <div className="pointer-events-none fixed bottom-6 right-6 z-50">
@@ -1692,6 +1704,12 @@ export default function ProjectWorkspace() {
           />
         </ErrorBoundary>
       )}
+      <GeneralSettingsDialog
+        open={generalSettingsOpen}
+        settings={generalSettings}
+        onClose={closeGeneralSettings}
+        onSave={handleGeneralSettingsSave}
+      />
       <ExportDialog isOpen={exportDialogOpen} photos={selectedPhotos} projectId={projectId ?? null} onClose={() => setExportDialogOpen(false)} />
     </div>
   )

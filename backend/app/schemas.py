@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from enum import Enum
@@ -151,6 +151,13 @@ class AssetDetail(BaseModel):
     pixel_hash: Optional[str] = None
 
 
+class AssetProjectUsage(BaseModel):
+    project_id: UUID
+    name: str
+    cover_thumb: Optional[str] = None
+    last_modified: Optional[datetime] = None
+
+
 class MetadataStateOut(BaseModel):
     id: UUID
     link_id: UUID
@@ -196,6 +203,81 @@ AssetDetail.model_rebuild()
 
 class ImageHubSettings(BaseModel):
     metadata_inheritance: MetadataInheritanceMode = MetadataInheritanceMode.ASK
+
+
+class ExportOutputFormat(str, Enum):
+    JPEG = "JPEG"
+    TIFF = "TIFF"
+    PNG = "PNG"
+
+
+class ExportRawStrategy(str, Enum):
+    RAW = "raw"
+    DEVELOPED = "developed"
+
+
+class ExportSizeMode(str, Enum):
+    ORIGINAL = "original"
+    RESIZE = "resize"
+
+
+class ExportContactSheetFormat(str, Enum):
+    JPEG = "JPEG"
+    TIFF = "TIFF"
+    PDF = "PDF"
+
+
+class ExportJobStatus(str, Enum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class ExportJobSettings(BaseModel):
+    output_format: ExportOutputFormat = ExportOutputFormat.JPEG
+    raw_handling: ExportRawStrategy = ExportRawStrategy.DEVELOPED
+    size_mode: ExportSizeMode = ExportSizeMode.ORIGINAL
+    long_edge: Optional[int] = Field(default=None, ge=32, le=50_000)
+    jpeg_quality: Optional[int] = Field(default=90, ge=10, le=100)
+    contact_sheet_enabled: bool = False
+    contact_sheet_format: ExportContactSheetFormat = ExportContactSheetFormat.PDF
+
+    @model_validator(mode="after")
+    def validate_resize(self):
+        if self.size_mode == ExportSizeMode.RESIZE and not self.long_edge:
+            raise ValueError("long_edge required when size_mode=resize")
+        return self
+
+    @field_validator("jpeg_quality")
+    @classmethod
+    def clamp_jpeg_quality(cls, value, info):
+        if value is None:
+            return 90
+        return value
+
+
+class ExportJobCreate(BaseModel):
+    project_id: UUID
+    photo_ids: List[UUID] = Field(default_factory=list, min_length=1)
+    settings: ExportJobSettings
+
+
+class ExportJobOut(BaseModel):
+    id: UUID
+    project_id: UUID
+    status: ExportJobStatus
+    progress: int
+    total_photos: int
+    exported_files: int
+    download_url: Optional[str] = None
+    artifact_filename: Optional[str] = None
+    error_message: Optional[str] = None
+    created_at: datetime
+    started_at: Optional[datetime]
+    finished_at: Optional[datetime]
+    settings: ExportJobSettings
 
 
 class HubAssetProjectRef(BaseModel):

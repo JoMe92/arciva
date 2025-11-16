@@ -3,7 +3,7 @@ import time
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from .deps import get_settings
-from .routers import projects, uploads, assets, settings, hub
+from .routers import projects, uploads, assets, settings, hub, export_jobs
 from .logging_utils import setup_logging
 
 api_logger = logging.getLogger("arciva.api")
@@ -26,6 +26,7 @@ def create_app() -> FastAPI:
     app.include_router(assets.router)
     app.include_router(settings.router)
     app.include_router(hub.router)
+    app.include_router(export_jobs.router)
 
     @app.middleware("http")
     async def log_requests(request: Request, call_next):

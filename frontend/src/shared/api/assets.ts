@@ -101,6 +101,9 @@ export type AssetProjectUsage = {
   name: string
   cover_thumb?: string | null
   last_modified?: string | null
+  preview_image_url?: string | null
+  last_updated_label?: string | null
+  is_current_project?: boolean
 }
 
 type LinkResponse = {
@@ -212,7 +215,7 @@ export async function updateAssetInteractions(
 }
 
 export async function listAssetProjects(assetId: string): Promise<AssetProjectUsage[]> {
-  const res = await fetch(withBase(`/imagehub/asset/${assetId}/projects`)!, {
+  const res = await fetch(withBase(`/v1/assets/${assetId}/projects`)!, {
     credentials: 'include',
   })
   if (!res.ok) {
@@ -233,7 +236,7 @@ export type LoadMetadataFromProjectResponse = {
 }
 
 export async function loadMetadataFromProject(payload: LoadMetadataFromProjectPayload): Promise<LoadMetadataFromProjectResponse> {
-  const res = await fetch(withBase(`/imagehub/asset/${payload.assetId}/load-metadata`)!, {
+  const res = await fetch(withBase(`/v1/imagehub/asset/${payload.assetId}/load-metadata`)!, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',

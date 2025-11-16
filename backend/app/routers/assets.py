@@ -475,6 +475,35 @@ async def get_asset(asset_id: UUID, project_id: UUID | None = None, db: AsyncSes
     return await _asset_detail(asset, db, storage, link=link, metadata=metadata)
 
 
+@router.get("/assets/{asset_id}/projects", response_model=list[schemas.AssetProjectUsage])
+async def asset_project_usage(asset_id: UUID, db: AsyncSession = Depends(get_db)):
+    asset = await db.get(models.Asset, asset_id)
+    if not asset:
+        raise HTTPException(status_code=404, detail="asset not found")
+
+    rows = (
+        await db.execute(
+            select(models.Project, models.ProjectAsset.updated_at)
+            .join(models.ProjectAsset, models.ProjectAsset.project_id == models.Project.id)
+            .where(models.ProjectAsset.asset_id == asset_id)
+            .order_by(models.ProjectAsset.updated_at.desc())
+        )
+    ).all()
+
+    usages: list[schemas.AssetProjectUsage] = []
+    for project, updated_at in rows:
+        last_modified = updated_at or project.updated_at
+        usages.append(
+            schemas.AssetProjectUsage(
+                project_id=project.id,
+                name=project.title,
+                cover_thumb=None,
+                last_modified=last_modified.isoformat() if last_modified else None,
+            )
+        )
+    return usages
+
+
 @router.post("/assets/{asset_id}/reprocess", response_model=schemas.AssetDetail)
 async def reprocess_asset(asset_id: UUID, db: AsyncSession = Depends(get_db)):
     await ensure_asset_metadata_column(db)

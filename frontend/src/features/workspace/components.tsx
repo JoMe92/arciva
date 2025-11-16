@@ -50,12 +50,15 @@ export type GridSelectOptions = {
   ctrlKey?: boolean
 }
 
+export const CURRENT_CONFIG_SOURCE_ID = 'current-config' as const
+export type MetadataSourceId = typeof CURRENT_CONFIG_SOURCE_ID | string
+
 type UsedProjectLink = {
   id: string
   name: string
-  coverThumb: string | null
-  lastModified: string | null
-  isCurrent: boolean
+  lastUpdatedLabel: string
+  previewImageUrl: string | null
+  isCurrentProject: boolean
 }
 
 type InspectorField = {
@@ -157,6 +160,8 @@ export function TopBar({
   stackPairsEnabled,
   onToggleStackPairs,
   stackTogglePending,
+  selectedCount,
+  onOpenExport,
 }: {
   projectName: string
   onBack: () => void
@@ -174,6 +179,8 @@ export function TopBar({
   stackPairsEnabled: boolean
   onToggleStackPairs: (next: boolean) => void
   stackTogglePending?: boolean
+  selectedCount: number
+  onOpenExport: () => void
 }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(projectName)
@@ -302,6 +309,7 @@ export function TopBar({
     }`
 
   const sizeControlWidth = 200
+  const canExport = selectedCount > 0
 
   return (
     <header className="sticky top-0 z-40 border-b border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]/95 backdrop-blur">
@@ -407,6 +415,20 @@ export function TopBar({
           >
             <span>{stackPairsEnabled ? 'Stacking' : 'Stack'}</span>
             <span>JPEG + RAW</span>
+          </button>
+          <button
+            type="button"
+            onClick={onOpenExport}
+            disabled={!canExport}
+            className={`inline-flex h-9 min-w-[150px] flex-shrink-0 items-center justify-center gap-2 rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-4 text-[12px] font-semibold text-[var(--text,#1F1E1B)] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--stone-trail-brand-focus,#4A463F)] ${
+              canExport ? 'hover:bg-[var(--sand-50,#F9F4EC)]' : 'text-[var(--text-muted,#6B645B)] cursor-not-allowed opacity-60'
+            }`}
+            aria-disabled={!canExport}
+            title={canExport ? `Export ${selectedCount} photo${selectedCount === 1 ? '' : 's'}` : 'Select at least one photo to enable exporting'}
+          >
+            <span aria-hidden="true">⇣</span>
+            <span>Export…</span>
+            {canExport ? <CountBadge count={selectedCount} /> : null}
           </button>
           <div
             data-testid="top-bar-size-control"
@@ -706,16 +728,24 @@ function CountBadge({ count, className = '' }: { count: number; className?: stri
   )
 }
 
-const LEFT_PANEL_ID = 'workspace-import-panel'
+const LEFT_PANEL_ID = 'workspace-project-panel'
 const LEFT_PANEL_CONTENT_ID = `${LEFT_PANEL_ID}-content`
+const LEFT_OVERVIEW_SECTION_ID = `${LEFT_PANEL_ID}-overview`
 const LEFT_IMPORT_SECTION_ID = `${LEFT_PANEL_ID}-import`
 const LEFT_DATE_SECTION_ID = `${LEFT_PANEL_ID}-date`
 const LEFT_FOLDER_SECTION_ID = `${LEFT_PANEL_ID}-folder`
 
-type LeftPanelTarget = 'import' | 'date' | 'folder'
+type LeftPanelTarget = 'overview' | 'import' | 'date' | 'folder'
 
 export function Sidebar({
   dateTree,
+  projectOverview,
+  onRenameProject,
+  renamePending,
+  renameError,
+  onProjectOverviewChange,
+  projectOverviewPending,
+  projectOverviewError,
   onOpenImport,
   onSelectDay,
   selectedDayKey,
@@ -726,6 +756,13 @@ export function Sidebar({
   onExpand,
 }: {
   dateTree: DateTreeYearNode[]
+  projectOverview: ProjectOverviewData | null
+  onRenameProject: (next: string) => Promise<void> | void
+  renamePending?: boolean
+  renameError?: string | null
+  onProjectOverviewChange: (patch: { note?: string | null; client?: string | null; tags?: string[] }) => Promise<void> | void
+  projectOverviewPending?: boolean
+  projectOverviewError?: string | null
   onOpenImport: () => void
   onSelectDay: (day: DateTreeDayNode) => void
   selectedDayKey: string | null
@@ -737,10 +774,12 @@ export function Sidebar({
 }) {
   const [expandedYears, setExpandedYears] = useState<Set<string>>(() => new Set())
   const [expandedMonths, setExpandedMonths] = useState<Set<string>>(() => new Set())
+  const [overviewSectionOpen, setOverviewSectionOpen] = useState(true)
   const [importSectionOpen, setImportSectionOpen] = useState(true)
   const [dateSectionOpen, setDateSectionOpen] = useState(true)
   const [folderSectionOpen, setFolderSectionOpen] = useState(true)
   const [pendingTarget, setPendingTarget] = useState<LeftPanelTarget | null>(null)
+  const overviewSectionRef = useRef<HTMLDivElement | null>(null)
   const importSectionRef = useRef<HTMLDivElement | null>(null)
   const dateSectionRef = useRef<HTMLDivElement | null>(null)
   const folderSectionRef = useRef<HTMLDivElement | null>(null)
@@ -786,13 +825,15 @@ export function Sidebar({
   }, [selectedDay])
 
   const ensureSectionOpen = useCallback((target: LeftPanelTarget) => {
-    if (target === 'import') setImportSectionOpen(true)
+    if (target === 'overview') setOverviewSectionOpen(true)
+    else if (target === 'import') setImportSectionOpen(true)
     else if (target === 'date') setDateSectionOpen(true)
     else setFolderSectionOpen(true)
   }, [])
 
   const scrollToTarget = useCallback((target: LeftPanelTarget) => {
-    const refMap: Record<LeftPanelTarget, React.RefObject<HTMLDivElement>> = {
+    const refMap: Record<LeftPanelTarget, React.RefObject<HTMLDivElement | null>> = {
+      overview: overviewSectionRef,
       import: importSectionRef,
       date: dateSectionRef,
       folder: folderSectionRef,
@@ -891,7 +932,7 @@ export function Sidebar({
     if (!dateTree.length) {
       return (
         <div className="rounded-[14px] border border-dashed border-[var(--border,#EDE1C6)] bg-[var(--surface-subtle,#FBF7EF)] px-3 py-4 text-center text-[11px] text-[var(--text-muted,#6B645B)]">
-          No photos yet. Import from the left rail to populate your folders.
+          No photos yet. Use the Project Overview tools to import photos and populate your folders.
         </div>
       )
     }
@@ -998,40 +1039,39 @@ export function Sidebar({
     <aside
       id={LEFT_PANEL_ID}
       role="complementary"
-      aria-label="Import panel"
+      aria-label="Project Overview panel"
       className="relative h-full min-h-0 px-2 py-4"
       data-state={collapsed ? 'collapsed' : 'expanded'}
     >
       <div
         data-panel="body"
         aria-hidden={collapsed}
-        className={`h-full transition-opacity duration-150 ${collapsed ? 'pointer-events-none opacity-0' : 'opacity-100'}`}
+        className={`h-full min-h-0 transition-opacity duration-150 ${collapsed ? 'pointer-events-none opacity-0' : 'opacity-100'}`}
       >
-        <div className="flex h-full flex-col overflow-hidden rounded-[var(--r-lg,20px)] border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] p-4 shadow-[0_30px_80px_rgba(31,30,27,0.16)]">
+        <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-[var(--r-lg,20px)] border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] p-4 shadow-[0_30px_80px_rgba(31,30,27,0.16)]">
           <header className="sticky top-0 z-10 border-b border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] pb-3">
             <div className="flex items-center gap-3">
               <button
                 type="button"
-                aria-label="Collapse Import panel"
+                aria-label="Collapse Project Overview panel"
                 aria-controls={LEFT_PANEL_CONTENT_ID}
                 onClick={onCollapse}
                 className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border,#EDE1C6)] text-[var(--text,#1F1E1B)] transition hover:border-[var(--text,#1F1E1B)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)]"
               >
                 <ChevronLeftIcon className="h-4 w-4" aria-hidden="true" />
               </button>
-              <ImportIcon className="h-4 w-4 text-[var(--text,#1F1E1B)]" aria-hidden="true" />
-              <span className="text-sm font-semibold text-[var(--text,#1F1E1B)]">Import</span>
+              <LayoutListIcon className="h-4 w-4 text-[var(--text,#1F1E1B)]" aria-hidden="true" />
+              <span className="text-sm font-semibold text-[var(--text,#1F1E1B)]">Project Overview</span>
             </div>
           </header>
-          <div id={LEFT_PANEL_CONTENT_ID} className="flex flex-1 flex-col gap-3 overflow-hidden">
+          <div id={LEFT_PANEL_CONTENT_ID} className="flex flex-1 min-h-0 flex-col gap-3 overflow-y-auto pr-2">
             <InspectorSection
               id={LEFT_IMPORT_SECTION_ID}
               ref={importSectionRef}
               icon={<ImportIcon className="h-4 w-4" aria-hidden="true" />}
-              label="Import"
+              label="Import Photos"
               open={importSectionOpen}
               onToggle={() => setImportSectionOpen((open) => !open)}
-              maxBodyHeight={220}
             >
               <div className="space-y-3">
                 <p className="text-xs text-[var(--text-muted,#6B645B)]">
@@ -1046,9 +1086,30 @@ export function Sidebar({
                   Open Import Flow
                 </button>
                 <p className="text-[11px] text-[var(--text-muted,#6B645B)]">
-                  Imports create folders per capture date automatically. Switch to a custom destination from the Import flow if you prefer a different structure.
                 </p>
               </div>
+            </InspectorSection>
+            <InspectorSection
+              id={LEFT_OVERVIEW_SECTION_ID}
+              ref={overviewSectionRef}
+              icon={<LayoutListIcon className="h-4 w-4" aria-hidden="true" />}
+              label="Project Overview"
+              open={overviewSectionOpen}
+              onToggle={() => setOverviewSectionOpen((open) => !open)}
+            >
+              {projectOverview ? (
+                <ProjectOverviewDetails
+                  data={projectOverview}
+                  onRename={onRenameProject}
+                  renamePending={renamePending}
+                  renameError={renameError}
+                  onUpdate={onProjectOverviewChange}
+                  updatePending={projectOverviewPending}
+                  updateError={projectOverviewError}
+                />
+              ) : (
+                <p className="text-sm text-[var(--text-muted,#6B645B)]">Project details unavailable.</p>
+              )}
             </InspectorSection>
             <InspectorSection
               id={LEFT_DATE_SECTION_ID}
@@ -1072,7 +1133,7 @@ export function Sidebar({
                     <span className="text-[var(--text-muted,#6B645B)]">No date filter applied</span>
                   )}
                 </div>
-                <div className="flex-1 min-h-0 overflow-y-auto pr-1">{renderTree()}</div>
+                <div className="flex-1 min-h-0 pr-1">{renderTree()}</div>
               </div>
             </InspectorSection>
             <InspectorSection
@@ -1082,7 +1143,6 @@ export function Sidebar({
               label="Folders"
               open={folderSectionOpen}
               onToggle={() => setFolderSectionOpen((open) => !open)}
-              maxBodyHeight={240}
             >
               <div className="space-y-3 text-left text-[12px] text-[var(--text,#1F1E1B)]">
                 <div className="flex items-center justify-between gap-2">
@@ -1115,10 +1175,12 @@ export function Sidebar({
         {collapsed ? (
           <LeftRail
             onExpand={onExpand}
+            onOverview={() => handleRailSelect('overview')}
             onImport={() => handleRailSelect('import')}
             onDate={() => handleRailSelect('date')}
             onFolder={() => handleRailSelect('folder')}
             onSettings={() => handleRailSelect('folder')}
+            overviewExpanded={overviewSectionOpen}
             importExpanded={importSectionOpen}
             dateExpanded={dateSectionOpen}
             folderExpanded={folderSectionOpen}
@@ -1132,20 +1194,24 @@ export function Sidebar({
 
 function LeftRail({
   onExpand,
+  onOverview,
   onImport,
   onDate,
   onFolder,
   onSettings,
+  overviewExpanded,
   importExpanded,
   dateExpanded,
   folderExpanded,
   hasDateFilter,
 }: {
   onExpand: () => void
+  onOverview: () => void
   onImport: () => void
   onDate: () => void
   onFolder: () => void
   onSettings?: () => void
+  overviewExpanded: boolean
   importExpanded: boolean
   dateExpanded: boolean
   folderExpanded: boolean
@@ -1154,14 +1220,21 @@ function LeftRail({
   return (
     <div
       role="toolbar"
-      aria-label="Import panel rail"
+      aria-label="Project Overview panel rail"
       className="pointer-events-auto flex h-full w-full flex-col items-center rounded-[var(--r-lg,20px)] border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] px-1 py-3 shadow-[0_20px_40px_rgba(31,30,27,0.18)]"
     >
       <div className="flex flex-col items-center gap-2">
-        <InspectorRailButton icon={<ChevronRightIcon className="h-4 w-4" aria-hidden="true" />} label="Expand Import panel" onClick={onExpand} />
+        <InspectorRailButton icon={<ChevronRightIcon className="h-4 w-4" aria-hidden="true" />} label="Expand Project Overview panel" onClick={onExpand} />
         <RailDivider />
       </div>
       <div className="mt-3 flex flex-1 flex-col items-center gap-2">
+        <InspectorRailButton
+          icon={<LayoutListIcon className="h-4 w-4" aria-hidden="true" />}
+          label="Project Overview"
+          onClick={onOverview}
+          ariaControls={LEFT_OVERVIEW_SECTION_ID}
+          ariaExpanded={overviewExpanded}
+        />
         <InspectorRailButton
           icon={<ImportIcon className="h-4 w-4" aria-hidden="true" />}
           label="Import"
@@ -1197,33 +1270,26 @@ function LeftRail({
   )
 }
 
-const RIGHT_PANEL_ID = 'workspace-inspector-panel'
+const RIGHT_PANEL_ID = 'workspace-image-details-panel'
 const RIGHT_PANEL_CONTENT_ID = `${RIGHT_PANEL_ID}-content`
-const RIGHT_OVERVIEW_SECTION_ID = `${RIGHT_PANEL_ID}-overview`
 const RIGHT_KEY_SECTION_ID = `${RIGHT_PANEL_ID}-key-data`
 const RIGHT_PROJECT_SECTION_ID = `${RIGHT_PANEL_ID}-projects`
 const RIGHT_METADATA_SECTION_ID = `${RIGHT_PANEL_ID}-metadata`
 
-type RightPanelTarget = 'overview' | 'keyData' | 'projects' | 'metadata'
+type RightPanelTarget = 'keyData' | 'projects' | 'metadata'
 
 export function InspectorPanel({
   collapsed,
   onCollapse,
   onExpand,
-  projectOverview,
-  onRenameProject,
-  renamePending,
-  renameError,
-  onProjectOverviewChange,
-  projectOverviewPending,
-  projectOverviewError,
   hasSelection,
   usedProjects,
   usedProjectsLoading,
   usedProjectsError,
-  metadataSourceProjectId,
-  onSelectMetadataSource,
-  metadataCopyBusy,
+  metadataSourceId,
+  onChangeMetadataSource,
+  metadataSourceBusy,
+  metadataSourceError,
   keyMetadataSections,
   metadataSummary,
   metadataEntries,
@@ -1234,20 +1300,14 @@ export function InspectorPanel({
   collapsed: boolean
   onCollapse: () => void
   onExpand: () => void
-  projectOverview: ProjectOverviewData | null
-  onRenameProject: (next: string) => Promise<void> | void
-  renamePending?: boolean
-  renameError?: string | null
-  onProjectOverviewChange: (patch: { note?: string | null; client?: string | null; tags?: string[] }) => Promise<void> | void
-  projectOverviewPending?: boolean
-  projectOverviewError?: string | null
   hasSelection: boolean
   usedProjects: UsedProjectLink[]
   usedProjectsLoading: boolean
   usedProjectsError: string | null
-  metadataSourceProjectId: string | null
-  onSelectMetadataSource: (projectId: string, projectName: string) => void
-  metadataCopyBusy: boolean
+  metadataSourceId: MetadataSourceId
+  onChangeMetadataSource: (nextId: MetadataSourceId) => void
+  metadataSourceBusy: boolean
+  metadataSourceError: string | null
   keyMetadataSections: KeyMetadataSections | null
   metadataSummary: MetadataSummary | null
   metadataEntries: MetadataEntry[]
@@ -1255,11 +1315,9 @@ export function InspectorPanel({
   metadataLoading: boolean
   metadataError: string | null
 }) {
-  const overviewSectionRef = useRef<HTMLDivElement | null>(null)
   const keyDataSectionRef = useRef<HTMLDivElement | null>(null)
   const projectsSectionRef = useRef<HTMLDivElement | null>(null)
   const metadataSectionRef = useRef<HTMLDivElement | null>(null)
-  const [overviewOpen, setOverviewOpen] = useState(true)
   const [keyDataOpen, setKeyDataOpen] = useState(true)
   const [projectsOpen, setProjectsOpen] = useState(true)
   const [metadataOpen, setMetadataOpen] = useState(true)
@@ -1299,15 +1357,13 @@ export function InspectorPanel({
   }, [metadataSummary, mergedInspectorFields])
 
   const ensureSectionOpen = useCallback((target: RightPanelTarget) => {
-    if (target === 'overview') setOverviewOpen(true)
-    else if (target === 'keyData') setKeyDataOpen(true)
+    if (target === 'keyData') setKeyDataOpen(true)
     else if (target === 'projects') setProjectsOpen(true)
     else setMetadataOpen(true)
   }, [])
 
   const scrollToTarget = useCallback((target: RightPanelTarget) => {
-    const refMap: Record<RightPanelTarget, React.RefObject<HTMLDivElement>> = {
-      overview: overviewSectionRef,
+    const refMap: Record<RightPanelTarget, React.RefObject<HTMLDivElement | null>> = {
       keyData: keyDataSectionRef,
       projects: projectsSectionRef,
       metadata: metadataSectionRef,
@@ -1349,21 +1405,21 @@ export function InspectorPanel({
     <aside
       id={RIGHT_PANEL_ID}
       role="complementary"
-      aria-label="Inspector"
+      aria-label="Image Details panel"
       className="relative h-full min-h-0 px-2 py-4"
       data-state={collapsed ? 'collapsed' : 'expanded'}
     >
       <div
         data-panel="body"
         aria-hidden={collapsed}
-        className={`h-full transition-opacity duration-150 ${collapsed ? 'pointer-events-none opacity-0' : 'opacity-100'}`}
+        className={`h-full min-h-0 transition-opacity duration-150 ${collapsed ? 'pointer-events-none opacity-0' : 'opacity-100'}`}
       >
-        <div className="flex h-full flex-col overflow-hidden rounded-[var(--r-lg,20px)] border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] p-4 shadow-[0_30px_80px_rgba(31,30,27,0.16)]">
+        <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-[var(--r-lg,20px)] border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] p-4 shadow-[0_30px_80px_rgba(31,30,27,0.16)]">
           <header className="sticky top-0 z-10 border-b border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] pb-3">
             <div className="flex items-center gap-3">
               <button
                 type="button"
-                aria-label="Collapse Inspector"
+                aria-label="Collapse Image Details panel"
                 aria-controls={RIGHT_PANEL_CONTENT_ID}
                 onClick={onCollapse}
                 className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border,#EDE1C6)] text-[var(--text,#1F1E1B)] transition hover:border-[var(--text,#1F1E1B)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)]"
@@ -1371,33 +1427,10 @@ export function InspectorPanel({
                 <ChevronRightIcon className="h-4 w-4" aria-hidden="true" />
               </button>
               <InspectorIcon className="h-4 w-4 text-[var(--text,#1F1E1B)]" aria-hidden="true" />
-              <span className="text-sm font-semibold text-[var(--text,#1F1E1B)]">Inspector</span>
+              <span className="text-sm font-semibold text-[var(--text,#1F1E1B)]">Image Details</span>
             </div>
           </header>
-          <div id={RIGHT_PANEL_CONTENT_ID} className="flex flex-1 flex-col gap-3 overflow-hidden">
-            <InspectorSection
-              id={RIGHT_OVERVIEW_SECTION_ID}
-              ref={overviewSectionRef}
-              icon={<LayoutListIcon className="h-4 w-4" aria-hidden="true" />}
-              label="Project Overview"
-              open={overviewOpen}
-              onToggle={() => setOverviewOpen((open) => !open)}
-              maxBodyHeight={320}
-            >
-              {projectOverview ? (
-                <ProjectOverviewDetails
-                  data={projectOverview}
-                  onRename={onRenameProject}
-                  renamePending={renamePending}
-                  renameError={renameError}
-                  onUpdate={onProjectOverviewChange}
-                  updatePending={projectOverviewPending}
-                  updateError={projectOverviewError}
-                />
-              ) : (
-                <p className="text-sm text-[var(--text-muted,#6B645B)]">Project details unavailable.</p>
-              )}
-            </InspectorSection>
+          <div id={RIGHT_PANEL_CONTENT_ID} className="flex flex-1 min-h-0 flex-col gap-3 overflow-y-auto pr-2">
             <InspectorSection
               id={RIGHT_KEY_SECTION_ID}
               ref={keyDataSectionRef}
@@ -1405,7 +1438,6 @@ export function InspectorPanel({
               label="Key Data"
               open={keyDataOpen}
               onToggle={() => setKeyDataOpen((open) => !open)}
-              maxBodyHeight={240}
             >
               {hasSelection ? (
                 <KeyDataGrid rows={keyDataRows} />
@@ -1420,16 +1452,16 @@ export function InspectorPanel({
               label="Used in Projects"
               open={projectsOpen}
               onToggle={() => setProjectsOpen((open) => !open)}
-              maxBodyHeight={280}
             >
               {hasSelection ? (
                 <UsedProjectsSection
                   projects={usedProjects}
                   loading={usedProjectsLoading}
                   error={usedProjectsError}
-                  metadataSourceProjectId={metadataSourceProjectId}
-                  onSelectMetadataSource={onSelectMetadataSource}
-                  metadataCopyBusy={metadataCopyBusy}
+                  metadataSourceId={metadataSourceId}
+                  onChangeMetadataSource={onChangeMetadataSource}
+                  metadataSourceBusy={metadataSourceBusy}
+                  actionError={metadataSourceError}
                 />
               ) : (
                 <p className="text-sm text-[var(--text-muted,#6B645B)]">Select a photo to see where it is used.</p>
@@ -1479,7 +1511,6 @@ export function InspectorPanel({
         {collapsed ? (
           <InspectorRail
             onExpand={onExpand}
-            onOverview={() => handleRailSelect('overview')}
             onKeyData={() => handleRailSelect('keyData')}
             onProjects={() => handleRailSelect('projects')}
             onMetadata={() => handleRailSelect('metadata')}
@@ -1498,14 +1529,12 @@ type InspectorSectionProps = {
   onToggle: () => void
   children: React.ReactNode
   grow?: boolean
-  maxBodyHeight?: number
 }
 
-const InspectorSection = React.forwardRef<HTMLDivElement, InspectorSectionProps>(function InspectorSection(
-  { id, icon, label, open, onToggle, children, grow = false, maxBodyHeight },
+const InspectorSection = React.forwardRef<HTMLDivElement | null, InspectorSectionProps>(function InspectorSection(
+  { id, icon, label, open, onToggle, children, grow = false },
   ref,
 ) {
-  const bodyStyle = maxBodyHeight ? { maxHeight: `${maxBodyHeight}px` } : undefined
   return (
     <section
       id={id}
@@ -1531,11 +1560,9 @@ const InspectorSection = React.forwardRef<HTMLDivElement, InspectorSectionProps>
       <div
         id={`${id}-content`}
         aria-hidden={!open}
-        className={`flex-1 ${open ? 'flex flex-col px-4 pb-4 pt-1' : 'hidden'}`}
+        className={`${open ? `${grow ? 'flex flex-col ' : ''}px-4 pb-4 pt-1` : 'hidden'} ${grow ? 'flex-1 min-h-0' : ''}`}
       >
-        <div className={`flex-1 overflow-auto overscroll-contain pr-2 ${grow ? 'min-h-0' : ''}`} style={bodyStyle}>
-          {children}
-        </div>
+        {children}
       </div>
     </section>
   )
@@ -1774,9 +1801,8 @@ function formatRatingValue(value?: number | null): string {
   return `${value} / 5`
 }
 
-function InspectorRail({ onExpand, onOverview, onKeyData, onProjects, onMetadata }: {
+function InspectorRail({ onExpand, onKeyData, onProjects, onMetadata }: {
   onExpand: () => void
-  onOverview: () => void
   onKeyData: () => void
   onProjects: () => void
   onMetadata: () => void
@@ -1784,15 +1810,14 @@ function InspectorRail({ onExpand, onOverview, onKeyData, onProjects, onMetadata
   return (
     <div
       role="toolbar"
-      aria-label="Inspector rail"
+      aria-label="Image Details panel rail"
       className="pointer-events-auto flex h-full w-full flex-col items-center rounded-[var(--r-lg,20px)] border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] px-1 py-3 shadow-[0_20px_40px_rgba(31,30,27,0.18)]"
     >
       <div className="flex flex-col items-center gap-2">
-        <InspectorRailButton icon={<ChevronLeftIcon className="h-4 w-4" />} label="Expand Inspector" onClick={onExpand} />
+        <InspectorRailButton icon={<ChevronLeftIcon className="h-4 w-4" />} label="Expand Image Details panel" onClick={onExpand} />
         <RailDivider />
       </div>
       <div className="mt-3 flex flex-1 flex-col items-center gap-2">
-        <InspectorRailButton icon={<LayoutListIcon className="h-4 w-4" />} label="Overview" onClick={onOverview} />
         <InspectorRailButton icon={<InfoIcon className="h-4 w-4" />} label="Key data" onClick={onKeyData} />
         <InspectorRailButton icon={<FolderIcon className="h-4 w-4" />} label="Projects" onClick={onProjects} />
         <InspectorRailButton icon={<CameraIcon className="h-4 w-4" />} label="Metadata" onClick={onMetadata} />
@@ -1800,7 +1825,7 @@ function InspectorRail({ onExpand, onOverview, onKeyData, onProjects, onMetadata
       </div>
       <div className="mt-auto flex flex-col items-center gap-2">
         <RailDivider />
-        <InspectorRailButton icon={<SettingsIcon className="h-4 w-4" />} label="Inspector settings" onClick={onMetadata} />
+        <InspectorRailButton icon={<SettingsIcon className="h-4 w-4" />} label="Image Details settings" onClick={onMetadata} />
       </div>
     </div>
   )
@@ -1846,16 +1871,18 @@ function UsedProjectsSection({
   projects,
   loading,
   error,
-  metadataSourceProjectId,
-  onSelectMetadataSource,
-  metadataCopyBusy,
+  metadataSourceId,
+  onChangeMetadataSource,
+  metadataSourceBusy,
+  actionError,
 }: {
   projects: UsedProjectLink[]
   loading: boolean
   error: string | null
-  metadataSourceProjectId: string | null
-  onSelectMetadataSource: (projectId: string, projectName: string) => void
-  metadataCopyBusy: boolean
+  metadataSourceId: MetadataSourceId
+  onChangeMetadataSource: (nextId: MetadataSourceId) => void
+  metadataSourceBusy: boolean
+  actionError?: string | null
 }) {
   if (loading) {
     return <p className="text-sm text-[var(--text-muted,#6B645B)]">Loading project memberships…</p>
@@ -1863,56 +1890,163 @@ function UsedProjectsSection({
   if (error) {
     return <p className="text-sm text-[#B42318]">{error}</p>
   }
-  if (!projects.length) {
-    return <p className="text-sm text-[var(--text-muted,#6B645B)]">Linked only to the current project.</p>
+  const currentProject = projects.find((project) => project.isCurrentProject) ?? null
+  const activeProject = metadataSourceId === CURRENT_CONFIG_SOURCE_ID ? null : projects.find((project) => project.id === metadataSourceId) ?? null
+  const activeTitle =
+    metadataSourceId === CURRENT_CONFIG_SOURCE_ID ? 'Current configuration' : activeProject?.name ?? 'Project unavailable'
+  const activeSubtitle =
+    metadataSourceId === CURRENT_CONFIG_SOURCE_ID ? "This image's own settings." : activeProject?.lastUpdatedLabel ?? 'Last updated —'
+  const activePreview = metadataSourceId === CURRENT_CONFIG_SOURCE_ID ? null : activeProject?.previewImageUrl ?? null
+  const activeFallback = metadataSourceId === CURRENT_CONFIG_SOURCE_ID ? 'CFG' : projectInitials(activeProject?.name ?? '')
+
+  const handleSelect = (nextId: MetadataSourceId) => {
+    if (metadataSourceBusy || metadataSourceId === nextId) return
+    onChangeMetadataSource(nextId)
   }
-  const effectiveSourceId = metadataSourceProjectId ?? projects.find((project) => project.isCurrent)?.id ?? null
+
   return (
-    <div className="flex flex-col gap-3">
-      {projects.map((project) => {
-        const title = project.lastModified ? `${project.name} • ${formatProjectTimestamp(project.lastModified)}` : project.name
-        return (
-          <div
-            key={project.id}
-            className={`flex items-center gap-3 rounded-[16px] border px-2 py-2 transition-colors ${
-              project.isCurrent ? 'border-[var(--charcoal-500,#4A4235)] bg-[var(--surface-subtle,#FBF7EF)]' : 'border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)]'
-            }`}
-            title={title}
-          >
-            <ProjectThumbnail cover={project.coverThumb} name={project.name} />
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-[var(--text,#1F1E1B)]">
-                <span className="truncate">{project.name}</span>
-                {effectiveSourceId === project.id ? <InspectorBadge tone="primary">Metadata source</InspectorBadge> : null}
-              </div>
-              <div className="text-[11px] text-[var(--text-muted,#6B645B)]">
-                {project.isCurrent ? 'Current project' : formatProjectTimestamp(project.lastModified)}
-              </div>
-            </div>
-            {!project.isCurrent ? (
-              <button
-                type="button"
-                className="ml-auto shrink-0 rounded-full border border-[var(--border,#EDE1C6)] px-3 py-1 text-[11px] font-medium text-[var(--text,#1F1E1B)] transition hover:border-[var(--text,#1F1E1B)] disabled:cursor-not-allowed disabled:opacity-60"
-                onClick={() => onSelectMetadataSource(project.id, project.name)}
-                disabled={metadataCopyBusy}
-              >
-                Set as Metadata Source
-              </button>
-            ) : null}
-          </div>
-        )
-      })}
+    <div className="space-y-4 text-[var(--text,#1F1E1B)]">
+      <div>
+        <h3 className="text-sm font-semibold">Metadata source</h3>
+        <p className="mt-1 text-xs text-[var(--text-muted,#6B645B)]">
+          Select which configuration should provide the metadata for this image. Switching sources is non-destructive and you can
+          always return to the current configuration.
+        </p>
+        {actionError ? <p className="mt-2 text-xs text-[#B42318]">{actionError}</p> : null}
+      </div>
+
+      <div className="space-y-1.5">
+        <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">Active source</div>
+        <ActiveSourceSummaryCard title={activeTitle} subtitle={activeSubtitle} previewImageUrl={activePreview} fallbackLabel={activeFallback} />
+      </div>
+
+      <div className="space-y-2">
+        <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">Available sources</div>
+        <div role="radiogroup" className="space-y-1.5">
+          <MetadataSourceRow
+            title="Current configuration"
+            subtitle="Use this image's own settings."
+            previewImageUrl={currentProject?.previewImageUrl ?? null}
+            fallbackLabel="CFG"
+            badge={null}
+            selected={metadataSourceId === CURRENT_CONFIG_SOURCE_ID}
+            disabled={metadataSourceBusy}
+            onSelect={() => handleSelect(CURRENT_CONFIG_SOURCE_ID)}
+          />
+          {projects.length ? (
+            projects.map((project) => (
+              <MetadataSourceRow
+                key={project.id}
+                title={project.name}
+                subtitle={project.lastUpdatedLabel}
+                previewImageUrl={project.previewImageUrl}
+                fallbackLabel={projectInitials(project.name)}
+                badge={project.isCurrentProject ? 'Current project' : null}
+                selected={metadataSourceId === project.id}
+                disabled={metadataSourceBusy || project.isCurrentProject}
+                onSelect={() => handleSelect(project.id)}
+              />
+            ))
+          ) : (
+            <p className="text-sm text-[var(--text-muted,#6B645B)]">No other projects use this image.</p>
+          )}
+        </div>
+      </div>
     </div>
   )
 }
 
-function ProjectThumbnail({ cover, name }: { cover: string | null; name: string }) {
-  if (cover) {
-    return <img src={cover} alt="" className="h-8 w-8 rounded-lg object-cover" loading="lazy" />
+function ActiveSourceSummaryCard({
+  title,
+  subtitle,
+  previewImageUrl,
+  fallbackLabel,
+}: {
+  title: string
+  subtitle: string
+  previewImageUrl: string | null
+  fallbackLabel: string
+}) {
+  return (
+    <div className="flex items-center gap-3 rounded-[12px] border border-[var(--border,#EDE1C6)] bg-[var(--surface-subtle,#FBF7EF)] px-3 py-3">
+      <MetadataSourceThumbnail previewImageUrl={previewImageUrl} fallbackLabel={fallbackLabel} />
+      <div className="min-w-0">
+        <div className="truncate text-sm font-semibold">{title}</div>
+        <div className="text-xs text-[var(--text-muted,#6B645B)]">{subtitle}</div>
+      </div>
+    </div>
+  )
+}
+
+function MetadataSourceRow({
+  title,
+  subtitle,
+  previewImageUrl,
+  fallbackLabel,
+  badge,
+  selected,
+  disabled,
+  onSelect,
+}: {
+  title: string
+  subtitle: string
+  previewImageUrl: string | null
+  fallbackLabel: string
+  badge: string | null
+  selected: boolean
+  disabled: boolean
+  onSelect: () => void
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={selected}
+      className={`flex w-full items-center gap-3 rounded-[12px] border px-3 py-2.5 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)] ${
+        selected ? 'border-[var(--river-400,#69A3AE)] bg-[var(--river-50,#F0F7F6)]' : 'border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] hover:border-[var(--text,#1F1E1B)]'
+      } ${disabled ? 'cursor-not-allowed opacity-70' : ''}`}
+      disabled={disabled}
+      onClick={() => {
+        if (!disabled) onSelect()
+      }}
+    >
+      <RadioIndicator selected={selected} />
+      <MetadataSourceThumbnail previewImageUrl={previewImageUrl} fallbackLabel={fallbackLabel} />
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-sm font-semibold">{title}</div>
+        <div className="truncate text-xs text-[var(--text-muted,#6B645B)]">{subtitle}</div>
+      </div>
+      {badge ? (
+        <span className="ml-2 shrink-0 rounded-full bg-[var(--surface-subtle,#FBF7EF)] px-2 py-0.5 text-[10px] font-medium text-[var(--text-muted,#6B645B)]">
+          {badge}
+        </span>
+      ) : null}
+    </button>
+  )
+}
+
+function RadioIndicator({ selected }: { selected: boolean }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={`inline-flex h-4 w-4 items-center justify-center rounded-full border ${
+        selected ? 'border-[var(--river-500,#3B7F87)]' : 'border-[var(--border,#EDE1C6)]'
+      }`}
+    >
+      <span
+        className={`h-2 w-2 rounded-full ${selected ? 'bg-[var(--river-500,#3B7F87)]' : 'bg-transparent'}`}
+      />
+    </span>
+  )
+}
+
+function MetadataSourceThumbnail({ previewImageUrl, fallbackLabel }: { previewImageUrl: string | null; fallbackLabel: string }) {
+  if (previewImageUrl) {
+    return <img src={previewImageUrl} alt="" className="h-9 w-9 rounded-[8px] object-cover" loading="lazy" />
   }
   return (
-    <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border,#EDE1C6)] bg-[var(--surface-subtle,#FBF7EF)] text-xs font-semibold text-[var(--text,#1F1E1B)]">
-      {projectInitials(name)}
+    <div className="flex h-9 w-9 items-center justify-center rounded-[8px] border border-[var(--border,#EDE1C6)] bg-[var(--surface-subtle,#FBF7EF)] text-[11px] font-semibold uppercase text-[var(--text,#1F1E1B)]">
+      {fallbackLabel || '—'}
     </div>
   )
 }
@@ -2067,13 +2201,6 @@ function formatMetadataEntryNumber(value: number): string {
   return fixed.replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1')
 }
 
-function formatProjectTimestamp(timestamp: string | null): string {
-  if (!timestamp) return 'Last updated —'
-  const parsed = new Date(timestamp)
-  if (Number.isNaN(parsed.getTime())) return 'Last updated —'
-  return `Last updated ${parsed.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`
-}
-
 function projectInitials(name: string): string {
   const parts = name.split(/\s+/).filter(Boolean)
   if (!parts.length) return 'P'
@@ -2184,6 +2311,14 @@ function ImportIcon(props: React.SVGProps<SVGSVGElement>) {
       <path d="M3.25 9.5h9.5a1.25 1.25 0 0 1 1.25 1.25V12a2 2 0 0 1-2 2h-8a2 2 0 0 1-2-2v-1.25A1.25 1.25 0 0 1 3.25 9.5Z" />
       <path d="M8 2v6.5" />
       <path d="m5.75 6.25 2.25 2.25 2.25-2.25" />
+    </svg>
+  )
+}
+
+function CheckIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M3.5 8.5 6.7 11.5 12.5 4.5" />
     </svg>
   )
 }

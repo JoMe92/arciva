@@ -34,6 +34,7 @@ def temp_fs_root(tmp_path_factory):
     (root / "uploads").mkdir()
     (root / "originals").mkdir()
     (root / "derivatives").mkdir()
+    (root / "exports").mkdir()
     return root
 
 
@@ -56,10 +57,12 @@ def test_settings(temp_fs_root):
         fs_uploads_dir = str(temp_fs_root / "uploads")
         fs_originals_dir = str(temp_fs_root / "originals")
         fs_derivatives_dir = str(temp_fs_root / "derivatives")
+        fs_exports_dir = str(temp_fs_root / "exports")
         thumb_sizes = [256]
         max_upload_mb = 5
         worker_concurrency = 1
         logs_dir = str(temp_fs_root / "logs")
+        export_retention_hours = 24
 
     # Ensure env var points to test DB before importing app modules
     os.environ["DATABASE_URL"] = _S.database_url

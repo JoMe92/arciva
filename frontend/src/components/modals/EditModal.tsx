@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useId } from 'react';
 import ModalShell from './ModalShell';
 import ProjectFields from './ProjectFields';
 import type { Project } from '../../features/projects/types';
@@ -38,6 +38,8 @@ const EditModal: React.FC<EditModalProps> = ({
   const [client, setClient] = useState(project?.client || '');
   const [selTags, setSelTags] = useState<string[]>(project?.tags || []);
   const [newTag, setNewTag] = useState('');
+  const [titleError, setTitleError] = useState<string | null>(null);
+  const formId = useId();
 
   const previews = useMemo(() => {
     if (!project?.previewImages?.length) return [];
@@ -50,97 +52,155 @@ const EditModal: React.FC<EditModalProps> = ({
     setDesc(project?.blurb || '');
     setClient(project?.client || '');
     setSelTags(project?.tags || []);
+    setNewTag('');
+    setTitleError(null);
   }, [project]);
 
   if (!open || !project) return null;
 
+  const validateTitle = () => {
+    if (!title.trim()) {
+      setTitleError('Project name is required.');
+      return false;
+    }
+    setTitleError(null);
+    return true;
+  };
+
+  const handleTitleChange = (value: string) => {
+    if (titleError) {
+      setTitleError(null);
+    }
+    setTitle(value);
+  };
+
   const save = () => {
+    if (!validateTitle()) return;
     onSave({
       ...project,
-      title: title || 'Untitled project',
-      blurb: desc || 'New project',
-      client: client || 'Unassigned',
+      title: title.trim(),
+      blurb: desc.trim(),
+      client: client.trim() || 'Unassigned',
       tags: selTags,
     });
   };
 
+  const handleSubmit = (event?: React.FormEvent) => {
+    event?.preventDefault();
+    save();
+  };
+
+  const archiveAction = archived ? () => onUnarchive(project.id) : () => onArchive(project.id);
+
   return (
     <ModalShell
       title={`Edit — ${project.title}`}
+      subtitle="Project settings"
       onClose={onClose}
-      onPrimary={() => onOpen(project.id)}
-      primaryLabel="Open"
       footerLeft={
         <>
-          <button onClick={save} className="h-8 rounded-full border border-[var(--border,#E1D3B9)] px-3 text-[12px]">
-            Apply changes
+          <button
+            type="button"
+            onClick={archiveAction}
+            className="h-9 rounded-full border border-[var(--border,#E1D3B9)] px-4 text-[13px]"
+          >
+            {archived ? 'Unarchive' : 'Archive'}
           </button>
-          {archived ? (
-            <button onClick={() => onUnarchive(project.id)} className="h-8 rounded-full border border-[var(--border,#E1D3B9)] px-3 text-[12px]">
-              Unarchive
-            </button>
-          ) : (
-            <button onClick={() => onArchive(project.id)} className="h-8 rounded-full border border-[var(--border,#E1D3B9)] px-3 text-[12px]">
-              Archive
-            </button>
-          )}
           {project.source === 'api' && (
             <button
-              onClick={() => { onClose(); onRequestDelete(project); }}
-              className="h-8 rounded-full border border-red-200 bg-red-50 px-3 text-[12px] text-red-700 hover:border-red-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-200"
+              type="button"
+              onClick={() => {
+                onClose();
+                onRequestDelete(project);
+              }}
+              className="h-9 rounded-full border border-red-200 bg-red-50 px-4 text-[13px] text-red-700 hover:border-red-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-200"
             >
               Delete…
             </button>
           )}
         </>
       }
+      footerRight={
+        <>
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-9 rounded-full border border-[var(--border,#E1D3B9)] px-4 text-[13px]"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            form={formId}
+            className="h-9 rounded-full border border-[var(--primary,#A56A4A)] bg-[var(--primary,#A56A4A)] px-4 text-[13px] text-[var(--primary-contrast,#FFFFFF)] hover:bg-[var(--primary-strong,#8D5336)]"
+          >
+            Apply changes
+          </button>
+          <button
+            type="button"
+            onClick={() => onOpen(project.id)}
+            className="h-9 rounded-full border border-transparent px-4 text-[13px] text-[var(--text,#1F1E1B)] hover:bg-[var(--surface,#FFFFFF)]/60"
+          >
+            Open
+          </button>
+        </>
+      }
     >
-      <ProjectFields
-        title={title}
-        setTitle={setTitle}
-        desc={desc}
-        setDesc={setDesc}
-        client={client}
-        setClient={setClient}
-        selTags={selTags}
-        setSelTags={setSelTags}
-        newTag={newTag}
-        setNewTag={setNewTag}
-        existingTags={existingTags}
-      />
-      <div className="mt-6">
-        <h3 className="mb-2 text-sm font-medium text-[var(--text,#1F1E1B)]">Preview images</h3>
-        {previews.length ? (
-          <div className="flex items-center gap-2 overflow-x-auto rounded-md border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-2 py-2">
-            {previews.map((img, idx) => {
-              const key = img.assetId ?? `${img.url}-${idx}`;
-              const isPrimary = idx === 0;
-              return (
-                <div
-                  key={key}
-                  className={`relative h-20 w-28 shrink-0 overflow-hidden rounded-md border ${isPrimary ? 'border-[var(--primary,#A56A4A)]' : 'border-[var(--border,#E1D3B9)] opacity-80'}`}
-                  title={isPrimary ? 'Current cover' : `Preview ${idx + 1}`}
-                >
-                  {img.url ? (
-                    <img src={img.url} alt={`${project.title} preview ${idx + 1}`} className="h-full w-full object-cover" />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center text-[10px] text-[var(--text-muted,#6B645B)]">
-                      No preview
+      <form id={formId} onSubmit={handleSubmit} className="space-y-8">
+        <ProjectFields
+          title={title}
+          setTitle={handleTitleChange}
+          desc={desc}
+          setDesc={setDesc}
+          client={client}
+          setClient={setClient}
+          selTags={selTags}
+          setSelTags={setSelTags}
+          newTag={newTag}
+          setNewTag={setNewTag}
+          existingTags={existingTags}
+          titleError={titleError}
+        />
+        <section>
+          <header className="mb-3">
+            <p className="text-[12px] font-medium uppercase tracking-wide text-[var(--text-muted,#6B645B)]">Preview images</p>
+            <p className="text-[12px] text-[var(--text-muted,#6B645B)]">Pick images in the project workspace to feature them on the project card.</p>
+          </header>
+          {previews.length ? (
+            <div className="flex gap-3 overflow-x-auto rounded-2xl border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 py-3">
+              {previews.map((img, idx) => {
+                const key = img.assetId ?? `${img.url}-${idx}`;
+                const isPrimary = idx === 0;
+                return (
+                  <div
+                    key={key}
+                    className={`relative h-24 w-32 shrink-0 overflow-hidden rounded-xl border ${isPrimary ? 'border-[var(--primary,#A56A4A)]' : 'border-[var(--border,#E1D3B9)] opacity-90'}`}
+                    title={isPrimary ? 'Current cover' : `Preview ${idx + 1}`}
+                  >
+                    {img.url ? (
+                      <img src={img.url} alt={`${project.title} preview ${idx + 1}`} className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center text-[11px] text-[var(--text-muted,#6B645B)]">
+                        No preview
+                      </div>
+                    )}
+                    <div className="absolute inset-x-0 bottom-0 bg-black/45 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-white">
+                      {isPrimary ? 'Cover' : `#${idx + 1}`}
                     </div>
-                  )}
-                  <div className="absolute inset-x-0 bottom-0 bg-black/45 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-white">
-                    {isPrimary ? 'Cover' : `#${idx + 1}`}
                   </div>
-                </div>
-              )
-            })}
-          </div>
-        ) : (
-          <p className="text-[12px] text-[var(--text-muted,#6B645B)]">
-            Pick images in the project workspace to feature them on the project card.
-          </p>
-        )}
-      </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-[var(--border,#E1D3B9)] px-4 py-6 text-center text-[12px] text-[var(--text-muted,#6B645B)]">
+              No preview images yet.
+            </div>
+          )}
+        </section>
+        <button type="submit" className="sr-only">
+          Apply changes
+        </button>
+      </form>
     </ModalShell>
   );
 };

@@ -208,3 +208,36 @@ class ExportJob(Base):
     started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class BulkImageExport(Base):
+    __tablename__ = "bulk_image_exports"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    asset_ids: Mapped[list[str]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+    )
+    status: Mapped[ExportJobStatus] = mapped_column(
+        SAEnum(
+            ExportJobStatus,
+            name="exportjobstatus",
+            native_enum=False,
+            values_callable=lambda enum_cls: [entry.value for entry in enum_cls],
+            validate_strings=True,
+        ),
+        nullable=False,
+        default=ExportJobStatus.QUEUED,
+    )
+    progress: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    processed_files: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    total_files: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    artifact_path: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    artifact_filename: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    artifact_size: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    date_basis: Mapped[str] = mapped_column(String(32), nullable=False, default="capture-date")
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)

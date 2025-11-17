@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { RawPlaceholder, RawPlaceholderFrame } from '../../components/RawPlaceholder'
 import ProjectSettingsButton from '../../components/ProjectSettingsButton'
 import StoneTrailLogo from '../../components/StoneTrailLogo'
+import DialogHeader from '../../components/DialogHeader'
 import { useTheme } from '../../shared/theme'
 import { TOKENS } from './utils'
 import type { Photo, ImgType, ColorTag } from './types'
@@ -585,25 +586,12 @@ function OverlayDialog({ id, title, onClose, headerAction, children, maxWidthCla
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className={`w-full ${maxWidthClass} rounded-2xl border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-4 text-[12px] shadow-xl`}
+        className={`w-full ${maxWidthClass} rounded-2xl border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] text-[12px] shadow-xl`}
         style={anchorStyle}
         onMouseDown={(event) => event.stopPropagation()}
       >
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <p className="text-sm font-semibold text-[var(--text,#1F1E1B)]">{title}</p>
-          <div className="flex items-center gap-2">
-            {headerAction}
-            <button
-              type="button"
-              onClick={onClose}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-transparent text-sm text-[var(--text-muted,#6B645B)] transition-colors hover:border-[var(--border,#E1D3B9)] hover:text-[var(--text,#1F1E1B)]"
-              aria-label={`Close ${title}`}
-            >
-              ✕
-            </button>
-          </div>
-        </div>
-        {children}
+        <DialogHeader title={title} onClose={onClose} actions={headerAction} closeLabel={`Close ${title}`} />
+        <div className="px-6 py-4">{children}</div>
       </div>
     </div>,
     document.body,

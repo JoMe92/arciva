@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { RawPlaceholderFrame } from '../../components/RawPlaceholder'
+import DialogHeader from '../../components/DialogHeader'
 import type { Photo } from './types'
 import { exportSelectedPhotos } from '../../shared/api/exports'
 import type { ExportPhotosResponse } from '../../shared/api/exports'
@@ -249,25 +250,13 @@ export function ExportDialog({ isOpen, photos, projectId, onClose }: ExportDialo
   return createPortal(
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 px-4 py-6">
       <div className="flex w-[min(1120px,100%)] max-h-[90vh] flex-col overflow-hidden rounded-[28px] border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] shadow-2xl">
-        <header className="border-b border-[var(--border,#E1D3B9)] px-6 py-4">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-lg font-semibold text-[var(--text,#1F1E1B)]">Export selected photos</p>
-              <p className="text-sm text-[var(--text-muted,#6B645B)]">{totalSelected} photo{totalSelected === 1 ? '' : 's'} selected</p>
-            </div>
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={phase === 'exporting'}
-              className={`inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border,#E1D3B9)] text-lg ${
-                phase === 'exporting' ? 'cursor-not-allowed opacity-60' : 'hover:border-[var(--text,#1F1E1B)]'
-              }`}
-              aria-label="Close export dialog"
-            >
-              ✕
-            </button>
-          </div>
-        </header>
+        <DialogHeader
+          title="Export selected photos"
+          subtitle={`${totalSelected} photo${totalSelected === 1 ? '' : 's'} selected`}
+          onClose={onClose}
+          closeDisabled={phase === 'exporting'}
+          closeLabel="Close export dialog"
+        />
         {phase === 'configure' ? (
           <>
             <div className="flex min-h-0 flex-1 flex-col divide-y divide-[var(--border,#E1D3B9)] lg:flex-row lg:divide-x lg:divide-y-0">

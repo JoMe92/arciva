@@ -63,6 +63,7 @@ import ErrorBoundary from '../../components/ErrorBoundary'
 import { fetchImageHubAssetStatus, type ImageHubAssetStatus } from '../../shared/api/hub'
 import { getImageHubSettings } from '../../shared/api/settings'
 import ExportDialog from './ExportDialog'
+import DialogHeader from '../../components/DialogHeader'
 import GeneralSettingsDialog from '../../components/modals/GeneralSettingsDialog'
 import { useGeneralSettings } from '../../shared/settings/general'
 import type { GeneralSettings } from '../../shared/settings/general'
@@ -3458,13 +3459,7 @@ function openLocalPicker(kind: 'files' | 'folder' = 'files') {
         onDragOver={handleDragOver}
         onDrop={handleLocalDrop}
       >
-        <div className="flex flex-shrink-0 items-center justify-between px-5 py-3">
-          <div className="flex items-center gap-2">
-            <div className="h-5 w-5 rounded-full" style={{ backgroundColor: TOKENS.clay500 }} />
-            <div className="text-sm font-semibold">Import photos</div>
-          </div>
-          <button onClick={onClose} className="px-2 py-1 text-sm rounded border border-[var(--border,#E1D3B9)]" aria-label="Close">Close</button>
-        </div>
+        <DialogHeader title="Import photos" onClose={onClose} closeLabel="Close import flow" className="flex-shrink-0" />
         <div className="relative flex-1 min-h-0 px-5 pb-5 pt-2 text-sm text-[var(--text,#1F1E1B)]">
           {isPreparingLocalSelection && (
             <div className="absolute inset-0 z-30 flex items-center justify-center bg-[var(--surface,#FFFFFF)]/70 backdrop-blur-[1px]">

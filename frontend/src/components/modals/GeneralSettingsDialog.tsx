@@ -28,12 +28,10 @@ const GeneralSettingsDialog: React.FC<GeneralSettingsDialogProps> = ({ open, set
     }
   }, [open, settings.language])
 
-  if (!open) return null
-
-    const handleSubmit = (event: React.FormEvent) => {
-      event.preventDefault()
-      onSave({ language })
-    }
+  const handleSubmit = (event: React.FormEvent) => {
+    event.preventDefault()
+    onSave({ language })
+  }
 
   const handleStartBulkExport = useCallback(async () => {
     if (bulkPhase === 'running') return
@@ -101,6 +99,8 @@ const GeneralSettingsDialog: React.FC<GeneralSettingsDialogProps> = ({ open, set
     setAutoDownloadedJobId(bulkResult.jobId)
   }, [autoDownloadedJobId, bulkPhase, bulkResult])
 
+  if (!open) return null
+
   const basisDescription =
     bulkResult?.dateBasis && bulkResult.dateBasis !== 'capture-date'
       ? 'Capture date.'
@@ -111,6 +111,8 @@ const GeneralSettingsDialog: React.FC<GeneralSettingsDialogProps> = ({ open, set
     bulkPhase === 'running'
       ? `Packaging ${bulkProgress.total ? `${bulkProgress.completed} of ${bulkProgress.total}` : `${bulkProgress.completed}`} images…`
       : null
+  const bulkProgressPercent =
+    bulkPhase === 'running' && bulkProgress.total > 0 ? Math.min(100, Math.round((bulkProgress.completed / bulkProgress.total) * 100)) : null
 
   return (
     <ModalShell
@@ -167,7 +169,22 @@ const GeneralSettingsDialog: React.FC<GeneralSettingsDialogProps> = ({ open, set
           >
             {bulkButtonLabel}
           </button>
-          {bulkProgressLabel ? <p className="text-[12px] text-[var(--text-muted,#6B645B)]">{bulkProgressLabel}</p> : null}
+          {bulkProgressLabel ? (
+            <div className="space-y-1">
+              <p className="text-[12px] text-[var(--text-muted,#6B645B)]">{bulkProgressLabel}</p>
+              {typeof bulkProgressPercent === 'number' ? (
+                <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--border,#E1D3B9)]">
+                  <div
+                    className="h-full rounded-full bg-[var(--primary,#A56A4A)] transition-all"
+                    style={{ width: `${bulkProgressPercent}%` }}
+                    aria-valuenow={bulkProgressPercent}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                  />
+                </div>
+              ) : null}
+            </div>
+          ) : null}
           {bulkError ? (
             <div className="rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-700">{bulkError}</div>
           ) : null}

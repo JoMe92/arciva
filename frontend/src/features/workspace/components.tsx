@@ -82,6 +82,26 @@ type MetadataSummary = {
   hasEdits: boolean
 }
 
+type InspectorPreviewData = {
+  src: string | null
+  thumbSrc: string | null
+  alt: string
+  placeholderRatio: Photo['placeholderRatio']
+}
+
+export type InspectorViewportRect = {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+export type InspectorPreviewPanCommand = {
+  x: number
+  y: number
+  token: number
+}
+
 type MetadataEntry = {
   key: string
   normalizedKey: string
@@ -1301,6 +1321,15 @@ export function InspectorPanel({
   metadataWarnings,
   metadataLoading,
   metadataError,
+  previewAsset,
+  detailZoom,
+  detailMinZoom,
+  detailMaxZoom,
+  onDetailZoomIn,
+  onDetailZoomOut,
+  onDetailZoomReset,
+  detailViewport,
+  onPreviewPan,
 }: {
   collapsed: boolean
   onCollapse: () => void
@@ -1319,6 +1348,15 @@ export function InspectorPanel({
   metadataWarnings: string[]
   metadataLoading: boolean
   metadataError: string | null
+  previewAsset: InspectorPreviewData | null
+  detailZoom: number
+  detailMinZoom: number
+  detailMaxZoom: number
+  onDetailZoomIn: () => void
+  onDetailZoomOut: () => void
+  onDetailZoomReset: () => void
+  detailViewport: InspectorViewportRect | null
+  onPreviewPan?: (position: { x: number; y: number }) => void
 }) {
   const keyDataSectionRef = useRef<HTMLDivElement | null>(null)
   const projectsSectionRef = useRef<HTMLDivElement | null>(null)
@@ -1436,6 +1474,18 @@ export function InspectorPanel({
             </div>
           </header>
           <div id={RIGHT_PANEL_CONTENT_ID} className="flex flex-1 min-h-0 flex-col gap-3 overflow-y-auto pr-2">
+            <InspectorPreviewCard
+              preview={previewAsset}
+              hasSelection={hasSelection}
+              zoomLevel={detailZoom}
+              minZoom={detailMinZoom}
+              maxZoom={detailMaxZoom}
+              viewport={detailViewport}
+              onZoomIn={onDetailZoomIn}
+              onZoomOut={onDetailZoomOut}
+              onZoomReset={onDetailZoomReset}
+              onPanPreview={onPreviewPan}
+            />
             <InspectorSection
               id={RIGHT_KEY_SECTION_ID}
               ref={keyDataSectionRef}
@@ -1523,6 +1573,201 @@ export function InspectorPanel({
         ) : null}
       </div>
     </aside>
+  )
+}
+
+type InspectorPreviewCardProps = {
+  preview: InspectorPreviewData | null
+  hasSelection: boolean
+  zoomLevel: number
+  minZoom: number
+  maxZoom: number
+  viewport: InspectorViewportRect | null
+  onZoomIn: () => void
+  onZoomOut: () => void
+  onZoomReset: () => void
+  onPanPreview?: (position: { x: number; y: number }) => void
+}
+
+function InspectorPreviewCard({
+  preview,
+  hasSelection,
+  zoomLevel,
+  minZoom,
+  maxZoom,
+  viewport,
+  onZoomIn,
+  onZoomOut,
+  onZoomReset,
+  onPanPreview,
+}: InspectorPreviewCardProps) {
+  const imageSrc = preview?.src ?? preview?.thumbSrc ?? null
+  const zoomPercent = `${Math.round(zoomLevel * 100)}%`
+  const controlsDisabled = !hasSelection
+  const canZoomIn = zoomLevel < maxZoom - 0.01
+  const canZoomOut = zoomLevel > minZoom + 0.01
+
+  const previewMessage = hasSelection ? 'Preview unavailable for this asset.' : 'Select a photo to see it here.'
+
+  const handleWheel = useCallback(
+    (event: React.WheelEvent<HTMLDivElement>) => {
+      if (!hasSelection) return
+      event.preventDefault()
+      if (event.deltaY < 0) onZoomIn()
+      else onZoomOut()
+    },
+    [hasSelection, onZoomIn, onZoomOut],
+  )
+
+  const indicatorStyle = useMemo(() => {
+    if (!viewport) return null
+    return {
+      left: `${viewport.x * 100}%`,
+      top: `${viewport.y * 100}%`,
+      width: `${viewport.width * 100}%`,
+      height: `${viewport.height * 100}%`,
+    }
+  }, [viewport])
+
+  const previewDragRef = useRef<number | null>(null)
+
+  const emitPanFromRelative = useCallback(
+    (relativeX: number, relativeY: number) => {
+      if (!viewport || !onPanPreview || !hasSelection) return
+      const clampCoordinate = (center: number, size: number) => {
+        if (!Number.isFinite(size) || size <= 0) return 0
+        const half = size / 2
+        const max = Math.max(0, 1 - size)
+        const target = center - half
+        return Math.min(max, Math.max(0, target))
+      }
+      onPanPreview({
+        x: clampCoordinate(relativeX, viewport.width),
+        y: clampCoordinate(relativeY, viewport.height),
+      })
+    },
+    [hasSelection, onPanPreview, viewport],
+  )
+
+  const handlePreviewPointerDown = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (!preview || !viewport || !onPanPreview || !hasSelection) return
+      event.preventDefault()
+      previewDragRef.current = event.pointerId
+      event.currentTarget.setPointerCapture(event.pointerId)
+      const bounds = event.currentTarget.getBoundingClientRect()
+      emitPanFromRelative((event.clientX - bounds.left) / bounds.width, (event.clientY - bounds.top) / bounds.height)
+    },
+    [emitPanFromRelative, hasSelection, onPanPreview, preview, viewport],
+  )
+
+  const handlePreviewPointerMove = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (previewDragRef.current !== event.pointerId) return
+      if (!preview || !viewport || !onPanPreview || !hasSelection) return
+      event.preventDefault()
+      const bounds = event.currentTarget.getBoundingClientRect()
+      emitPanFromRelative((event.clientX - bounds.left) / bounds.width, (event.clientY - bounds.top) / bounds.height)
+    },
+    [emitPanFromRelative, hasSelection, onPanPreview, preview, viewport],
+  )
+
+  const releasePreviewPointer = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (previewDragRef.current !== event.pointerId) return
+    previewDragRef.current = null
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+  }, [])
+
+  return (
+    <div className="self-end w-full max-w-[320px] shrink-0">
+      <div className="flex flex-col rounded-[18px] border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] shadow-[0_18px_40px_rgba(31,30,27,0.12)]">
+        <div className="flex items-center justify-between border-b border-[var(--border,#EDE1C6)] px-4 py-2">
+          <span className="text-sm font-semibold text-[var(--text,#1F1E1B)]">Preview</span>
+          <span className="text-xs font-medium uppercase tracking-wide text-[var(--text-muted,#6B645B)]">{zoomPercent}</span>
+        </div>
+        <div
+          tabIndex={preview ? 0 : -1}
+          aria-label={preview ? preview.alt : 'No image selected'}
+          className="relative aspect-[4/3] w-full overflow-hidden rounded-[16px] p-3 outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring,#1A73E8)]"
+          onWheel={handleWheel}
+          onPointerDown={handlePreviewPointerDown}
+          onPointerMove={handlePreviewPointerMove}
+          onPointerUp={releasePreviewPointer}
+          onPointerLeave={releasePreviewPointer}
+          onPointerCancel={releasePreviewPointer}
+          onClick={(event) => {
+            if (event.detail !== 0) return
+            emitPanFromRelative(0.5, 0.5)
+          }}
+        >
+          <div className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-[12px] border border-[var(--border,#EDE1C6)] bg-[var(--placeholder-bg-beige,#F3EBDD)]">
+            {preview ? (
+              imageSrc ? (
+                <img src={imageSrc} alt={preview.alt} className="max-h-full max-w-full object-contain" />
+              ) : (
+                <RawPlaceholder ratio={preview.placeholderRatio} title={preview.alt} fit="contain" />
+              )
+            ) : (
+              <p className="px-4 text-center text-sm text-[var(--text-muted,#6B645B)]">{previewMessage}</p>
+            )}
+            {preview && viewport ? (
+              <span className="pointer-events-none absolute inset-0">
+                <span
+                  className="absolute rounded-[6px] border border-[var(--focus-ring,#1A73E8)] bg-[rgba(26,115,232,0.12)]"
+                  style={indicatorStyle ?? undefined}
+                />
+              </span>
+            ) : null}
+          </div>
+          {null}
+        </div>
+        <div className="flex items-center justify-center gap-3 border-t border-[var(--border,#EDE1C6)] px-3 py-3">
+          <InspectorPreviewControlButton
+            label="Zoom out"
+            icon={<MinusIcon className="h-4 w-4" aria-hidden="true" />}
+            onClick={onZoomOut}
+            disabled={controlsDisabled || !canZoomOut}
+          />
+          <InspectorPreviewControlButton
+            label="Fit to canvas"
+            icon={<FrameIcon className="h-4 w-4" aria-hidden="true" />}
+            onClick={onZoomReset}
+            disabled={!hasSelection}
+          />
+          <InspectorPreviewControlButton
+            label="Zoom in"
+            icon={<PlusIcon className="h-4 w-4" aria-hidden="true" />}
+            onClick={onZoomIn}
+            disabled={controlsDisabled || !canZoomIn}
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+type InspectorPreviewControlButtonProps = {
+  label: string
+  icon: React.ReactNode
+  onClick: () => void
+  disabled?: boolean
+}
+
+function InspectorPreviewControlButton({ label, icon, onClick, disabled }: InspectorPreviewControlButtonProps) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      disabled={disabled}
+      className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border,#EDE1C6)] text-[var(--text,#1F1E1B)] transition hover:border-[var(--text,#1F1E1B)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)] disabled:cursor-not-allowed disabled:opacity-50"
+    >
+      <span className="sr-only">{label}</span>
+      {icon}
+    </button>
   )
 }
 
@@ -2277,6 +2522,25 @@ function PlusIcon(props: React.SVGProps<SVGSVGElement>) {
   )
 }
 
+function MinusIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M3 8h10" />
+    </svg>
+  )
+}
+
+function FrameIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M5 3H3v2" />
+      <path d="M11 3h2v2" />
+      <path d="M5 13H3v-2" />
+      <path d="M11 13h2v-2" />
+    </svg>
+  )
+}
+
 function CalendarIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" {...props}>
@@ -2394,6 +2658,15 @@ export function DetailView({
   selectedIds,
   onSelect,
   paginatorRef,
+  zoom = 1,
+  minZoom = 1,
+  maxZoom = 4,
+  zoomStep = 1.2,
+  onViewportChange,
+  viewportResetKey,
+  assetDimensions,
+  onZoomChange,
+  previewPanRequest,
 }: {
   items: Photo[]
   index: number
@@ -2402,6 +2675,15 @@ export function DetailView({
   selectedIds?: Set<string>
   onSelect?: (idx: number, options?: GridSelectOptions) => void
   paginatorRef?: React.Ref<HTMLDivElement>
+  zoom?: number
+  minZoom?: number
+  maxZoom?: number
+  zoomStep?: number
+  onViewportChange?: (rect: InspectorViewportRect | null) => void
+  viewportResetKey?: number
+  assetDimensions?: { width: number; height: number } | null
+  onZoomChange?: React.Dispatch<React.SetStateAction<number>>
+  previewPanRequest?: InspectorPreviewPanCommand | null
 }) {
   const cur = items[index]
   const canPrev = index > 0
@@ -2410,20 +2692,287 @@ export function DetailView({
   const THUMB = 96
 
   const rootClass = ['grid', 'h-full', 'min-h-0', className].filter(Boolean).join(' ')
+  const viewerRef = useRef<HTMLDivElement | null>(null)
+  const dragStateRef = useRef<{ pointerId: number | null; lastX: number; lastY: number } | null>(null)
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 })
+  const [pan, setPan] = useState({ x: 0, y: 0 })
+  const [isDragging, setIsDragging] = useState(false)
+  const clampZoomValue = useCallback(
+    (value: number) => {
+      if (!Number.isFinite(value)) return minZoom
+      return Math.min(maxZoom, Math.max(minZoom, value))
+    },
+    [minZoom, maxZoom],
+  )
+
+  const zoomValue = useMemo(() => {
+    return clampZoomValue(zoom)
+  }, [zoom, clampZoomValue])
+
+  useEffect(() => {
+    const node = viewerRef.current
+    if (!node) return
+    if (typeof ResizeObserver === 'undefined') {
+      const rect = node.getBoundingClientRect()
+      setContainerSize({ width: rect.width, height: rect.height })
+      return
+    }
+    const observer = new ResizeObserver((entries) => {
+      if (!entries.length) return
+      const entry = entries[0]
+      setContainerSize({ width: entry.contentRect.width, height: entry.contentRect.height })
+    })
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [cur ? cur.id : null])
+
+  const fallbackRatio = useMemo(() => {
+    if (!cur?.placeholderRatio) return 1
+    const parts = String(cur.placeholderRatio)
+      .split('x')
+      .map((part) => Number(part))
+    if (parts.length === 2 && Number.isFinite(parts[0]) && Number.isFinite(parts[1]) && parts[1] !== 0) {
+      return Math.abs(parts[0] / parts[1])
+    }
+    return 1
+  }, [cur?.placeholderRatio])
+
+  const detailAspectRatio = useMemo(() => {
+    const width = assetDimensions?.width
+    const height = assetDimensions?.height
+    if (Number.isFinite(width) && Number.isFinite(height) && width && height) {
+      const ratio = width / height
+      if (ratio > 0) return ratio
+    }
+    return fallbackRatio || 1
+  }, [assetDimensions?.width, assetDimensions?.height, fallbackRatio])
+
+  const baseSize = useMemo(() => {
+    if (!containerSize.width || !containerSize.height) return { width: 0, height: 0 }
+    const ratio = detailAspectRatio || 1
+    const containerRatio = containerSize.width / containerSize.height || 1
+    if (ratio >= containerRatio) {
+      const width = containerSize.width
+      const height = ratio ? width / ratio : containerSize.height
+      return { width, height }
+    }
+    const height = containerSize.height
+    const width = height * ratio
+    return { width, height }
+  }, [containerSize.width, containerSize.height, detailAspectRatio])
+
+  const scaledWidth = baseSize.width * zoomValue
+  const scaledHeight = baseSize.height * zoomValue
+  const maxOffsetX = Math.max(0, (scaledWidth - containerSize.width) / 2)
+  const maxOffsetY = Math.max(0, (scaledHeight - containerSize.height) / 2)
+
+  const clampPanValue = useCallback(
+    (value: number, axis: 'x' | 'y') => {
+      const limit = axis === 'x' ? maxOffsetX : maxOffsetY
+      if (!Number.isFinite(value) || limit <= 0) return 0
+      return Math.min(limit, Math.max(-limit, value))
+    },
+    [maxOffsetX, maxOffsetY],
+  )
+
+  const clampPanState = useCallback(
+    (next: { x: number; y: number }) => ({
+      x: clampPanValue(next.x, 'x'),
+      y: clampPanValue(next.y, 'y'),
+    }),
+    [clampPanValue],
+  )
+
+  useEffect(() => {
+    setPan((prev) => clampPanState(prev))
+  }, [clampPanState])
+
+  useEffect(() => {
+    setPan({ x: 0, y: 0 })
+    dragStateRef.current = null
+    setIsDragging(false)
+  }, [cur?.id, viewportResetKey])
+
+  useEffect(() => {
+    if (!previewPanRequest) return
+    if (!containerSize.width || !containerSize.height || !scaledWidth || !scaledHeight) return
+    const viewWidth = Math.min(containerSize.width, scaledWidth)
+    const viewHeight = Math.min(containerSize.height, scaledHeight)
+    const normalizedWidth = Math.min(1, scaledWidth ? viewWidth / scaledWidth : 1)
+    const normalizedHeight = Math.min(1, scaledHeight ? viewHeight / scaledHeight : 1)
+    const clampCoord = (value: number, size: number) => {
+      const max = Math.max(0, 1 - size)
+      if (!Number.isFinite(value)) return 0
+      return Math.min(max, Math.max(0, value))
+    }
+    const targetX = clampCoord(previewPanRequest.x, normalizedWidth)
+    const targetY = clampCoord(previewPanRequest.y, normalizedHeight)
+
+    const computePanFromNormalized = (target: number, axis: 'x' | 'y') => {
+      const scaled = axis === 'x' ? scaledWidth : scaledHeight
+      const container = axis === 'x' ? containerSize.width : containerSize.height
+      if (!scaled || !container) return 0
+      if (scaled <= container) return 0
+      const desiredImageOffset = -target * scaled
+      const centeredOffset = (container - scaled) / 2
+      return clampPanValue(desiredImageOffset - centeredOffset, axis)
+    }
+
+    setPan({
+      x: computePanFromNormalized(targetX, 'x'),
+      y: computePanFromNormalized(targetY, 'y'),
+    })
+  }, [
+    clampPanValue,
+    containerSize.height,
+    containerSize.width,
+    previewPanRequest,
+    scaledHeight,
+    scaledWidth,
+  ])
+
+  const handlePointerDown = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (zoomValue <= 1) return
+      event.preventDefault()
+      event.currentTarget.setPointerCapture(event.pointerId)
+      dragStateRef.current = { pointerId: event.pointerId, lastX: event.clientX, lastY: event.clientY }
+      setIsDragging(true)
+    },
+    [zoomValue],
+  )
+
+  const handlePointerMove = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      const state = dragStateRef.current
+      if (!state || state.pointerId !== event.pointerId) return
+      event.preventDefault()
+      const dx = event.clientX - state.lastX
+      const dy = event.clientY - state.lastY
+      state.lastX = event.clientX
+      state.lastY = event.clientY
+      setPan((prev) => clampPanState({ x: prev.x + dx, y: prev.y + dy }))
+    },
+    [clampPanState],
+  )
+
+  const endPointerInteraction = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    const state = dragStateRef.current
+    if (!state || state.pointerId !== event.pointerId) return
+    dragStateRef.current = null
+    setIsDragging(false)
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+  }, [])
+
+  const interactionCursor = zoomValue > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default'
+  const handleWheelZoom = useCallback(
+    (event: React.WheelEvent<HTMLDivElement>) => {
+      if (!onZoomChange || !cur) return
+      event.preventDefault()
+      const direction = event.deltaY < 0 ? zoomStep : 1 / zoomStep
+      const nextZoom = clampZoomValue(zoomValue * direction)
+      if (nextZoom === zoomValue) return
+      onZoomChange(() => nextZoom)
+    },
+    [clampZoomValue, cur, onZoomChange, zoomStep, zoomValue],
+  )
+
+  const detailImage = useMemo(() => {
+    if (!cur) return null
+    if (cur.previewSrc) {
+      return (
+        <img
+          src={cur.previewSrc}
+          alt={cur.name}
+          draggable={false}
+          className="pointer-events-none h-full w-full select-none object-contain"
+        />
+      )
+    }
+    if (cur.thumbSrc) {
+      return (
+        <img
+          src={cur.thumbSrc}
+          alt={cur.name}
+          draggable={false}
+          className="pointer-events-none h-full w-full select-none object-contain"
+        />
+      )
+    }
+    return (
+      <div className="pointer-events-none">
+        <RawPlaceholder ratio={cur.placeholderRatio} title={cur.name || 'Placeholder image'} fit="contain" />
+      </div>
+    )
+  }, [cur])
+
+  useEffect(() => {
+    if (!onViewportChange) return
+    if (!cur) {
+      onViewportChange(null)
+      return
+    }
+    if (!containerSize.width || !containerSize.height || !scaledWidth || !scaledHeight) {
+      onViewportChange({ x: 0, y: 0, width: 1, height: 1 })
+      return
+    }
+    const containerWidth = containerSize.width
+    const containerHeight = containerSize.height
+    const viewWidth = Math.min(containerWidth, scaledWidth)
+    const viewHeight = Math.min(containerHeight, scaledHeight)
+    const normalizedWidth = Math.min(1, scaledWidth ? viewWidth / scaledWidth : 1)
+    const normalizedHeight = Math.min(1, scaledHeight ? viewHeight / scaledHeight : 1)
+    const imageLeft = (containerWidth - scaledWidth) / 2 + pan.x
+    const imageTop = (containerHeight - scaledHeight) / 2 + pan.y
+    const visibleLeft = Math.max(0, -imageLeft)
+    const visibleTop = Math.max(0, -imageTop)
+    const rawX = scaledWidth ? visibleLeft / scaledWidth : 0
+    const rawY = scaledHeight ? visibleTop / scaledHeight : 0
+    const clampCoord = (value: number, size: number) => {
+      const max = Math.max(0, 1 - size)
+      if (!Number.isFinite(value)) return 0
+      return Math.min(max, Math.max(0, value))
+    }
+    onViewportChange({
+      x: clampCoord(rawX, normalizedWidth),
+      y: clampCoord(rawY, normalizedHeight),
+      width: normalizedWidth,
+      height: normalizedHeight,
+    })
+  }, [containerSize.height, containerSize.width, cur, onViewportChange, pan.x, pan.y, scaledHeight, scaledWidth])
 
   return (
     <div className={rootClass} style={{ gridTemplateRows: `minmax(0,1fr) ${STRIP_H}px` }}>
       <div className="relative min-h-0 overflow-hidden">
         {cur ? (
           <>
-            <div className="absolute inset-0 flex items-center justify-center bg-[var(--placeholder-bg-beige,#F3EBDD)] p-6">
-              {cur.previewSrc ? (
-                <img src={cur.previewSrc} alt={cur.name} className="max-h-full max-w-full object-contain" />
-              ) : cur.thumbSrc ? (
-                <img src={cur.thumbSrc} alt={cur.name} className="max-h-full max-w-full object-contain" />
-              ) : (
-                <RawPlaceholder ratio={cur.placeholderRatio} title={cur.name || 'Placeholder image'} fit="contain" />
-              )}
+            <div className="absolute inset-0 bg-[var(--placeholder-bg-beige,#F3EBDD)] p-6">
+              <div ref={viewerRef} className="relative h-full w-full overflow-hidden rounded-[var(--r-lg,20px)]">
+                <div
+                  className="absolute inset-0"
+                  style={{ cursor: interactionCursor }}
+                  onPointerDown={handlePointerDown}
+                  onPointerMove={handlePointerMove}
+                  onPointerUp={endPointerInteraction}
+                  onPointerLeave={endPointerInteraction}
+                  onPointerCancel={endPointerInteraction}
+                  onWheel={handleWheelZoom}
+                >
+                  <div
+                    className="absolute left-1/2 top-1/2"
+                    style={{
+                      width: baseSize.width || undefined,
+                      height: baseSize.height || undefined,
+                      transform: `translate(-50%, -50%) translate3d(${pan.x}px, ${pan.y}px, 0) scale(${zoomValue})`,
+                      transition: isDragging ? 'none' : 'transform 120ms ease-out',
+                    }}
+                  >
+                    {detailImage}
+                  </div>
+                </div>
+              </div>
             </div>
             <div
               ref={paginatorRef}

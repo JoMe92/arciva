@@ -1,4 +1,5 @@
 import { render, fireEvent, screen, waitFor } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ImportSheet } from '../ProjectWorkspace'
 import { vi } from 'vitest'
 
@@ -75,15 +76,18 @@ describe('ImportSheet local selection queue feedback', () => {
     const onClose = vi.fn()
     const onImport = vi.fn()
     const onProgressSnapshot = vi.fn()
+    const client = new QueryClient()
     const utils = render(
-      <ImportSheet
-        projectId="project-123"
-        onClose={onClose}
-        onImport={onImport}
-        onProgressSnapshot={onProgressSnapshot}
-        folderMode="custom"
-        customFolder="Test Folder"
-      />,
+      <QueryClientProvider client={client}>
+        <ImportSheet
+          projectId="project-123"
+          onClose={onClose}
+          onImport={onImport}
+          onProgressSnapshot={onProgressSnapshot}
+          folderMode="custom"
+          customFolder="Test Folder"
+        />
+      </QueryClientProvider>,
     )
     return { ...utils, onClose, onImport, onProgressSnapshot }
   }

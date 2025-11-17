@@ -1,9 +1,8 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import ModalShell from './ModalShell'
 import type { GeneralSettings } from '../../shared/settings/general'
 import { LANGUAGE_OPTIONS } from '../../shared/settings/general'
-import { exportAllProjectImages, type BulkImageExportProgress, type BulkImageExportResult } from '../../shared/api/bulkImageExports'
-import { triggerBrowserDownload } from '../../shared/downloads'
+import { useBulkImageExport } from '../../shared/bulkExport/BulkImageExportContext'
 
 type GeneralSettingsDialogProps = {
   open: boolean
@@ -14,13 +13,11 @@ type GeneralSettingsDialogProps = {
 
 const GeneralSettingsDialog: React.FC<GeneralSettingsDialogProps> = ({ open, settings, onClose, onSave }) => {
   const [language, setLanguage] = useState<GeneralSettings['language']>(settings.language)
-  const [bulkPhase, setBulkPhase] = useState<'idle' | 'running' | 'success'>('idle')
-  const [bulkProgress, setBulkProgress] = useState<BulkImageExportProgress>({ completed: 0, total: 0 })
-  const [bulkError, setBulkError] = useState<string | null>(null)
-  const [bulkResult, setBulkResult] = useState<BulkImageExportResult | null>(null)
-  const [autoDownloadedJobId, setAutoDownloadedJobId] = useState<string | null>(null)
-  const controllerRef = useRef<AbortController | null>(null)
-  const downloadUrlRef = useRef<string | null>(null)
+  const { state: bulkState, startExport, cancelExport, downloadResult } = useBulkImageExport()
+  const bulkPhase = bulkState.phase
+  const bulkProgress = bulkState.progress
+  const bulkResult = bulkState.result
+  const bulkError = bulkState.phase === 'error' ? bulkState.error : null
 
   useEffect(() => {
     if (open) {
@@ -33,71 +30,13 @@ const GeneralSettingsDialog: React.FC<GeneralSettingsDialogProps> = ({ open, set
     onSave({ language })
   }
 
-  const handleStartBulkExport = useCallback(async () => {
-    if (bulkPhase === 'running') return
-    if (controllerRef.current) {
-      controllerRef.current.abort()
-    }
-    setBulkPhase('running')
-    setBulkError(null)
-    setBulkResult(null)
-    setAutoDownloadedJobId(null)
-    setBulkProgress({ completed: 0, total: 0 })
-    const controller = new AbortController()
-    controllerRef.current = controller
-    try {
-      const result = await exportAllProjectImages({
-        signal: controller.signal,
-        onProgress: (snapshot) => setBulkProgress({ completed: snapshot.completed, total: snapshot.total }),
-      })
-      setBulkResult(result)
-      setBulkPhase('success')
-    } catch (error) {
-      if ((error as Error)?.name === 'AbortError') {
-        setBulkError('Export cancelled.')
-      } else {
-        setBulkError(error instanceof Error ? error.message : 'Unable to export images.')
-      }
-      setBulkPhase('idle')
-    } finally {
-      controllerRef.current = null
-    }
-  }, [bulkPhase])
+  const handleStartBulkExport = useCallback(() => {
+    void startExport()
+  }, [startExport])
 
   const handleDownloadBulkResult = useCallback(() => {
-    if (!bulkResult?.downloadUrl) return
-    triggerBrowserDownload(bulkResult.downloadUrl, bulkResult.downloadFilename)
-  }, [bulkResult])
-
-  useEffect(() => {
-    if (!open && controllerRef.current) {
-      controllerRef.current.abort()
-      controllerRef.current = null
-    }
-  }, [open])
-
-  useEffect(() => {
-    if (downloadUrlRef.current && downloadUrlRef.current !== (bulkResult?.downloadUrl ?? null)) {
-      URL.revokeObjectURL(downloadUrlRef.current)
-    }
-    downloadUrlRef.current = bulkResult?.downloadUrl ?? null
-  }, [bulkResult?.downloadUrl])
-
-  useEffect(() => {
-    return () => {
-      controllerRef.current?.abort()
-      if (downloadUrlRef.current) {
-        URL.revokeObjectURL(downloadUrlRef.current)
-      }
-    }
-  }, [])
-
-  useEffect(() => {
-    if (bulkPhase !== 'success' || !bulkResult?.downloadUrl) return
-    if (autoDownloadedJobId && autoDownloadedJobId === bulkResult.jobId) return
-    triggerBrowserDownload(bulkResult.downloadUrl, bulkResult.downloadFilename)
-    setAutoDownloadedJobId(bulkResult.jobId)
-  }, [autoDownloadedJobId, bulkPhase, bulkResult])
+    downloadResult()
+  }, [downloadResult])
 
   if (!open) return null
 
@@ -161,14 +100,24 @@ const GeneralSettingsDialog: React.FC<GeneralSettingsDialogProps> = ({ open, set
           </p>
           <p className="text-[11px] text-[var(--text-muted,#6B645B)]">{basisDescription}</p>
           <p className="text-[11px] text-[var(--text-muted,#6B645B)]">This contains image files only—metadata/database exports live in their own workflow.</p>
-          <button
-            type="button"
-            onClick={handleStartBulkExport}
-            disabled={bulkPhase === 'running'}
-            className={`inline-flex h-9 items-center rounded-full px-4 text-[13px] ${bulkPhase === 'running' ? 'cursor-wait border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] text-[var(--text-muted,#6B645B)]' : 'border border-[var(--primary,#A56A4A)] bg-[var(--primary,#A56A4A)] text-[var(--primary-contrast,#FFFFFF)] hover:bg-[var(--primary-strong,#8D5336)]'}`}
-          >
-            {bulkButtonLabel}
-          </button>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={handleStartBulkExport}
+              disabled={bulkPhase === 'running'}
+              className={`inline-flex h-9 items-center rounded-full px-4 text-[13px] ${bulkPhase === 'running' ? 'cursor-wait border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] text-[var(--text-muted,#6B645B)]' : 'border border-[var(--primary,#A56A4A)] bg-[var(--primary,#A56A4A)] text-[var(--primary-contrast,#FFFFFF)] hover:bg-[var(--primary-strong,#8D5336)]'}`}
+            >
+              {bulkButtonLabel}
+            </button>
+            {bulkPhase === 'running' ? (
+              <button type="button" onClick={cancelExport} className="text-[11px] text-[var(--text-muted,#6B645B)] underline hover:text-[var(--text,#1F1E1B)]">
+                Cancel export
+              </button>
+            ) : null}
+          </div>
+          {bulkPhase === 'running' ? (
+            <p className="text-[11px] text-[var(--text-muted,#6B645B)]">You can close this dialog—the export keeps running in the background.</p>
+          ) : null}
           {bulkProgressLabel ? (
             <div className="space-y-1">
               <p className="text-[12px] text-[var(--text-muted,#6B645B)]">{bulkProgressLabel}</p>

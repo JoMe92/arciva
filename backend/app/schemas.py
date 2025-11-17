@@ -280,6 +280,30 @@ class ExportJobOut(BaseModel):
     settings: ExportJobSettings
 
 
+class BulkImageExportOut(BaseModel):
+    id: UUID
+    status: ExportJobStatus
+    progress: int
+    processed_files: int
+    total_files: int
+    download_url: Optional[str] = None
+    artifact_filename: Optional[str] = None
+    artifact_size: Optional[int] = None
+    date_basis: str
+    folder_template: str
+    error_message: Optional[str] = None
+    created_at: datetime
+    started_at: Optional[datetime]
+    finished_at: Optional[datetime]
+
+
+class BulkImageExportEstimate(BaseModel):
+    total_files: int
+    total_bytes: int
+    date_basis: str
+    folder_template: str
+
+
 class HubAssetProjectRef(BaseModel):
     project_id: UUID
     title: str

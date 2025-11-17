@@ -5,6 +5,7 @@ import type { Photo } from './types'
 import { exportSelectedPhotos } from '../../shared/api/exports'
 import type { ExportPhotosResponse } from '../../shared/api/exports'
 import { useExportPresets, type ExportSettingsSnapshot, type ExportPreset } from './exportPresets'
+import { triggerBrowserDownload } from '../../shared/downloads'
 
 type ExportDialogProps = {
   isOpen: boolean
@@ -179,20 +180,6 @@ export function ExportDialog({ isOpen, photos, projectId, onClose }: ExportDialo
     }
   }, [addPreset, presetName, settings])
 
-  const triggerDownload = useCallback((url: string, filename?: string | null) => {
-    if (typeof document === 'undefined') return
-    const anchor = document.createElement('a')
-    anchor.href = url
-    if (filename) {
-      anchor.download = filename
-    }
-    anchor.rel = 'noopener'
-    anchor.style.display = 'none'
-    document.body.appendChild(anchor)
-    anchor.click()
-    document.body.removeChild(anchor)
-  }, [])
-
   const handleExport = useCallback(async () => {
     if (!validate()) return
     if (!photos.length) return
@@ -247,15 +234,15 @@ export function ExportDialog({ isOpen, photos, projectId, onClose }: ExportDialo
 
   const handleDownloadExport = useCallback(() => {
     if (!exportResult?.downloadUrl) return
-    triggerDownload(exportResult.downloadUrl, exportResult.downloadFilename)
-  }, [exportResult, triggerDownload])
+    triggerBrowserDownload(exportResult.downloadUrl, exportResult.downloadFilename)
+  }, [exportResult])
 
   useEffect(() => {
     if (phase !== 'success' || !exportResult?.downloadUrl) return
     if (autoDownloadedJobId && autoDownloadedJobId === exportResult.jobId) return
-    triggerDownload(exportResult.downloadUrl, exportResult.downloadFilename)
+    triggerBrowserDownload(exportResult.downloadUrl, exportResult.downloadFilename)
     setAutoDownloadedJobId(exportResult.jobId)
-  }, [autoDownloadedJobId, exportResult, phase, triggerDownload])
+  }, [autoDownloadedJobId, exportResult, phase])
 
   if (!isOpen) return null
 

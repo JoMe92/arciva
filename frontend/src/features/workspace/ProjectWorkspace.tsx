@@ -18,7 +18,7 @@ import {
 } from '../../shared/api/assets'
 import { getProject, updateProject, type ProjectApiResponse, type ProjectUpdatePayload } from '../../shared/api/projects'
 import { initUpload, putUpload, completeUpload } from '../../shared/api/uploads'
-import { placeholderRatioForAspect } from '../../shared/placeholder'
+import { placeholderRatioForAspect, RATIO_DIMENSIONS } from '../../shared/placeholder'
 import type { Photo, ImgType, ColorTag } from './types'
 import type { PendingItem } from './importTypes'
 import {
@@ -37,6 +37,8 @@ import {
   type GridSelectOptions,
   CURRENT_CONFIG_SOURCE_ID,
   type MetadataSourceId,
+  type InspectorViewportRect,
+  type InspectorPreviewPanCommand,
 } from './components'
 import ImageHubImportPane from './ImageHubImportPane'
 import ErrorBoundary from '../../components/ErrorBoundary'
@@ -46,6 +48,7 @@ import ExportDialog from './ExportDialog'
 import GeneralSettingsDialog from '../../components/modals/GeneralSettingsDialog'
 import { useGeneralSettings } from '../../shared/settings/general'
 import type { GeneralSettings } from '../../shared/settings/general'
+import { withBase } from '../../shared/api/base'
 
 const LEFT_MIN_WIDTH = 300
 const LEFT_MAX_WIDTH = 560
@@ -57,6 +60,14 @@ const RIGHT_DEFAULT_WIDTH = 360
 const RIGHT_COLLAPSED_WIDTH = 56
 const HANDLE_WIDTH = 12
 const RESIZE_STEP = 16
+const DETAIL_MIN_ZOOM = 1
+const DETAIL_MAX_ZOOM = 4
+const DETAIL_ZOOM_FACTOR = 1.2
+
+function clampDetailZoom(value: number): number {
+  if (!Number.isFinite(value)) return DETAIL_MIN_ZOOM
+  return Math.min(DETAIL_MAX_ZOOM, Math.max(DETAIL_MIN_ZOOM, value))
+}
 const IGNORED_METADATA_WARNINGS = new Set(['EXIFTOOL_ERROR', 'EXIFTOOL_NOT_INSTALLED', 'EXIFTOOL_JSON_ERROR', 'ExifPill-Load failed'])
 const DATE_KEY_DELIM = '__'
 const UNKNOWN_VALUE = 'unknown'
@@ -492,6 +503,10 @@ export default function ProjectWorkspace() {
   const currentPhotoIdRef = useRef<string | null>(null)
   const [view, setView] = useState<'grid' | 'detail'>('detail')
   const [current, setCurrent] = useState(0)
+  const [detailZoom, setDetailZoom] = useState(1)
+  const [detailViewportRect, setDetailViewportRect] = useState<InspectorViewportRect | null>(null)
+  const [detailViewportResetKey, setDetailViewportResetKey] = useState(0)
+  const [previewPanRequest, setPreviewPanRequest] = useState<InspectorPreviewPanCommand | null>(null)
   const [selectedPhotoIds, setSelectedPhotoIds] = useState<Set<string>>(() => new Set<string>())
   const lastSelectedPhotoIdRef = useRef<string | null>(null)
   const selectionAnchorRef = useRef<string | null>(null)
@@ -1259,6 +1274,7 @@ export default function ProjectWorkspace() {
   function goBack() { navigate('/') }
 
   const currentPhoto = visible[current] ?? null
+
   const handlePhotoSelect = useCallback(
     (idx: number, options?: GridSelectOptions) => {
       const photo = visible[idx]
@@ -1315,6 +1331,28 @@ export default function ProjectWorkspace() {
     [visible, current],
   )
   const currentAssetId = currentPhoto?.id ?? null
+  useEffect(() => {
+    setDetailZoom(1)
+    setDetailViewportResetKey((key) => key + 1)
+    setPreviewPanRequest(null)
+    if (!currentAssetId) {
+      setDetailViewportRect(null)
+    }
+  }, [currentAssetId])
+  const handleDetailZoomIn = useCallback(() => {
+    setDetailZoom((prev) => clampDetailZoom(prev * DETAIL_ZOOM_FACTOR))
+  }, [])
+  const handleDetailZoomOut = useCallback(() => {
+    setDetailZoom((prev) => clampDetailZoom(prev / DETAIL_ZOOM_FACTOR))
+  }, [])
+  const handleDetailZoomReset = useCallback(() => {
+    setDetailZoom(1)
+    setDetailViewportResetKey((key) => key + 1)
+  }, [])
+  const handlePreviewPan = useCallback((position: { x: number; y: number }) => {
+    setDetailViewportRect((prev) => (prev ? { ...prev, x: position.x, y: position.y } : prev))
+    setPreviewPanRequest({ ...position, token: Date.now() })
+  }, [])
   const {
     data: currentAssetDetail,
     isFetching: assetDetailFetching,
@@ -1401,6 +1439,39 @@ export default function ProjectWorkspace() {
       hasEdits,
     }
   }, [currentPhoto, currentAssetDetail?.metadata_state?.edits])
+  const currentAssetDimensions = useMemo(() => {
+    if (currentAssetDetail?.width && currentAssetDetail?.height) {
+      return { width: currentAssetDetail.width, height: currentAssetDetail.height }
+    }
+    if (currentPhoto) {
+      const ratioSpec = RATIO_DIMENSIONS[currentPhoto.placeholderRatio]
+      if (ratioSpec) {
+        return { width: ratioSpec.width, height: ratioSpec.height }
+      }
+    }
+    return null
+  }, [currentAssetDetail?.width, currentAssetDetail?.height, currentPhoto?.placeholderRatio])
+  const inspectorPreviewAsset = useMemo(() => {
+    if (!currentPhoto) return null
+    const detailPreviewUrl = withBase(currentAssetDetail?.preview_url ?? null)
+    const detailThumbUrl = withBase(currentAssetDetail?.thumb_url ?? null)
+    const primarySrc = detailPreviewUrl ?? currentPhoto.previewSrc ?? currentPhoto.thumbSrc ?? detailThumbUrl
+    const fallback = currentPhoto.thumbSrc ?? detailThumbUrl ?? null
+    return {
+      src: primarySrc,
+      thumbSrc: fallback,
+      alt: currentPhoto.name || 'Selected photo preview',
+      placeholderRatio: currentPhoto.placeholderRatio,
+    }
+  }, [
+    currentPhoto?.id,
+    currentPhoto?.previewSrc,
+    currentPhoto?.thumbSrc,
+    currentPhoto?.name,
+    currentPhoto?.placeholderRatio,
+    currentAssetDetail?.preview_url,
+    currentAssetDetail?.thumb_url,
+  ])
   const metadataSourceProjectId = currentPhoto?.metadataSourceProjectId ?? currentAssetDetail?.metadata_state?.source_project_id ?? null
   const metadataSourceId: MetadataSourceId = metadataSourceProjectId ?? CURRENT_CONFIG_SOURCE_ID
   const projectOverview = useMemo(() => {
@@ -1635,6 +1706,15 @@ export default function ProjectWorkspace() {
               selectedIds={selectedPhotoIds}
               onSelect={handlePhotoSelect}
               paginatorRef={paginatorRef}
+              zoom={detailZoom}
+              minZoom={DETAIL_MIN_ZOOM}
+              maxZoom={DETAIL_MAX_ZOOM}
+              zoomStep={DETAIL_ZOOM_FACTOR}
+              onViewportChange={setDetailViewportRect}
+              viewportResetKey={detailViewportResetKey}
+              assetDimensions={currentAssetDimensions}
+              onZoomChange={setDetailZoom}
+              previewPanRequest={previewPanRequest}
             />
             )}
           </div>
@@ -1676,6 +1756,15 @@ export default function ProjectWorkspace() {
           metadataWarnings={metadataWarnings}
           metadataLoading={metadataLoading}
           metadataError={metadataErrorMessage}
+          previewAsset={inspectorPreviewAsset}
+          detailZoom={detailZoom}
+          detailMinZoom={DETAIL_MIN_ZOOM}
+          detailMaxZoom={DETAIL_MAX_ZOOM}
+          onDetailZoomIn={handleDetailZoomIn}
+          onDetailZoomOut={handleDetailZoomOut}
+          onDetailZoomReset={handleDetailZoomReset}
+          detailViewport={detailViewportRect}
+          onPreviewPan={handlePreviewPan}
         />
       </div>
 

@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import AsyncIterator, Iterable
 from uuid import UUID
 
-from sqlalchemy import exists, select
+from sqlalchemy import exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .. import models
@@ -27,23 +27,39 @@ CHUNK_SIZE = 64
 COMMIT_INTERVAL = 25
 
 
+def _bulk_export_conditions():
+    return (
+        models.Asset.status == models.AssetStatus.READY,
+        models.Asset.storage_uri.is_not(None),
+        exists().where(models.ProjectAsset.asset_id == models.Asset.id),
+    )
+
+
 async def collect_bulk_export_asset_ids(db: AsyncSession) -> list[UUID]:
     rows = (
         await db.execute(
             select(models.Asset.id)
-            .where(
-                models.Asset.status == models.AssetStatus.READY,
-                models.Asset.storage_uri.is_not(None),
-                exists().where(models.ProjectAsset.asset_id == models.Asset.id),
-            )
-            .order_by(
-                models.Asset.taken_at.is_(None),
-                models.Asset.taken_at.asc(),
-                models.Asset.created_at.asc(),
-            )
+                .where(*_bulk_export_conditions())
+                .order_by(
+                    models.Asset.taken_at.is_(None),
+                    models.Asset.taken_at.asc(),
+                    models.Asset.created_at.asc(),
+                )
         )
     ).scalars().all()
     return rows
+
+
+async def estimate_bulk_image_export(db: AsyncSession) -> tuple[int, int]:
+    total_files, total_bytes = (
+        await db.execute(
+            select(
+                func.count(models.Asset.id),
+                func.coalesce(func.sum(models.Asset.size_bytes), 0),
+            ).where(*_bulk_export_conditions())
+        )
+    ).one()
+    return int(total_files or 0), int(total_bytes or 0)
 
 
 def _pick_reference_date(asset: models.Asset) -> datetime:

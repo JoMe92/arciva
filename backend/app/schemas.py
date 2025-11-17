@@ -297,6 +297,13 @@ class BulkImageExportOut(BaseModel):
     finished_at: Optional[datetime]
 
 
+class BulkImageExportEstimate(BaseModel):
+    total_files: int
+    total_bytes: int
+    date_basis: str
+    folder_template: str
+
+
 class HubAssetProjectRef(BaseModel):
     project_id: UUID
     title: str

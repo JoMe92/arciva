@@ -56,6 +56,13 @@ async def test_bulk_image_export_flow(client, TestSessionLocal):
         session.add(models.ProjectAsset(project_id=uuid.UUID(project_id), asset_id=asset.id))
         await session.commit()
 
+    estimate_res = await client.get("/v1/bulk-image-exports/estimate")
+    assert estimate_res.status_code == 200
+    estimate_payload = estimate_res.json()
+    assert estimate_payload["total_files"] == 1
+    assert estimate_payload["total_bytes"] == 10
+    assert estimate_payload["folder_template"] == bulk_image_exports.FOLDER_TEMPLATE
+
     start_res = await client.post("/v1/bulk-image-exports")
     assert start_res.status_code == 201
     job_payload = start_res.json()

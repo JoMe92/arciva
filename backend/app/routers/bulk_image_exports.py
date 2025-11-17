@@ -49,6 +49,21 @@ def _serialize_job(job: models.BulkImageExport) -> schemas.BulkImageExportOut:
     )
 
 
+@router.get("/estimate", response_model=schemas.BulkImageExportEstimate)
+async def estimate_bulk_image_export(
+    db: AsyncSession = Depends(get_db),
+):
+    total_files, total_bytes = await bulk_image_exports.estimate_bulk_image_export(db)
+    if total_files == 0:
+        raise HTTPException(status_code=400, detail="No project images available to export.")
+    return schemas.BulkImageExportEstimate(
+        total_files=total_files,
+        total_bytes=total_bytes,
+        date_basis=bulk_image_exports.DATE_BASIS_LABEL,
+        folder_template=bulk_image_exports.FOLDER_TEMPLATE,
+    )
+
+
 @router.post("", response_model=schemas.BulkImageExportOut, status_code=201)
 async def start_bulk_image_export(
     background_tasks: BackgroundTasks,

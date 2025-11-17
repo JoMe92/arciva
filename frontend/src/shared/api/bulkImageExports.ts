@@ -17,6 +17,13 @@ export type BulkImageExportResult = {
   folderTemplate: string
 }
 
+export type BulkImageExportEstimate = {
+  totalFiles: number
+  totalBytes: number
+  dateBasis: string
+  folderTemplate: string
+}
+
 export type BulkImageExportOptions = {
   signal?: AbortSignal
   onProgress?: (snapshot: BulkImageExportProgress) => void
@@ -38,6 +45,28 @@ type BulkImageExportJobRecord = {
 
 const BULK_EXPORT_ENDPOINT = '/v1/bulk-image-exports'
 const POLL_INTERVAL_MS = 1500
+
+export async function getBulkExportEstimate(options: BulkImageExportOptions = {}): Promise<BulkImageExportEstimate> {
+  const res = await fetch(requireBase(`${BULK_EXPORT_ENDPOINT}/estimate`), {
+    credentials: 'include',
+    signal: options.signal,
+  })
+  if (!res.ok) {
+    throw new Error(await res.text())
+  }
+  const payload = (await res.json()) as {
+    total_files: number
+    total_bytes: number
+    date_basis: string
+    folder_template: string
+  }
+  return {
+    totalFiles: payload.total_files,
+    totalBytes: payload.total_bytes,
+    dateBasis: payload.date_basis,
+    folderTemplate: payload.folder_template,
+  }
+}
 
 export async function exportAllProjectImages(options: BulkImageExportOptions = {}): Promise<BulkImageExportResult> {
   const res = await fetch(requireBase(BULK_EXPORT_ENDPOINT), {

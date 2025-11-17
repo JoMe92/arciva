@@ -3,6 +3,7 @@ import ModalShell from './ModalShell'
 import type { GeneralSettings } from '../../shared/settings/general'
 import { LANGUAGE_OPTIONS } from '../../shared/settings/general'
 import { useBulkImageExport } from '../../shared/bulkExport/BulkImageExportContext'
+import { formatBytes } from '../../shared/formatBytes'
 
 type GeneralSettingsDialogProps = {
   open: boolean
@@ -18,6 +19,7 @@ const GeneralSettingsDialog: React.FC<GeneralSettingsDialogProps> = ({ open, set
   const bulkProgress = bulkState.progress
   const bulkResult = bulkState.result
   const bulkError = bulkState.phase === 'error' ? bulkState.error : null
+  const bulkEstimate = bulkState.estimate
 
   useEffect(() => {
     if (open) {
@@ -45,7 +47,7 @@ const GeneralSettingsDialog: React.FC<GeneralSettingsDialogProps> = ({ open, set
       ? 'Capture date.'
       : 'Capture date (falls back to upload time when metadata is missing).'
   const folderTemplate = bulkResult?.folderTemplate ?? 'year/month/day'
-  const bulkButtonLabel = bulkPhase === 'running' ? 'Preparing archive…' : 'Download all images'
+  const bulkButtonLabel = bulkPhase === 'running' ? 'Preparing archive…' : bulkPhase === 'estimating' ? 'Estimating size…' : 'Download all images'
   const bulkProgressLabel =
     bulkPhase === 'running'
       ? `Packaging ${bulkProgress.total ? `${bulkProgress.completed} of ${bulkProgress.total}` : `${bulkProgress.completed}`} images…`
@@ -100,11 +102,16 @@ const GeneralSettingsDialog: React.FC<GeneralSettingsDialogProps> = ({ open, set
           </p>
           <p className="text-[11px] text-[var(--text-muted,#6B645B)]">{basisDescription}</p>
           <p className="text-[11px] text-[var(--text-muted,#6B645B)]">This contains image files only—metadata/database exports live in their own workflow.</p>
+          {bulkEstimate ? (
+            <p className="text-[11px] text-[var(--text-muted,#6B645B)]">
+              Estimated size: {bulkEstimate.totalFiles} images (~{formatBytes(bulkEstimate.totalBytes)}).
+            </p>
+          ) : null}
           <div className="flex flex-wrap items-center gap-3">
             <button
               type="button"
               onClick={handleStartBulkExport}
-              disabled={bulkPhase === 'running'}
+              disabled={bulkPhase === 'running' || bulkPhase === 'estimating'}
               className={`inline-flex h-9 items-center rounded-full px-4 text-[13px] ${bulkPhase === 'running' ? 'cursor-wait border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] text-[var(--text-muted,#6B645B)]' : 'border border-[var(--primary,#A56A4A)] bg-[var(--primary,#A56A4A)] text-[var(--primary-contrast,#FFFFFF)] hover:bg-[var(--primary-strong,#8D5336)]'}`}
             >
               {bulkButtonLabel}
@@ -117,6 +124,8 @@ const GeneralSettingsDialog: React.FC<GeneralSettingsDialogProps> = ({ open, set
           </div>
           {bulkPhase === 'running' ? (
             <p className="text-[11px] text-[var(--text-muted,#6B645B)]">You can close this dialog—the export keeps running in the background.</p>
+          ) : bulkPhase === 'estimating' ? (
+            <p className="text-[11px] text-[var(--text-muted,#6B645B)]">Gathering an estimate… hang tight.</p>
           ) : null}
           {bulkProgressLabel ? (
             <div className="space-y-1">

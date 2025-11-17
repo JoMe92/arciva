@@ -1,14 +1,21 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { exportAllProjectImages, type BulkImageExportProgress, type BulkImageExportResult } from '../api/bulkImageExports'
+import {
+  exportAllProjectImages,
+  getBulkExportEstimate,
+  type BulkImageExportEstimate,
+  type BulkImageExportProgress,
+  type BulkImageExportResult,
+} from '../api/bulkImageExports'
 import { triggerBrowserDownload } from '../downloads'
 
-type BulkExportPhase = 'idle' | 'running' | 'success' | 'error'
+type BulkExportPhase = 'idle' | 'estimating' | 'running' | 'success' | 'error'
 
 type BulkExportState = {
   phase: BulkExportPhase
   progress: BulkImageExportProgress
   error: string | null
   result: BulkImageExportResult | null
+  estimate: BulkImageExportEstimate | null
 }
 
 type BulkExportContextValue = {
@@ -24,6 +31,7 @@ const initialState: BulkExportState = {
   progress: { completed: 0, total: 0 },
   error: null,
   result: null,
+  estimate: null,
 }
 
 const BulkExportContext = createContext<BulkExportContextValue | undefined>(undefined)
@@ -62,18 +70,37 @@ export const BulkExportProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   }, [])
 
   const startExport = useCallback(async () => {
-    if (state.phase === 'running') return
+    if (state.phase === 'running' || state.phase === 'estimating') return
     controllerRef.current?.abort()
     const controller = new AbortController()
     controllerRef.current = controller
     autoDownloadRef.current = null
     setState({
-      phase: 'running',
+      phase: 'estimating',
       progress: { completed: 0, total: 0 },
       error: null,
       result: null,
+      estimate: null,
     })
     try {
+      const estimate = await getBulkExportEstimate({ signal: controller.signal })
+      if (estimate.totalFiles <= 0) {
+        setState({
+          phase: 'error',
+          progress: { completed: 0, total: 0 },
+          error: 'No project images available to export.',
+          result: null,
+          estimate,
+        })
+        return
+      }
+      setState({
+        phase: 'running',
+        progress: { completed: 0, total: estimate.totalFiles },
+        error: null,
+        result: null,
+        estimate,
+      })
       const result = await exportAllProjectImages({
         signal: controller.signal,
         onProgress: (snapshot) => {
@@ -88,6 +115,7 @@ export const BulkExportProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         progress: { completed: result.totalFiles, total: result.totalFiles },
         error: null,
         result,
+        estimate,
       })
     } catch (error) {
       if ((error as Error)?.name === 'AbortError') {
@@ -98,6 +126,7 @@ export const BulkExportProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           progress: { completed: 0, total: 0 },
           error: error instanceof Error ? error.message : 'Unable to export images.',
           result: null,
+          estimate: null,
         })
       }
     } finally {

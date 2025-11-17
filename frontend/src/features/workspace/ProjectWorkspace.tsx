@@ -40,6 +40,24 @@ import {
   type InspectorViewportRect,
   type InspectorPreviewPanCommand,
 } from './components'
+
+const COLOR_SHORTCUT_MAP = {
+  '6': 'Red',
+  '7': 'Yellow',
+  '8': 'Green',
+  '9': 'Blue',
+  '0': 'Purple',
+} satisfies Record<string, ColorTag>
+type ColorShortcutKey = keyof typeof COLOR_SHORTCUT_MAP
+
+const isColorShortcutKey = (key: string): key is ColorShortcutKey => key in COLOR_SHORTCUT_MAP
+
+const isTextInputTarget = (target: EventTarget | null): boolean => {
+  if (!(target instanceof HTMLElement)) return false
+  const tagName = target.tagName
+  if (tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT') return true
+  return target.isContentEditable
+}
 import ImageHubImportPane from './ImageHubImportPane'
 import ErrorBoundary from '../../components/ErrorBoundary'
 import { fetchImageHubAssetStatus, type ImageHubAssetStatus } from '../../shared/api/hub'
@@ -960,6 +978,68 @@ export default function ProjectWorkspace() {
     return visible.filter((photo) => selectedPhotoIds.has(photo.id))
   }, [visible, selectedPhotoIds])
 
+  const photoById = useMemo(() => {
+    const map = new Map<string, Photo>()
+    photos.forEach((photo) => map.set(photo.id, photo))
+    return map
+  }, [photos])
+
+  const shortcutPrimaryId = useCallback(() => {
+    const firstSelected = selectedPhotoIds.values().next().value as string | undefined
+    if (firstSelected) return firstSelected
+    const fallback = visible[current]
+    return fallback ? fallback.id : null
+  }, [selectedPhotoIds, visible, current])
+
+  const runWithShortcutTargets = useCallback(
+    (callback: (targets: Set<string>) => void) => {
+      const primaryId = shortcutPrimaryId()
+      if (!primaryId) return
+      const targets = resolveActionTargetIds(primaryId)
+      if (!targets.size) return
+      callback(targets)
+    },
+    [shortcutPrimaryId, resolveActionTargetIds],
+  )
+
+  const togglePickSelection = useCallback(() => {
+    runWithShortcutTargets((targets) => {
+      targets.forEach((id) => {
+        const photo = photoById.get(id)
+        if (!photo) return
+        applyInteraction(new Set([id]), { picked: !photo.picked })
+      })
+    })
+  }, [runWithShortcutTargets, photoById, applyInteraction])
+
+  const toggleRejectSelection = useCallback(() => {
+    runWithShortcutTargets((targets) => {
+      targets.forEach((id) => {
+        const photo = photoById.get(id)
+        if (!photo) return
+        applyInteraction(new Set([id]), { rejected: !photo.rejected })
+      })
+    })
+  }, [runWithShortcutTargets, photoById, applyInteraction])
+
+  const applyRatingShortcut = useCallback(
+    (rating: 1 | 2 | 3 | 4 | 5) => {
+      runWithShortcutTargets((targets) => {
+        applyInteraction(targets, { rating })
+      })
+    },
+    [runWithShortcutTargets, applyInteraction],
+  )
+
+  const applyColorShortcut = useCallback(
+    (tag: ColorTag) => {
+      runWithShortcutTargets((targets) => {
+        applyInteraction(targets, { tag })
+      })
+    },
+    [runWithShortcutTargets, applyInteraction],
+  )
+
   useEffect(() => {
     if (exportDialogOpen && selectedPhotos.length === 0) {
       setExportDialogOpen(false)
@@ -1062,64 +1142,73 @@ export default function ProjectWorkspace() {
 
   useEffect(() => { if (current >= visible.length) setCurrent(Math.max(0, visible.length - 1)) }, [visible, current])
 
-  // Shortcuts (gleich wie Monolith)
+  const visibleCount = visible.length
+
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement | null
-      const lowerKey = e.key.toLowerCase()
-      if ((e.metaKey || e.ctrlKey) && lowerKey === 's') {
-        e.preventDefault()
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const normalizedKey = event.key.length === 1 ? event.key.toLowerCase() : event.key
+      if ((event.metaKey || event.ctrlKey) && normalizedKey === 's') {
+        event.preventDefault()
         applyChanges()
         return
       }
-      if (target?.tagName === 'INPUT') return
-      if (lowerKey === 'g') setView('grid')
-      if (lowerKey === 'd') setView('detail')
-      if (!visible.length) return
-      const cur = visible[current]
-      if (!cur) return
-      if (lowerKey === 'p' && !e.metaKey && !e.altKey && !e.ctrlKey) {
+      if (isTextInputTarget(event.target)) return
+      if (event.metaKey || event.ctrlKey || event.altKey) return
+      if (normalizedKey === 'g') {
+        setView('grid')
+        return
+      }
+      if (normalizedKey === 'd') {
+        setView('detail')
+        return
+      }
+      if (normalizedKey === 'p') {
         paginatorRef.current?.focus({ preventScroll: true })
+        togglePickSelection()
+        return
       }
-      if (lowerKey === 'p') {
-        const targets = resolveActionTargetIds(cur.id)
-        targets.forEach((id) => {
-          const photo = photos.find((x) => x.id === id)
-          if (photo) {
-            applyInteraction(new Set([id]), { picked: !photo.picked })
-          }
-        })
+      if (normalizedKey === 'x') {
+        toggleRejectSelection()
+        return
       }
-      if (lowerKey === 'x') {
-        const targets = resolveActionTargetIds(cur.id)
-        targets.forEach((id) => {
-          const photo = photos.find((x) => x.id === id)
-          if (photo) {
-            applyInteraction(new Set([id]), { rejected: !photo.rejected })
-          }
-        })
+      if (/^[1-5]$/.test(event.key)) {
+        applyRatingShortcut(Number(event.key) as 1 | 2 | 3 | 4 | 5)
+        return
       }
-      if (/^[1-5]$/.test(e.key)) {
-        const targets = resolveActionTargetIds(cur.id)
-        if (targets.size) {
-          const rating = Number(e.key) as 1 | 2 | 3 | 4 | 5
-          applyInteraction(targets, { rating })
-        }
+      if (isColorShortcutKey(event.key)) {
+        applyColorShortcut(COLOR_SHORTCUT_MAP[event.key])
+        return
       }
-      if (e.key === 'ArrowRight') setCurrent((i) => Math.min(i + 1, visible.length - 1))
-      if (e.key === 'ArrowLeft') setCurrent((i) => Math.max(i - 1, 0))
-      if (e.key === 'Home') {
-        e.preventDefault()
+      if (event.key === 'ArrowRight') {
+        setCurrent((index) => Math.min(index + 1, visibleCount - 1))
+        return
+      }
+      if (event.key === 'ArrowLeft') {
+        setCurrent((index) => Math.max(index - 1, 0))
+        return
+      }
+      if (event.key === 'Home') {
+        event.preventDefault()
         setCurrent(0)
+        return
       }
-      if (e.key === 'End') {
-        e.preventDefault()
-        setCurrent(Math.max(0, visible.length - 1))
+      if (event.key === 'End') {
+        event.preventDefault()
+        setCurrent(Math.max(0, visibleCount - 1))
       }
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [visible, current, applyInteraction, resolveActionTargetIds, photos])
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [
+    applyChanges,
+    setView,
+    togglePickSelection,
+    toggleRejectSelection,
+    applyRatingShortcut,
+    applyColorShortcut,
+    setCurrent,
+    visibleCount,
+  ])
 
   // Custom events vom Grid
   useEffect(() => {

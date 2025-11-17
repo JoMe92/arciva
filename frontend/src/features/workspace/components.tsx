@@ -669,9 +669,10 @@ function FiltersDialog({ controls, onReset, onClose, anchorRect }: { controls: W
 const SHORTCUTS: Array<{ keys: string; description: string }> = [
   { keys: 'G', description: 'Switch to the grid view' },
   { keys: 'D', description: 'Open detail view' },
-  { keys: 'P', description: 'Pick or preview the selection' },
+  { keys: 'P', description: 'Toggle pick for the selection' },
   { keys: 'X', description: 'Reject the selected assets' },
   { keys: '1-5', description: 'Apply a star rating' },
+  { keys: '6 / 7 / 8 / 9 / 0', description: 'Apply color labels (Red, Yellow, Green, Blue, Purple)' },
   { keys: 'Left / Right arrows', description: 'Move between photos' },
   { keys: 'Alt + [ / ]', description: 'Collapse or expand the date rail' },
 ]
@@ -3131,13 +3132,10 @@ export function ThumbOverlay({ p, twoLine }: { p: Photo; twoLine?: boolean }) {
       ? { label: 'Rejected', tone: 'danger', icon: '✕', ariaLabel: 'Rejected asset' }
       : { label: 'Pending', tone: 'muted', icon: '•', ariaLabel: 'Pick or reject pending' }
 
-  const ratingBadgeLabel = `★${p.rating > 0 ? p.rating : '—'}`
-  const ratingBadge: BadgeConfig = { label: ratingBadgeLabel, tone: 'accent', ariaLabel: `Rating: ${p.rating} star${p.rating === 1 ? '' : 's'}` }
-
-  const statusBadge: BadgeConfig = (() => {
+  const statusBadge: BadgeConfig | null = (() => {
     switch (p.status) {
       case 'READY':
-        return { label: 'Ready', tone: 'success', icon: '✔', ariaLabel: 'Asset ready' }
+        return null
       case 'PROCESSING':
       case 'QUEUED':
       case 'UPLOADING':
@@ -3159,8 +3157,7 @@ export function ThumbOverlay({ p, twoLine }: { p: Photo; twoLine?: boolean }) {
         <span className="min-w-0 text-[12px] font-semibold text-[var(--text,#1F1E1B)] truncate">{p.name}</span>
         <div className="flex flex-wrap items-center justify-end gap-1">
           <Badge {...pickBadge} />
-          <Badge {...ratingBadge} />
-          <Badge {...statusBadge} />
+          {statusBadge ? <Badge {...statusBadge} /> : null}
         </div>
       </div>
       {twoLine ? (
@@ -3210,10 +3207,23 @@ export function ColorSwatch({ value, onPick }: { value: ColorTag; onPick: (t: Co
     <div className="relative inline-block">
       <button aria-label={`Color ${value}`} title={`Color ${value}`} className="w-5 h-5 rounded-full border border-[var(--border,#E1D3B9)]" style={{ backgroundColor: map[value] }} onClick={() => setOpen((v) => !v)} />
       {open && (
-        <div className="absolute right-0 z-10 mt-1 grid grid-cols-6 gap-1 rounded border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-2 shadow">
-          {(Object.keys(map) as ColorTag[]).map((k) => (
-            <button key={k} aria-label={k} title={k} className="w-5 h-5 rounded-full border border-[var(--border,#E1D3B9)]" style={{ backgroundColor: map[k] }} onClick={() => { onPick(k); setOpen(false) }} />
-          ))}
+        <div className="absolute right-0 z-10 mt-1 min-w-[140px] rounded border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-3 shadow">
+          <div className="grid grid-cols-3 gap-2">
+            {(Object.keys(map) as ColorTag[]).map((k) => (
+              <button
+                key={k}
+                type="button"
+                aria-label={k}
+                title={k}
+                className="w-6 h-6 rounded-full border border-[var(--border,#E1D3B9)]"
+                style={{ backgroundColor: map[k] }}
+                onClick={() => {
+                  onPick(k)
+                  setOpen(false)
+                }}
+              />
+            ))}
+          </div>
         </div>
       )}
     </div>

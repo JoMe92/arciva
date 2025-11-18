@@ -38,21 +38,39 @@ const MONTHS = [
   'December',
 ]
 
+const FILTER_PANEL_ID = 'project-filters-panel'
+
 const AppBar: React.FC<{
   onCreate: () => void
   onToggleArchive: () => void
   archiveMode: boolean
   onOpenSettings: () => void
-}> = ({ onCreate, onToggleArchive, archiveMode, onOpenSettings }) => {
+  filtersOpen: boolean
+  onToggleFilters: () => void
+  filterCount: number
+}> = ({ onCreate, onToggleArchive, archiveMode, onOpenSettings, filtersOpen, onToggleFilters, filterCount }) => {
   const { mode, toggle } = useTheme()
+  const filterButtonActive = filtersOpen || filterCount > 0
 
   return (
-    <div className="sticky top-0 z-40 border-b border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]/90 backdrop-blur">
+    <div className="border-b border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]/90 backdrop-blur">
       <div className="mx-auto max-w-7xl px-4 py-2 flex items-center gap-3">
         <StoneTrailLogo className="shrink-0" mode={mode} onToggleTheme={toggle} />
         <div className="ml-auto flex items-center gap-2">
           <button onClick={onToggleArchive} className="inline-flex h-8 items-center rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 text-[12px] hover:border-[var(--text-muted,#6B645B)]">
             {archiveMode ? 'Exit archive' : 'Enter archive'}
+          </button>
+          <button
+            type="button"
+            onClick={onToggleFilters}
+            className={`inline-flex h-8 items-center rounded-full border px-3 text-[12px] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--stone-trail-brand-focus,#4A463F)] ${
+              filterButtonActive ? 'border-[var(--text,#1F1E1B)] text-[var(--text,#1F1E1B)]' : 'border-[var(--border,#E1D3B9)] text-[var(--text-muted,#6B645B)] hover:border-[var(--text-muted,#6B645B)]'
+            }`}
+            aria-expanded={filtersOpen}
+            aria-controls={FILTER_PANEL_ID}
+            title="Toggle project filters"
+          >
+            {filterCount ? `Filters (${filterCount})` : 'Filters'}
           </button>
           <button onClick={onCreate} className="inline-flex h-8 items-center rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 text-[12px] hover:border-[var(--text-muted,#6B645B)]">
             <span className="mr-1">＋</span> New project
@@ -78,7 +96,8 @@ const FilterBar: React.FC<{
   tags: string[]
   setTags: (t: string[]) => void
   onClearFilters: () => void
-}> = ({ projects, q, setQ, client, setClient, year, setYear, month, setMonth, tags, setTags, onClearFilters }) => {
+  id?: string
+}> = ({ projects, q, setQ, client, setClient, year, setYear, month, setMonth, tags, setTags, onClearFilters, id }) => {
   const clients = useMemo(() => unique(projects.map((p) => p.client)), [projects])
   const allTags = useMemo(() => unique(projects.flatMap((p) => p.tags || [])), [projects])
   const years = useMemo(() => {
@@ -150,7 +169,12 @@ const FilterBar: React.FC<{
   if (month && monthLabel) activePills.push({ label: `Month: ${monthLabel}`, onClear: () => setMonth('') })
 
   return (
-    <div className="mb-8 rounded-3xl border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-4 py-4 shadow-[0_8px_26px_rgba(31,30,27,0.05)]">
+    <div
+      id={id}
+      role="region"
+      aria-label="Project filters"
+      className="mb-8 rounded-3xl border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-4 py-4 shadow-[0_8px_26px_rgba(31,30,27,0.05)]"
+    >
       <div className="flex flex-wrap gap-4">
         <div className="flex-1 min-w-[220px]">
           <label className="block text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">
@@ -351,6 +375,7 @@ export default function ProjectIndex() {
   const [year, setYear] = useState('')
   const [month, setMonth] = useState('')
   const [tags, setTags] = useState<string[]>([])
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const [modalOpen, setModalOpen] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
   const { archived, isArchived, archive, unarchive } = useArchive()
@@ -593,9 +618,22 @@ export default function ProjectIndex() {
     closeEditor()
   }
 
+  const filterCount = useMemo(() => {
+    let count = 0
+    if (q.trim()) count += 1
+    if (client) count += 1
+    if (year) count += 1
+    if (month) count += 1
+    if (tags.length) count += tags.length
+    return count
+  }, [client, month, q, tags, year])
   const handleToggleArchive = () => setArchiveMode(a => !a)
   const hasAnyFilters = Boolean(q || client || year || month || tags.length)
+  const toggleFilters = useCallback(() => {
+    setFiltersOpen((open) => !open)
+  }, [])
   const clearFilters = () => { setQ(''); setClient(''); setYear(''); setMonth(''); setTags([]) }
+
   const handleRequestDelete = useCallback((project: Project) => {
     setDeleteTarget(project)
     setDeleteError(null)
@@ -621,7 +659,37 @@ export default function ProjectIndex() {
   return (
     <div className="min-h-screen bg-[var(--surface-subtle,#FBF7EF)]">
       <div className="sticky top-0 z-40">
-        <AppBar onCreate={openCreateModal} onToggleArchive={handleToggleArchive} archiveMode={archiveMode} onOpenSettings={openGeneralSettings} />
+        <AppBar
+          onCreate={openCreateModal}
+          onToggleArchive={handleToggleArchive}
+          archiveMode={archiveMode}
+          onOpenSettings={openGeneralSettings}
+          filtersOpen={filtersOpen}
+          onToggleFilters={toggleFilters}
+          filterCount={filterCount}
+        />
+        <div
+          className="border-b border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]/90 backdrop-blur"
+          hidden={!filtersOpen}
+        >
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-4">
+            <FilterBar
+              id={FILTER_PANEL_ID}
+              projects={baseProjects}
+              q={q}
+              setQ={setQ}
+              client={client}
+              setClient={setClient}
+              year={year}
+              setYear={setYear}
+              month={month}
+              setMonth={setMonth}
+              tags={tags}
+              setTags={setTags}
+              onClearFilters={clearFilters}
+            />
+          </div>
+        </div>
         <AnimatePresence>{!ready && <Splash />}</AnimatePresence>
       </div>
       <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-10">
@@ -634,22 +702,6 @@ export default function ProjectIndex() {
           </p>
         </header>
 
-        {!archiveMode && (
-          <FilterBar
-            projects={baseProjects}
-            q={q}
-            setQ={setQ}
-            client={client}
-            setClient={setClient}
-            year={year}
-            setYear={setYear}
-            month={month}
-            setMonth={setMonth}
-            tags={tags}
-            setTags={setTags}
-            onClearFilters={clearFilters}
-          />
-        )}
         {projectsError && (
           <StateHint message={`Could not load projects from server: ${projectsErrorObj?.message ?? 'Unknown error'}`} />
         )}

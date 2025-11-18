@@ -2679,8 +2679,44 @@ export function DetailView({
   const canNext = index < items.length - 1
   const STRIP_H = 180
   const THUMB = 96
+  const itemsLength = items.length
+  const indexRef = useRef(index)
+  const itemsLengthRef = useRef(itemsLength)
 
-  const rootClass = ['grid', 'h-full', 'min-h-0', className].filter(Boolean).join(' ')
+  useEffect(() => {
+    indexRef.current = index
+  }, [index])
+
+  useEffect(() => {
+    itemsLengthRef.current = itemsLength
+  }, [itemsLength])
+
+  const stripNodeRef = useRef<HTMLDivElement | null>(null)
+  const [stripEl, setStripEl] = useState<HTMLDivElement | null>(null)
+  const setStripRef = useCallback((node: HTMLDivElement | null) => {
+    stripNodeRef.current = node
+    setStripEl(node)
+  }, [])
+
+  const rootClass = ['grid', 'h-full', 'w-full', 'min-h-0', 'min-w-0', className].filter(Boolean).join(' ')
+  const ensureThumbVisible = useCallback((behavior: ScrollBehavior = 'smooth') => {
+    const container = stripNodeRef.current
+    const total = itemsLengthRef.current
+    if (!container || !total) return
+    const targetIndex = indexRef.current
+    const target = container.querySelector<HTMLElement>(`[data-thumb-index="${targetIndex}"]`)
+    if (!target) return
+    const padding = 12
+    const containerRect = container.getBoundingClientRect()
+    const targetRect = target.getBoundingClientRect()
+    const overflowLeft = targetRect.left - containerRect.left - padding
+    const overflowRight = targetRect.right - containerRect.right + padding
+    if (overflowLeft < 0) {
+      container.scrollTo({ left: container.scrollLeft + overflowLeft, behavior })
+    } else if (overflowRight > 0) {
+      container.scrollTo({ left: container.scrollLeft + overflowRight, behavior })
+    }
+  }, [])
   const viewerRef = useRef<HTMLDivElement | null>(null)
   const dragStateRef = useRef<{ pointerId: number | null; lastX: number; lastY: number } | null>(null)
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 })
@@ -2932,9 +2968,35 @@ export function DetailView({
     })
   }, [containerSize.height, containerSize.width, cur, onViewportChange, pan.x, pan.y, scaledHeight, scaledWidth])
 
+  useEffect(() => {
+    ensureThumbVisible('smooth')
+  }, [index, ensureThumbVisible])
+
+  const prevItemsLengthRef = useRef(itemsLength)
+  useEffect(() => {
+    if (prevItemsLengthRef.current !== itemsLength) {
+      prevItemsLengthRef.current = itemsLength
+      ensureThumbVisible('auto')
+    }
+  }, [itemsLength, ensureThumbVisible])
+
+  useEffect(() => {
+    const node = stripEl
+    if (!node) return
+    ensureThumbVisible('auto')
+    if (typeof ResizeObserver === 'undefined') {
+      const handleResize = () => ensureThumbVisible('auto')
+      window.addEventListener('resize', handleResize)
+      return () => window.removeEventListener('resize', handleResize)
+    }
+    const observer = new ResizeObserver(() => ensureThumbVisible('auto'))
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [stripEl, ensureThumbVisible])
+
   return (
     <div className={rootClass} style={{ gridTemplateRows: `minmax(0,1fr) ${STRIP_H}px` }}>
-      <div className="relative min-h-0 overflow-hidden">
+      <div className="relative min-h-0 min-w-0 overflow-hidden">
         {cur ? (
           <>
             <div className="absolute inset-0 bg-[var(--placeholder-bg-beige,#F3EBDD)] p-6">
@@ -2963,38 +3025,6 @@ export function DetailView({
                 </div>
               </div>
             </div>
-            <div
-              ref={paginatorRef}
-              tabIndex={-1}
-              aria-label="Image paginator"
-              className="absolute left-1/2 bottom-4 z-10 flex items-center gap-3 overflow-visible rounded-full bg-[rgba(31,30,27,0.55)] px-4 py-2 text-[13px] font-medium text-white shadow-[0_12px_30px_rgba(0,0,0,0.35)]"
-            >
-              <button
-                type="button"
-                disabled={!canPrev}
-                aria-label="Previous asset"
-                onClick={() => setIndex(Math.max(0, index - 1))}
-                className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full border border-white/30 bg-white/10 px-3 py-2 text-white transition hover:bg-white/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)] disabled:border-white/20 disabled:bg-white/5"
-              >
-                <span aria-hidden className="text-[16px] leading-none">
-                  ←
-                </span>
-              </button>
-              <span className="text-[13px] font-semibold tracking-wide">
-                {index + 1}/{items.length}
-              </span>
-              <button
-                type="button"
-                disabled={!canNext}
-                aria-label="Next asset"
-                onClick={() => setIndex(Math.min(items.length - 1, index + 1))}
-                className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full border border-white/30 bg-white/10 px-3 py-2 text-white transition hover:bg-white/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)] disabled:border-white/20 disabled:bg-white/5"
-              >
-                <span aria-hidden className="text-[16px] leading-none">
-                  →
-                </span>
-              </button>
-            </div>
           </>
         ) : (
           <div className="absolute inset-0 grid place-items-center">
@@ -3003,74 +3033,105 @@ export function DetailView({
         )}
       </div>
 
-      <div className="thumb-strip border-t border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] relative">
-        {items.length === 0 ? (
-          <div className="h-full grid place-items-center">
-            <RawPlaceholderFrame ratio="3x2" className="w-[220px] h-[132px] rounded-lg border border-[var(--border,#E1D3B9)]" title="Placeholder image" />
+      <div className="group relative w-full min-w-0 border-t border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]">
+        {items.length > 0 ? (
+          <div
+            ref={paginatorRef}
+            tabIndex={-1}
+            role="group"
+            aria-label="Image paginator"
+            className="pointer-events-none absolute inset-y-0 left-0 right-0 z-10 flex items-center justify-between px-4 opacity-0 transition-opacity duration-150 focus:opacity-100 focus-visible:opacity-100 focus-within:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100"
+          >
+            <button
+              type="button"
+              aria-label="Previous image"
+              onClick={() => canPrev && setIndex(Math.max(0, index - 1))}
+              disabled={!canPrev}
+              className="pointer-events-auto inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] text-[var(--text,#1F1E1B)] shadow-[0_10px_30px_rgba(31,30,27,0.18)] transition hover:bg-[var(--surface-hover,#F4EBDD)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)] disabled:cursor-default disabled:opacity-40 disabled:shadow-none"
+            >
+              <ChevronLeftIcon className="h-4 w-4" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              aria-label="Next image"
+              onClick={() => canNext && setIndex(Math.min(items.length - 1, index + 1))}
+              disabled={!canNext}
+              className="pointer-events-auto inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] text-[var(--text,#1F1E1B)] shadow-[0_10px_30px_rgba(31,30,27,0.18)] transition hover:bg-[var(--surface-hover,#F4EBDD)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)] disabled:cursor-default disabled:opacity-40 disabled:shadow-none"
+            >
+              <ChevronRightIcon className="h-4 w-4" aria-hidden="true" />
+            </button>
           </div>
-        ) : (
-          <div className="flex items-end gap-6 pr-6">
-            {items.map((p, i) => (
-              <div key={p.id} className="flex shrink-0 w-[96px] max-w-[96px] flex-col items-stretch text-[10px] leading-tight">
-                <button
-                  onClick={(event) => {
-                    if (onSelect) {
-                      onSelect(i, {
-                        shiftKey: event.shiftKey,
-                        metaKey: event.metaKey,
-                        ctrlKey: event.ctrlKey,
-                      })
-                    } else {
-                      setIndex(i)
-                    }
-                  }}
-                  className={`relative overflow-hidden rounded border focus:outline-none focus:ring-2 focus:ring-[var(--sand-200,#EDE1C6)] ${
-                    selectedIds?.has(p.id)
-                      ? 'border-[var(--charcoal-800,#1F1E1B)] shadow-[0_0_0_1px_var(--charcoal-800,#1F1E1B)]'
-                      : i === index
-                        ? 'border-[var(--text,#1F1E1B)]'
-                        : 'border-[var(--border,#E1D3B9)]'
-                  }`}
-                  style={{ width: THUMB, height: THUMB }}
-                  aria-label={`View ${p.name}`}
-                >
-                  <span className="absolute top-1 left-1 rounded bg-[var(--surface-frosted-strong,#FBF7EF)] px-1 py-[2px] text-[9px] font-medium border border-[var(--border,#E1D3B9)] text-[var(--text,#1F1E1B)]">
-                    {p.type}
-                  </span>
-                  <div className="absolute inset-0 flex items-center justify-center bg-[var(--placeholder-bg-beige,#F3EBDD)]">
-                    {p.thumbSrc ? (
-                      <img src={p.thumbSrc} alt={p.name} className="h-full w-full object-contain" />
-                    ) : (
-                      <RawPlaceholder ratio={p.placeholderRatio} title={p.name || 'Placeholder image'} fit="contain" />
-                    )}
-                  </div>
-                </button>
-                <div className="mt-1 truncate text-center font-medium text-[var(--text,#1F1E1B)]">{p.name}</div>
-                <div className="mt-1 rounded border border-[var(--border,#E1D3B9)] bg-[var(--sand-50,#FBF7EF)] px-1 py-0.5">
-                  <div className="flex flex-col gap-0.5 text-[9px]">
-                    <span className="flex items-center justify-between gap-1">
-                      <span className="font-medium">Rating</span>
-                      <span>{p.rating}★</span>
+        ) : null}
+        <div ref={setStripRef} className="thumb-strip min-w-0">
+          {items.length === 0 ? (
+            <div className="h-full grid place-items-center">
+              <RawPlaceholderFrame ratio="3x2" className="w-[220px] h-[132px] rounded-lg border border-[var(--border,#E1D3B9)]" title="Placeholder image" />
+            </div>
+          ) : (
+            <div className="flex min-w-0 items-end gap-6 pr-6">
+              {items.map((p, i) => (
+                <div key={p.id} className="flex shrink-0 w-[96px] max-w-[96px] flex-col items-stretch text-[10px] leading-tight">
+                  <button
+                    data-thumb-index={i}
+                    onClick={(event) => {
+                      if (onSelect) {
+                        onSelect(i, {
+                          shiftKey: event.shiftKey,
+                          metaKey: event.metaKey,
+                          ctrlKey: event.ctrlKey,
+                        })
+                      } else {
+                        setIndex(i)
+                      }
+                    }}
+                    className={`relative overflow-hidden rounded border focus:outline-none focus:ring-2 focus:ring-[var(--sand-200,#EDE1C6)] ${
+                      selectedIds?.has(p.id)
+                        ? 'border-[var(--charcoal-800,#1F1E1B)] shadow-[0_0_0_1px_var(--charcoal-800,#1F1E1B)]'
+                        : i === index
+                          ? 'border-[var(--text,#1F1E1B)]'
+                          : 'border-[var(--border,#E1D3B9)]'
+                    }`}
+                    style={{ width: THUMB, height: THUMB }}
+                    aria-label={`View ${p.name}`}
+                  >
+                    <span className="absolute top-1 left-1 rounded bg-[var(--surface-frosted-strong,#FBF7EF)] px-1 py-[2px] text-[9px] font-medium border border-[var(--border,#E1D3B9)] text-[var(--text,#1F1E1B)]">
+                      {p.type}
                     </span>
-                    <span className="flex items-center justify-between gap-1">
-                      <span className="font-medium">Color</span>
-                      <span className="flex items-center gap-1">
-                        <span className="h-2 w-2 rounded-full border border-[var(--border,#E1D3B9)]" style={{ backgroundColor: COLOR_MAP[p.tag] }} aria-hidden />
-                        <span className="truncate">{p.tag}</span>
+                    <div className="absolute inset-0 flex items-center justify-center bg-[var(--placeholder-bg-beige,#F3EBDD)]">
+                      {p.thumbSrc ? (
+                        <img src={p.thumbSrc} alt={p.name} className="h-full w-full object-contain" />
+                      ) : (
+                        <RawPlaceholder ratio={p.placeholderRatio} title={p.name || 'Placeholder image'} fit="contain" />
+                      )}
+                    </div>
+                  </button>
+                  <div className="mt-1 truncate text-center font-medium text-[var(--text,#1F1E1B)]">{p.name}</div>
+                  <div className="mt-1 rounded border border-[var(--border,#E1D3B9)] bg-[var(--sand-50,#FBF7EF)] px-1 py-0.5">
+                    <div className="flex flex-col gap-0.5 text-[9px]">
+                      <span className="flex items-center justify-between gap-1">
+                        <span className="font-medium">Rating</span>
+                        <span>{p.rating}★</span>
                       </span>
-                    </span>
-                    <span className="flex items-center justify-between gap-1">
-                      <span className="font-medium">Status</span>
-                      <span className={p.rejected ? 'text-[#B91C1C]' : p.picked ? 'text-[#166534]' : 'text-[var(--text-muted,#6B645B)]'}>
-                        {p.rejected ? 'Rejected' : p.picked ? 'Picked' : '—'}
+                      <span className="flex items-center justify-between gap-1">
+                        <span className="font-medium">Color</span>
+                        <span className="flex items-center gap-1">
+                          <span className="h-2 w-2 rounded-full border border-[var(--border,#E1D3B9)]" style={{ backgroundColor: COLOR_MAP[p.tag] }} aria-hidden />
+                          <span className="truncate">{p.tag}</span>
+                        </span>
                       </span>
-                    </span>
+                      <span className="flex items-center justify-between gap-1">
+                        <span className="font-medium">Status</span>
+                        <span className={p.rejected ? 'text-[#B91C1C]' : p.picked ? 'text-[#166534]' : 'text-[var(--text-muted,#6B645B)]'}>
+                          {p.rejected ? 'Rejected' : p.picked ? 'Picked' : '—'}
+                        </span>
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )

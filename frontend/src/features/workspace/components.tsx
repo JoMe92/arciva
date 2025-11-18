@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useId } from 'react'
 import { createPortal } from 'react-dom'
 import { RawPlaceholder, RawPlaceholderFrame } from '../../components/RawPlaceholder'
 import ProjectSettingsButton from '../../components/ProjectSettingsButton'
@@ -1350,6 +1350,7 @@ export function InspectorPanel({
   const keyDataSectionRef = useRef<HTMLDivElement | null>(null)
   const projectsSectionRef = useRef<HTMLDivElement | null>(null)
   const metadataSectionRef = useRef<HTMLDivElement | null>(null)
+  const [previewOpen, setPreviewOpen] = useState(true)
   const [keyDataOpen, setKeyDataOpen] = useState(true)
   const [projectsOpen, setProjectsOpen] = useState(true)
   const [metadataOpen, setMetadataOpen] = useState(true)
@@ -1357,12 +1358,15 @@ export function InspectorPanel({
   const generalFields = keyMetadataSections?.general ?? []
   const captureFields = keyMetadataSections?.capture ?? []
   const metadataGroups = useMemo(() => groupMetadataEntries(metadataEntries), [metadataEntries])
-  const [metadataAccordion, setMetadataAccordion] = useState<Record<string, boolean>>(() => makeMetadataAccordionState(metadataGroups))
-
-  useEffect(() => {
-    setMetadataAccordion(makeMetadataAccordionState(metadataGroups))
+  const metadataRows = useMemo(() => {
+    if (!metadataGroups.length) return []
+    return metadataGroups.flatMap((group) =>
+      group.entries.map((entry) => ({
+        label: entry.label,
+        value: formatMetadataEntryValue(entry.value),
+      })),
+    )
   }, [metadataGroups])
-
   const mergedInspectorFields = useMemo(() => {
     const map = new Map<string, string>()
     generalFields.forEach((field) => {
@@ -1429,10 +1433,6 @@ export function InspectorPanel({
     [collapsed, ensureSectionOpen, onExpand, scrollToTarget],
   )
 
-  const toggleMetadataGroup = useCallback((groupId: string) => {
-    setMetadataAccordion((prev) => ({ ...prev, [groupId]: !prev[groupId] }))
-  }, [])
-
   return (
     <aside
       id={RIGHT_PANEL_ID}
@@ -1474,6 +1474,8 @@ export function InspectorPanel({
               onZoomOut={onDetailZoomOut}
               onZoomReset={onDetailZoomReset}
               onPanPreview={onPreviewPan}
+              open={previewOpen}
+              onToggle={() => setPreviewOpen((open) => !open)}
             />
             <InspectorSection
               id={RIGHT_KEY_SECTION_ID}
@@ -1520,29 +1522,27 @@ export function InspectorPanel({
               onToggle={() => setMetadataOpen((open) => !open)}
               grow
             >
-              <div className="flex min-h-0 flex-col gap-3">
-                {metadataLoading ? <p className="text-xs text-[var(--text-muted,#6B645B)]">Loading metadata…</p> : null}
-                {metadataError ? <p className="text-xs text-[#B42318]">{metadataError}</p> : null}
-                {metadataWarnings.length ? (
-                  <ul className="space-y-1 rounded-[12px] border border-[#F59E0B]/40 bg-[#FFF7ED] px-3 py-2 text-[11px] text-[#B45309]">
-                    {metadataWarnings.map((warning) => (
-                      <li key={warning} className="flex items-start gap-2">
-                        <span className="mt-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full border border-[#F59E0B] text-[10px]">!</span>
-                        <span className="flex-1 break-words">{warning}</span>
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-                {hasSelection ? (
-                  metadataEntries.length ? (
-                    <MetadataAccordion groups={metadataGroups} openState={metadataAccordion} onToggle={toggleMetadataGroup} />
-                  ) : (
-                    <p className="text-sm text-[var(--text-muted,#6B645B)]">No metadata available for this asset.</p>
-                  )
+              {metadataLoading ? <p className="text-xs text-[var(--text-muted,#6B645B)]">Loading metadata…</p> : null}
+              {metadataError ? <p className="text-xs text-[#B42318]">{metadataError}</p> : null}
+              {metadataWarnings.length ? (
+                <ul className="space-y-1 rounded-[12px] border border-[#F59E0B]/40 bg-[#FFF7ED] px-3 py-2 text-[11px] text-[#B45309]">
+                  {metadataWarnings.map((warning) => (
+                    <li key={warning} className="flex items-start gap-2">
+                      <span className="mt-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full border border-[#F59E0B] text-[10px]">!</span>
+                      <span className="flex-1 break-words">{warning}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              {hasSelection ? (
+                metadataRows.length ? (
+                  <KeyDataGrid rows={metadataRows} />
                 ) : (
-                  <p className="text-sm text-[var(--text-muted,#6B645B)]">Select a photo to review metadata.</p>
-                )}
-              </div>
+                  <p className="text-sm text-[var(--text-muted,#6B645B)]">No metadata available for this asset.</p>
+                )
+              ) : (
+                <p className="text-sm text-[var(--text-muted,#6B645B)]">Select a photo to review metadata.</p>
+              )}
             </InspectorSection>
           </div>
         </div>
@@ -1576,6 +1576,8 @@ type InspectorPreviewCardProps = {
   onZoomOut: () => void
   onZoomReset: () => void
   onPanPreview?: (position: { x: number; y: number }) => void
+  open: boolean
+  onToggle: () => void
 }
 
 function InspectorPreviewCard({
@@ -1589,7 +1591,10 @@ function InspectorPreviewCard({
   onZoomOut,
   onZoomReset,
   onPanPreview,
+  open,
+  onToggle,
 }: InspectorPreviewCardProps) {
+  const contentId = useId()
   const imageSrc = preview?.src ?? preview?.thumbSrc ?? null
   const zoomPercent = `${Math.round(zoomLevel * 100)}%`
   const controlsDisabled = !hasSelection
@@ -1670,67 +1675,81 @@ function InspectorPreviewCard({
   }, [])
 
   return (
-    <div className="self-end w-full max-w-[320px] shrink-0">
+    <div className="w-full shrink-0">
       <div className="flex flex-col rounded-[18px] border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] shadow-[0_18px_40px_rgba(31,30,27,0.12)]">
-        <div className="flex items-center justify-between border-b border-[var(--border,#EDE1C6)] px-4 py-2">
-          <span className="text-sm font-semibold text-[var(--text,#1F1E1B)]">Preview</span>
-          <span className="text-xs font-medium uppercase tracking-wide text-[var(--text-muted,#6B645B)]">{zoomPercent}</span>
+        <div className="flex items-center gap-3 border-b border-[var(--border,#EDE1C6)] px-4 py-2">
+          <span className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--text,#1F1E1B)]">
+            <PreviewIcon className="h-4 w-4 text-[var(--text-muted,#6B645B)]" aria-hidden="true" />
+            Preview
+          </span>
+          <span className="ml-auto text-xs font-medium uppercase tracking-wide text-[var(--text-muted,#6B645B)]">{zoomPercent}</span>
+          <button
+            type="button"
+            aria-expanded={open}
+            aria-controls={contentId}
+            onClick={onToggle}
+            className="rounded-md text-[11px] font-medium uppercase tracking-wide text-[var(--text-muted,#6B645B)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)]"
+          >
+            {open ? 'Hide' : 'Show'}
+          </button>
         </div>
-        <div
-          tabIndex={preview ? 0 : -1}
-          aria-label={preview ? preview.alt : 'No image selected'}
-          className="relative aspect-[4/3] w-full overflow-hidden rounded-[16px] p-3 outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring,#1A73E8)]"
-          onWheel={handleWheel}
-          onPointerDown={handlePreviewPointerDown}
-          onPointerMove={handlePreviewPointerMove}
-          onPointerUp={releasePreviewPointer}
-          onPointerLeave={releasePreviewPointer}
-          onPointerCancel={releasePreviewPointer}
-          onClick={(event) => {
-            if (event.detail !== 0) return
-            emitPanFromRelative(0.5, 0.5)
-          }}
-        >
-          <div className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-[12px] border border-[var(--border,#EDE1C6)] bg-[var(--placeholder-bg-beige,#F3EBDD)]">
-            {preview ? (
-              imageSrc ? (
-                <img src={imageSrc} alt={preview.alt} className="max-h-full max-w-full object-contain" />
+        <div id={contentId} aria-hidden={!open} className={open ? 'flex flex-col' : 'hidden'}>
+          <div
+            tabIndex={preview ? 0 : -1}
+            aria-label={preview ? preview.alt : 'No image selected'}
+            className="relative aspect-[4/3] w-full overflow-hidden rounded-[16px] p-3 outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring,#1A73E8)]"
+            onWheel={handleWheel}
+            onPointerDown={handlePreviewPointerDown}
+            onPointerMove={handlePreviewPointerMove}
+            onPointerUp={releasePreviewPointer}
+            onPointerLeave={releasePreviewPointer}
+            onPointerCancel={releasePreviewPointer}
+            onClick={(event) => {
+              if (event.detail !== 0) return
+              emitPanFromRelative(0.5, 0.5)
+            }}
+          >
+            <div className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-[12px] border border-[var(--border,#EDE1C6)] bg-[var(--placeholder-bg-beige,#F3EBDD)]">
+              {preview ? (
+                imageSrc ? (
+                  <img src={imageSrc} alt={preview.alt} className="max-h-full max-w-full object-contain" />
+                ) : (
+                  <RawPlaceholder ratio={preview.placeholderRatio} title={preview.alt} fit="contain" />
+                )
               ) : (
-                <RawPlaceholder ratio={preview.placeholderRatio} title={preview.alt} fit="contain" />
-              )
-            ) : (
-              <p className="px-4 text-center text-sm text-[var(--text-muted,#6B645B)]">{previewMessage}</p>
-            )}
-            {preview && viewport ? (
-              <span className="pointer-events-none absolute inset-0">
-                <span
-                  className="absolute rounded-[6px] border border-[var(--focus-ring,#1A73E8)] bg-[rgba(26,115,232,0.12)]"
-                  style={indicatorStyle ?? undefined}
-                />
-              </span>
-            ) : null}
+                <p className="px-4 text-center text-sm text-[var(--text-muted,#6B645B)]">{previewMessage}</p>
+              )}
+              {preview && viewport ? (
+                <span className="pointer-events-none absolute inset-0">
+                  <span
+                    className="absolute rounded-[6px] border border-[var(--focus-ring,#1A73E8)] bg-[rgba(26,115,232,0.12)]"
+                    style={indicatorStyle ?? undefined}
+                  />
+                </span>
+              ) : null}
+            </div>
+            {null}
           </div>
-          {null}
-        </div>
-        <div className="flex items-center justify-center gap-3 border-t border-[var(--border,#EDE1C6)] px-3 py-3">
-          <InspectorPreviewControlButton
-            label="Zoom out"
-            icon={<MinusIcon className="h-4 w-4" aria-hidden="true" />}
-            onClick={onZoomOut}
-            disabled={controlsDisabled || !canZoomOut}
-          />
-          <InspectorPreviewControlButton
-            label="Fit to canvas"
-            icon={<FrameIcon className="h-4 w-4" aria-hidden="true" />}
-            onClick={onZoomReset}
-            disabled={!hasSelection}
-          />
-          <InspectorPreviewControlButton
-            label="Zoom in"
-            icon={<PlusIcon className="h-4 w-4" aria-hidden="true" />}
-            onClick={onZoomIn}
-            disabled={controlsDisabled || !canZoomIn}
-          />
+          <div className="flex items-center justify-center gap-3 border-t border-[var(--border,#EDE1C6)] px-3 py-3">
+            <InspectorPreviewControlButton
+              label="Zoom out"
+              icon={<MinusIcon className="h-4 w-4" aria-hidden="true" />}
+              onClick={onZoomOut}
+              disabled={controlsDisabled || !canZoomOut}
+            />
+            <InspectorPreviewControlButton
+              label="Fit to canvas"
+              icon={<FrameIcon className="h-4 w-4" aria-hidden="true" />}
+              onClick={onZoomReset}
+              disabled={!hasSelection}
+            />
+            <InspectorPreviewControlButton
+              label="Zoom in"
+              icon={<PlusIcon className="h-4 w-4" aria-hidden="true" />}
+              onClick={onZoomIn}
+              disabled={controlsDisabled || !canZoomIn}
+            />
+          </div>
         </div>
       </div>
     </div>
@@ -1774,14 +1793,13 @@ const InspectorSection = React.forwardRef<HTMLDivElement | null, InspectorSectio
   { id, icon, label, open, onToggle, children, grow = false },
   ref,
 ) {
+  const growClasses = grow && open ? 'flex-1 min-h-0' : ''
   return (
     <section
       id={id}
       ref={ref}
       tabIndex={-1}
-      className={`flex flex-col rounded-[18px] border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] shadow-[0_18px_40px_rgba(31,30,27,0.12)] ${
-        grow ? 'flex-1 min-h-0' : ''
-      }`}
+      className={`flex flex-col rounded-[18px] border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] shadow-[0_18px_40px_rgba(31,30,27,0.12)] ${growClasses}`}
     >
       <button
         type="button"
@@ -1799,7 +1817,7 @@ const InspectorSection = React.forwardRef<HTMLDivElement | null, InspectorSectio
       <div
         id={`${id}-content`}
         aria-hidden={!open}
-        className={`${open ? `${grow ? 'flex flex-col ' : ''}px-4 pb-4 pt-1` : 'hidden'} ${grow ? 'flex-1 min-h-0' : ''}`}
+        className={`${open ? `${grow ? 'flex flex-col ' : ''}px-4 pb-4 pt-1` : 'hidden'} ${growClasses}`}
       >
         {children}
       </div>
@@ -2304,60 +2322,6 @@ function InspectorBadge({ children, tone = 'neutral' }: { children: React.ReactN
   )
 }
 
-function MetadataAccordion({
-  groups,
-  openState,
-  onToggle,
-}: {
-  groups: MetadataGroup[]
-  openState: Record<string, boolean>
-  onToggle: (groupId: string) => void
-}) {
-  if (!groups.length) {
-    return <p className="text-sm text-[var(--text-muted,#6B645B)]">No technical metadata captured.</p>
-  }
-  return (
-    <div className="flex-1 min-h-0 overflow-hidden rounded-[16px] border border-[var(--border,#EDE1C6)]">
-      <div className="max-h-[360px] overflow-auto">
-        {groups.map((group) => {
-          const open = openState[group.id] ?? true
-          return (
-            <div key={group.id} className="border-b border-[var(--border,#EDE1C6)] last:border-b-0">
-              <button
-                type="button"
-                className="sticky top-0 z-10 flex w-full items-center justify-between gap-2 bg-[var(--surface,#FFFFFF)] px-3 py-2 text-left text-[12px] font-semibold text-[var(--text,#1F1E1B)]"
-                aria-expanded={open}
-                onClick={() => onToggle(group.id)}
-              >
-                <span>{group.label}</span>
-                <ChevronDownIcon className={`h-4 w-4 transition-transform ${open ? 'rotate-180' : ''}`} />
-              </button>
-              <div className={`overflow-hidden transition-[max-height] duration-200 ease-out ${open ? 'max-h-[999px]' : 'max-h-0'}`}>
-                <dl>
-                  {group.entries.map((entry, index) => (
-                    <div key={`${group.id}-${entry.key}-${index}`} className="grid grid-cols-[minmax(140px,35%)_minmax(0,1fr)] gap-3 px-3 py-2 text-[11px] odd:bg-[var(--surface-subtle,#FBF7EF)]">
-                      <dt className="font-semibold text-[var(--text,#1F1E1B)]">{entry.label}</dt>
-                      <dd className="break-words text-[var(--text-muted,#6B645B)]">{formatMetadataEntryValue(entry.value)}</dd>
-                    </div>
-                  ))}
-                </dl>
-              </div>
-            </div>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
-function makeMetadataAccordionState(groups: MetadataGroup[]): Record<string, boolean> {
-  const state: Record<string, boolean> = {}
-  groups.forEach((group, index) => {
-    state[group.id] = index < 2
-  })
-  return state
-}
-
 const METADATA_GROUP_ORDER: { id: MetadataCategory; label: string }[] = [
   { id: 'camera', label: 'Camera' },
   { id: 'lens', label: 'Lens' },
@@ -2482,6 +2446,16 @@ function LayoutListIcon(props: React.SVGProps<SVGSVGElement>) {
   )
 }
 
+function PreviewIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <rect x="2.5" y="3" width="11" height="10" rx="2" />
+      <path d="M4.5 10.5 6.5 8l2 2.5 1.5-1.5L12 12" />
+      <circle cx="6" cy="6.25" r="0.75" fill="currentColor" stroke="none" />
+    </svg>
+  )
+}
+
 function CameraIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" {...props}>
@@ -2569,14 +2543,6 @@ function CheckIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" {...props}>
       <path d="M3.5 8.5 6.7 11.5 12.5 4.5" />
-    </svg>
-  )
-}
-
-function ChevronDownIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <path d="M3.5 6.5 8 11l4.5-4.5" />
     </svg>
   )
 }

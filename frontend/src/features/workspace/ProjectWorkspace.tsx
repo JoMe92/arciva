@@ -87,7 +87,7 @@ function clampDetailZoom(value: number): number {
   if (!Number.isFinite(value)) return DETAIL_MIN_ZOOM
   return Math.min(DETAIL_MAX_ZOOM, Math.max(DETAIL_MIN_ZOOM, value))
 }
-const IGNORED_METADATA_WARNINGS = new Set(['EXIFTOOL_ERROR', 'EXIFTOOL_NOT_INSTALLED', 'EXIFTOOL_JSON_ERROR', 'ExifPill-Load failed'])
+const IGNORED_METADATA_WARNINGS = new Set(['EXIFTOOL_ERROR', 'EXIFTOOL_NOT_INSTALLED', 'EXIFTOOL_JSON_ERROR', 'ExifPill-Load failed', 'EXIF_PIL_LOAD_FAILED'])
 const DATE_KEY_DELIM = '__'
 const UNKNOWN_VALUE = 'unknown'
 const MONTH_FORMATTER = new Intl.DateTimeFormat(undefined, { month: 'long' })

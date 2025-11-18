@@ -117,7 +117,7 @@ body {
 .thumb-strip {
   overflow-x: auto;
   overflow-y: hidden;
-  padding: 0.75rem;
+  padding: 0.75rem 0.75rem 0 0.75rem;
   scrollbar-width: auto;
   scrollbar-color: var(--border, #e1d3b9) transparent;
 }

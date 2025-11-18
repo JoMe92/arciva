@@ -1765,8 +1765,8 @@ export default function ProjectWorkspace() {
           <span className="h-10 w-[2px] rounded-full bg-[var(--border,#EDE1C6)] transition-colors group-hover:bg-[var(--text-muted,#6B645B)]" aria-hidden="true" />
         </button>
 
-        <main ref={contentRef} className="relative flex min-h-0 flex-col bg-[var(--surface,#FFFFFF)]">
-          <div className="flex-1 min-h-0 overflow-hidden">
+        <main ref={contentRef} className="relative flex min-h-0 min-w-0 flex-col bg-[var(--surface,#FFFFFF)]">
+          <div className="flex-1 min-h-0 min-w-0 overflow-hidden">
             {!hasAny ? (
               <div className="flex h-full items-center justify-center overflow-auto p-6">
                 <EmptyState />

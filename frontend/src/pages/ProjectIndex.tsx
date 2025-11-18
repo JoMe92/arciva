@@ -381,10 +381,12 @@ export default function ProjectIndex() {
     return apiProjects.map((proj) => projectFromApi(proj))
   }, [apiProjects])
 
+  const includeDemoProjects = import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEMO_PROJECTS !== 'false'
+
   const baseProjects = useMemo(() => {
-    const combined = [...dynamicProjects, ...PROJECTS]
+    const combined = includeDemoProjects ? [...dynamicProjects, ...PROJECTS] : [...dynamicProjects]
     return combined.map((p) => ({ ...p, ...(localEdits[p.id] || {}) }))
-  }, [dynamicProjects, localEdits])
+  }, [dynamicProjects, includeDemoProjects, localEdits])
 
   const previewMutation = useMutation({
     mutationFn: ({ projectId, assetId }: { projectId: string; assetId: string }) =>

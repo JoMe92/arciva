@@ -13,6 +13,8 @@ from ..db import get_db
 from ..storage import PosixStorage
 from ..schema_utils import ensure_preview_columns
 
+MAX_PREVIEW_IMAGES = 36
+
 
 def _thumb_url(asset: models.Asset, storage: PosixStorage) -> str | None:
     if not asset.sha256:
@@ -53,6 +55,36 @@ async def _load_preview_map(
         preview_map.setdefault(project_asset.project_id, []).append(
             (order, asset.id, _thumb_url(asset, storage), asset.width, asset.height)
         )
+
+    missing_preview_projects = [pid for pid, entries in preview_map.items() if not entries]
+    if missing_preview_projects:
+        fallback_rows = (
+            await db.execute(
+                select(models.ProjectAsset, models.Asset, models.MetadataState)
+                .join(models.Asset, models.Asset.id == models.ProjectAsset.asset_id)
+                .join(models.MetadataState, models.MetadataState.link_id == models.ProjectAsset.id)
+                .where(
+                    models.ProjectAsset.project_id.in_(missing_preview_projects),
+                    models.MetadataState.picked.is_(True),
+                )
+                .order_by(
+                    models.ProjectAsset.project_id,
+                    models.MetadataState.updated_at.desc(),
+                    models.MetadataState.created_at.desc(),
+                    models.ProjectAsset.added_at.desc(),
+                )
+            )
+        ).all()
+        fallback_counts: dict[UUID, int] = {}
+        for link, asset, _state in fallback_rows:
+            project_id = link.project_id
+            count = fallback_counts.get(project_id, 0)
+            if count >= MAX_PREVIEW_IMAGES:
+                continue
+            fallback_counts[project_id] = count + 1
+            preview_map.setdefault(project_id, []).append(
+                (count, asset.id, _thumb_url(asset, storage), asset.width, asset.height)
+            )
 
     normalized_map: dict[UUID, list[schemas.ProjectPreviewImage]] = {}
     for project_id, entries in preview_map.items():

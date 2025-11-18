@@ -1799,7 +1799,7 @@ const InspectorSection = React.forwardRef<HTMLDivElement | null, InspectorSectio
       id={id}
       ref={ref}
       tabIndex={-1}
-      className={`flex flex-col rounded-[18px] border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] shadow-[0_18px_40px_rgba(31,30,27,0.12)] ${growClasses}`}
+      className={`flex shrink-0 flex-col rounded-[18px] border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] shadow-[0_18px_40px_rgba(31,30,27,0.12)] ${growClasses}`}
     >
       <button
         type="button"

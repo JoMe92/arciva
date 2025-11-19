@@ -85,7 +85,10 @@ const GeneralSettingsDialog: React.FC<GeneralSettingsDialogProps> = ({ open, set
       }
       return <p className="text-[12px] text-[var(--text-muted,#6B645B)]">No storage configuration found yet.</p>
     }
-    if (experimentalStorage.locations.length <= 1) {
+    if (!experimentalStorage.locations.length) {
+      return <p className="text-[12px] text-[var(--text-muted,#6B645B)]">No storage configuration found yet.</p>
+    }
+    if (experimentalStorage.locations.length === 1) {
       const location = experimentalStorage.locations[0]
       return (
         <div className="space-y-2">

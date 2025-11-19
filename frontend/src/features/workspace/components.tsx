@@ -3270,3 +3270,4 @@ export function NoResults({ onReset }: { onReset: () => void }) {
     </div>
   )
 }
+

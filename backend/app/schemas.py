@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, field_validator, model_validator
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Literal
 from datetime import datetime
 from enum import Enum
 from uuid import UUID
@@ -32,6 +32,63 @@ class MetadataInheritanceMode(str, Enum):
     ALWAYS = "always"
     ASK = "ask"
     NEVER = "never"
+
+
+class DatabasePathStatus(str, Enum):
+    READY = "ready"
+    INVALID = "invalid"
+    NOT_ACCESSIBLE = "not_accessible"
+    NOT_WRITABLE = "not_writable"
+
+
+class DatabasePathUpdate(BaseModel):
+    path: str = Field(..., min_length=1)
+
+
+class DatabasePathSettings(BaseModel):
+    path: str
+    status: DatabasePathStatus
+    message: Optional[str] = None
+    requires_restart: bool = False
+
+
+class PhotoStorePathStatus(str, Enum):
+    AVAILABLE = "available"
+    MISSING = "missing"
+    NOT_WRITABLE = "not_writable"
+
+
+class PhotoStoreLocation(BaseModel):
+    id: str
+    path: str
+    role: Literal["primary", "secondary"]
+    status: PhotoStorePathStatus
+    message: Optional[str] = None
+
+
+class PhotoStoreSettings(BaseModel):
+    enabled: bool
+    developer_only: bool
+    warning_active: bool
+    last_option: Optional[str] = None
+    locations: List[PhotoStoreLocation] = Field(default_factory=list)
+
+
+class PhotoStoreValidationRequest(BaseModel):
+    path: str = Field(..., min_length=1)
+    mode: Literal["fresh", "load", "move", "add"] | None = "fresh"
+
+
+class PhotoStoreValidationResult(BaseModel):
+    path: str
+    valid: bool
+    message: Optional[str] = None
+
+
+class PhotoStoreApplyRequest(BaseModel):
+    path: str = Field(..., min_length=1)
+    mode: Literal["fresh", "load"]
+    acknowledge: bool = False
 
 # Projects
 class ProjectCreate(BaseModel):

@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .. import models
 from ..db import SessionLocal
 from ..deps import get_settings
+from ..storage import PosixStorage
 
 logger = logging.getLogger("arciva.bulk_image_exports")
 
@@ -147,6 +148,7 @@ async def _iter_assets(db: AsyncSession, asset_ids: Iterable[UUID]) -> AsyncIter
 
 async def process_bulk_image_export(job_id: UUID) -> None:
     settings = get_settings()
+    storage = PosixStorage.from_env()
     async with SessionLocal() as db:
         job = await db.get(models.BulkImageExport, job_id)
         if not job:
@@ -187,7 +189,10 @@ async def process_bulk_image_export(job_id: UUID) -> None:
                 async for asset in _iter_assets(db, asset_ids):
                     if not asset.storage_uri:
                         raise RuntimeError(f"Asset {asset.id} missing storage path")
-                    source_path = Path(asset.storage_uri)
+                    try:
+                        source_path = storage.path_from_key(asset.storage_uri)
+                    except ValueError as exc:
+                        raise RuntimeError(f"Invalid storage key for asset {asset.id}: {exc}") from exc
                     if not source_path.exists():
                         raise RuntimeError(f"Asset source missing: {source_path}")
                     member_path = _build_member_path(asset, used_paths)
@@ -198,7 +203,10 @@ async def process_bulk_image_export(job_id: UUID) -> None:
                     if processed % COMMIT_INTERVAL == 0:
                         await db.commit()
 
-            job.artifact_path = str(archive_path)
+            try:
+                job.artifact_path = storage.storage_key_for(archive_path)
+            except ValueError:
+                job.artifact_path = str(archive_path)
             job.artifact_filename = archive_name
             job.artifact_size = archive_path.stat().st_size if archive_path.exists() else None
             job.status = models.ExportJobStatus.COMPLETED
@@ -219,6 +227,7 @@ async def process_bulk_image_export(job_id: UUID) -> None:
 
 async def cleanup_bulk_image_exports() -> None:
     settings = get_settings()
+    storage = PosixStorage.from_env()
     cutoff = datetime.now(timezone.utc) - timedelta(hours=settings.export_retention_hours)
     async with SessionLocal() as db:
         rows = (
@@ -232,7 +241,13 @@ async def cleanup_bulk_image_exports() -> None:
         ).scalars().all()
         cleaned: list[UUID] = []
         for job in rows:
-            path = Path(job.artifact_path) if job.artifact_path else None
+            path: Path | None = None
+            if job.artifact_path:
+                try:
+                    path = storage.path_from_key(job.artifact_path)
+                except ValueError:
+                    path = None
+                    logger.warning("cleanup_bulk_image_exports: invalid artifact path job=%s", job.id)
             if path and path.exists():
                 try:
                     if path.is_file():

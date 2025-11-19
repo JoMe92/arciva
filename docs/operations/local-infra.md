@@ -173,14 +173,12 @@ S3_USE_SSL=false
 ### B) POSIX filesystem (transition option)
 ```bash
 # Create directories with write access
-mkdir -p $HOME/photo-store/{uploads,originals,derivatives}
+mkdir -p $HOME/arciva-data/{db,media/uploads,media/originals,media/derivatives,media/exports}
 ```
 **Environment you’ll need:**
 ```
-FS_ROOT=$HOME/photo-store
-FS_UPLOADS_DIR=$HOME/photo-store/uploads
-FS_ORIGINALS_DIR=$HOME/photo-store/originals
-FS_DERIVATIVES_DIR=$HOME/photo-store/derivatives
+APP_DB_PATH=$HOME/arciva-data/db/app.db
+APP_MEDIA_ROOT=$HOME/arciva-data/media
 ```
 > Implement a storage adapter in the app so MinIO ⇄ POSIX is just config.
 
@@ -189,13 +187,9 @@ FS_DERIVATIVES_DIR=$HOME/photo-store/derivatives
 ## 7) Environment variables (project-wide)
 Create a **`.env`** in the repo root based on `.env.example` with at least:
 ```
-# Database
-POSTGRES_HOST=127.0.0.1
-POSTGRES_PORT=5432
-POSTGRES_DB=photoapp_dev
-POSTGRES_USER=photoapp
-POSTGRES_PASSWORD=REPLACE_ME
-# or DATABASE_URL=postgresql+psycopg://photoapp:REPLACE_ME@127.0.0.1:5432/photoapp_dev
+# Runtime data
+APP_DB_PATH=/app-data/db/app.db
+APP_MEDIA_ROOT=/app-data/media
 
 # Redis
 REDIS_URL=redis://127.0.0.1:6379/0
@@ -209,11 +203,6 @@ S3_BUCKET_UPLOADS=uploads
 S3_BUCKET_ORIGINALS=originals
 S3_BUCKET_DERIVATIVES=derivatives
 S3_USE_SSL=false
-# OR
-FS_ROOT=$HOME/photo-store
-FS_UPLOADS_DIR=$HOME/photo-store/uploads
-FS_ORIGINALS_DIR=$HOME/photo-store/originals
-FS_DERIVATIVES_DIR=$HOME/photo-store/derivatives
 
 # App
 APP_ENV=dev
@@ -265,4 +254,3 @@ VITE_API_BASE_URL=http://127.0.0.1:8000
 ---
 
 *File location:* `infra/local/INSTALL.md`
-

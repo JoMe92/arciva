@@ -24,13 +24,10 @@ Arciva — Organize once. Find forever. Project-first photo management with smar
 ## 3) Environment variables (recap)
 Key variables in `.env` (repo root):
 ```
-DATABASE_URL=postgresql+asyncpg://arciva:1234@127.0.0.1:5432/arciva_dev
+APP_DB_PATH=$HOME/arciva-data/db/app.db
+APP_MEDIA_ROOT=$HOME/arciva-data/media
 REDIS_URL=redis://127.0.0.1:6379/0
 ALLOWED_ORIGINS=["http://localhost:5173","http://127.0.0.1:5173"]
-FS_ROOT=/home/<you>/photo-store
-FS_UPLOADS_DIR=/home/<you>/photo-store/uploads
-FS_ORIGINALS_DIR=/home/<you>/photo-store/originals
-FS_DERIVATIVES_DIR=/home/<you>/photo-store/derivatives
 THUMB_SIZES=[256]
 ```
 
@@ -170,7 +167,7 @@ Keep production data safe: no destructive autogenerates without review.
 ## 10) Debugging & troubleshooting
 - **Internal Server Error on POST /v1/projects**: ensure `await db.refresh(p)` after `flush()` in `create_project`.
 - **Worker cannot connect to Redis**: start Redis (`systemctl enable --now redis-server`), verify `redis-cli ping`.
-- **Thumb 404**: worker logs; check that `FS_*` paths exist & are writable; Pillow installed.
+- **Thumb 404**: worker logs; check that `APP_MEDIA_ROOT` (and its `uploads/originals/derivatives` subfolders) exists & is writable; Pillow installed.
 - **CORS in browser**: `ALLOWED_ORIGINS` includes your frontend URL.
 - **Bad UUID in upload**: ensure you pass the real `asset_id` from the init step.
 

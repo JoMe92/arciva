@@ -68,7 +68,7 @@ class Asset(Base):
     height: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     taken_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    storage_uri: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # POSIX path or URI
+    storage_uri: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # Relative path under APP_MEDIA_ROOT
     status: Mapped[AssetStatus] = mapped_column(SAEnum(AssetStatus), nullable=False, default=AssetStatus.UPLOADING)
     queued_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     processing_started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -128,7 +128,7 @@ class Derivative(Base):
     format: Mapped[str] = mapped_column(String(16))     # e.g., "jpg"
     width: Mapped[int] = mapped_column(Integer)
     height: Mapped[int] = mapped_column(Integer)
-    storage_key: Mapped[str] = mapped_column(Text)
+    storage_key: Mapped[str] = mapped_column(Text)  # Relative path under APP_MEDIA_ROOT
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (

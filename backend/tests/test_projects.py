@@ -138,7 +138,7 @@ async def test_delete_project_keep_assets(client, TestSessionLocal):
             mime="image/jpeg",
             size_bytes=123,
             status=models.AssetStatus.READY,
-            storage_uri=str(original_path),
+            storage_uri=storage.storage_key_for(original_path),
             sha256=sha,
             reference_count=1,
         )
@@ -197,7 +197,7 @@ async def test_delete_project_remove_assets(client, TestSessionLocal):
             mime="image/jpeg",
             size_bytes=321,
             status=models.AssetStatus.READY,
-            storage_uri=str(original_path),
+            storage_uri=storage.storage_key_for(original_path),
             sha256=sha,
             reference_count=1,
         )

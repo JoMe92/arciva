@@ -2,15 +2,22 @@ import logging
 import time
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.responses import JSONResponse
 from .deps import get_settings
 from .routers import projects, uploads, assets, settings, hub, export_jobs, bulk_image_exports
 from .logging_utils import setup_logging
+from .schema_utils import ensure_base_schema
 
 api_logger = logging.getLogger("arciva.api")
+startup_logger = logging.getLogger("arciva.startup")
 
 def create_app() -> FastAPI:
     s = get_settings()
     setup_logging(s.logs_dir)
+    startup_logger.info("Starting Arciva backend (env=%s)", s.app_env)
+    startup_logger.info("Using database: %s", s.app_db_path)
+    startup_logger.info("Using media root: %s", s.fs_root)
+    startup_logger.info("CORS allow_origins: %s", ", ".join(s.allowed_origins) or "<none>")
     app = FastAPI(title="Arciva API", version="0.1.0")
 
     app.add_middleware(
@@ -29,6 +36,10 @@ def create_app() -> FastAPI:
     app.include_router(export_jobs.router)
     app.include_router(bulk_image_exports.router)
 
+    @app.on_event("startup")
+    async def _bootstrap_schema():
+        await ensure_base_schema()
+
     @app.middleware("http")
     async def log_requests(request: Request, call_next):
         start = time.perf_counter()
@@ -36,8 +47,15 @@ def create_app() -> FastAPI:
             response = await call_next(request)
         except Exception:
             duration_ms = (time.perf_counter() - start) * 1000
-            api_logger.exception("Unhandled error during %s %s (%.2f ms)", request.method, request.url.path, duration_ms)
-            raise
+            api_logger.exception(
+                "Unhandled error during %s %s (%.2f ms) db=%s media_root=%s",
+                request.method,
+                request.url.path,
+                duration_ms,
+                s.app_db_path,
+                s.fs_root,
+            )
+            return JSONResponse({"detail": "Internal server error. See logs."}, status_code=500)
         duration_ms = (time.perf_counter() - start) * 1000
         api_logger.info(
             "%s %s -> %s (%.2f ms)",

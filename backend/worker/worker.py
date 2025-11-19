@@ -127,7 +127,13 @@ async def ingest_asset(ctx, asset_id: str):
 
         temp_path = storage.temp_path_for(asset_id)
         temp_exists = temp_path.exists()
-        original_path: Path | None = Path(asset.storage_uri) if asset.storage_uri else None
+        original_path: Path | None = None
+        if asset.storage_uri:
+            try:
+                original_path = storage.path_from_key(asset.storage_uri)
+            except ValueError:
+                logger.warning("ingest_asset: invalid storage key asset=%s key=%s", asset.id, asset.storage_uri)
+                original_path = None
         if original_path and not original_path.exists():
             original_path = None
 
@@ -364,7 +370,7 @@ async def ingest_asset(ctx, asset_id: str):
                 if derivative:
                     derivative.width, derivative.height = dims
                     derivative.format = "jpg"
-                    derivative.storage_key = str(tpath)
+                    derivative.storage_key = storage.storage_key_for(tpath)
                 else:
                     db.add(
                         models.Derivative(
@@ -373,7 +379,7 @@ async def ingest_asset(ctx, asset_id: str):
                             format="jpg",
                             width=dims[0],
                             height=dims[1],
-                            storage_key=str(tpath),
+                            storage_key=storage.storage_key_for(tpath),
                         )
                     )
 
@@ -421,7 +427,7 @@ async def ingest_asset(ctx, asset_id: str):
                     preview_derivative.width = px
                     preview_derivative.height = py
                     preview_derivative.format = "jpg"
-                    preview_derivative.storage_key = str(preview_path)
+                    preview_derivative.storage_key = storage.storage_key_for(preview_path)
                 else:
                     db.add(
                         models.Derivative(
@@ -430,7 +436,7 @@ async def ingest_asset(ctx, asset_id: str):
                             format="jpg",
                             width=px,
                             height=py,
-                            storage_key=str(preview_path),
+                            storage_key=storage.storage_key_for(preview_path),
                         )
                     )
 
@@ -443,7 +449,7 @@ async def ingest_asset(ctx, asset_id: str):
                 final_path = storage.original_path_for(sha, ext)
 
             asset.sha256 = sha
-            asset.storage_uri = str(final_path.resolve())
+            asset.storage_uri = storage.storage_key_for(final_path)
             asset.width = width
             asset.height = height
             asset.taken_at = taken_at

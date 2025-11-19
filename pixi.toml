@@ -55,3 +55,6 @@ cmd = "./dev.sh up"
 
 [tasks.down]
 cmd = "./dev.sh down"
+
+[tasks.setup]
+cmd = "./dev.sh setup"

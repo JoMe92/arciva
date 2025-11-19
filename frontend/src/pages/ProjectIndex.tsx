@@ -388,7 +388,6 @@ export default function ProjectIndex() {
   const closeGeneralSettings = useCallback(() => setGeneralSettingsOpen(false), [])
   const handleGeneralSettingsSave = useCallback((nextSettings: GeneralSettings) => {
     setGeneralSettings(nextSettings)
-    setGeneralSettingsOpen(false)
   }, [setGeneralSettings])
 
   useEffect(() => { const t = setTimeout(() => setReady(true), 400); return () => clearTimeout(t) }, [])

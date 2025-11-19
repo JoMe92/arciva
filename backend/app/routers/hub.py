@@ -31,8 +31,8 @@ def _color_label_to_schema(value: models.ColorLabel | str | None) -> schemas.Col
 def _thumb_url(asset: models.Asset, storage: PosixStorage) -> str | None:
     if not asset.sha256:
         return None
-    path = storage.derivative_path(asset.sha256, "thumb_256", "jpg")
-    if path.exists():
+    path = storage.find_derivative(asset.sha256, "thumb_256", "jpg")
+    if path:
         return f"/v1/assets/{asset.id}/thumbs/256"
     return None
 
@@ -40,8 +40,8 @@ def _thumb_url(asset: models.Asset, storage: PosixStorage) -> str | None:
 def _preview_url(asset: models.Asset, storage: PosixStorage) -> str | None:
     if not asset.sha256:
         return None
-    path = storage.derivative_path(asset.sha256, "preview_raw", "jpg")
-    if path.exists():
+    path = storage.find_derivative(asset.sha256, "preview_raw", "jpg")
+    if path:
         return f"/v1/assets/{asset.id}/preview"
     return None
 

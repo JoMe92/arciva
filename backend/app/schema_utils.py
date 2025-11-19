@@ -5,10 +5,10 @@ import logging
 from typing import Iterable
 
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, AsyncEngine
 from sqlalchemy.exc import SQLAlchemyError
 
-from .db import engine as async_engine
+from .db import engine as async_engine, Base
 
 logger = logging.getLogger("arciva.schema")
 
@@ -16,6 +16,30 @@ _preview_columns_ready = False
 _preview_columns_lock = asyncio.Lock()
 _asset_metadata_ready = False
 _asset_metadata_lock = asyncio.Lock()
+_base_schema_ready = False
+_base_schema_lock = asyncio.Lock()
+
+async def _create_base_schema(engine: AsyncEngine) -> None:
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    logger.info("ensure_base_schema: base schema ready on %s", engine.url)
+
+async def ensure_base_schema(engine: AsyncEngine | None = None) -> None:
+    """
+    Ensure the primary tables exist before serving requests.
+    """
+    target_engine = engine or async_engine
+    if engine is None:
+        global _base_schema_ready
+        if _base_schema_ready:
+            return
+        async with _base_schema_lock:
+            if _base_schema_ready:
+                return
+            await _create_base_schema(target_engine)
+            _base_schema_ready = True
+        return
+    await _create_base_schema(target_engine)
 
 
 def _build_statements(existing: Iterable[str]) -> list[str]:

@@ -1699,6 +1699,7 @@ export default function ProjectWorkspace() {
         size={gridSizeForView}
         gap={GAP}
         containerWidth={contentW}
+        columns={isMobileLayout ? 2 : undefined}
         onOpen={(idx) => {
           setCurrent(idx)
           setView('detail')
@@ -1725,6 +1726,8 @@ export default function ProjectWorkspace() {
       assetDimensions={currentAssetDimensions}
       onZoomChange={setDetailZoom}
       previewPanRequest={previewPanRequest}
+      showFilmstrip={!isMobileLayout}
+      enableSwipeNavigation={isMobileLayout}
     />
   )
 
@@ -1904,10 +1907,7 @@ export default function ProjectWorkspace() {
             onSelectPanel={setActiveMobilePanel}
             onOpenExport={() => setExportDialogOpen(true)}
             canExport={selectedPhotoIds.size > 0}
-            onToggleStack={() => handleStackToggle(!stackPairsEnabled)}
-            stackEnabled={stackPairsEnabled}
             detailsDisabled={!currentPhoto}
-            stackTogglePending={stackToggleMutation.isPending}
           />
         </>
       ) : (

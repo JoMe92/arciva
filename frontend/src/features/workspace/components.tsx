@@ -404,25 +404,16 @@ export function TopBar({
             </button>
             <button
               type="button"
-              ref={shortcutsButtonRef}
-              onClick={() => {
-                if (shortcutsOpen) {
-                  closeShortcuts()
-                } else {
-                  setShortcutsOpen(true)
-                  syncShortcutsAnchor()
-                }
-              }}
-              className={`inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border,#E1D3B9)] text-[var(--text,#1F1E1B)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--stone-trail-brand-focus,#4A463F)] ${
-                shortcutsOpen ? 'bg-[var(--sand-100,#F3EBDD)]' : 'bg-[var(--surface,#FFFFFF)]'
-              }`}
-              aria-haspopup="dialog"
-              aria-expanded={shortcutsOpen}
-              aria-controls={SHORTCUTS_LEGEND_ID}
-              title="Shortcuts"
+              onClick={() => onToggleStackPairs(!stackPairsEnabled)}
+              disabled={stackTogglePending}
+              aria-pressed={stackPairsEnabled}
+              className={`inline-flex h-10 w-10 items-center justify-center rounded-full border text-[var(--text,#1F1E1B)] transition ${
+                stackPairsEnabled ? 'border-[var(--text,#1F1E1B)] bg-[var(--sand-100,#F3EBDD)]' : 'border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]'
+              } ${stackTogglePending ? 'cursor-not-allowed opacity-60' : ''}`}
+              title="Toggle JPEG+RAW stacking"
             >
-              <ShortcutIcon className="h-5 w-5" aria-hidden="true" />
-              <span className="sr-only">Keyboard shortcuts</span>
+              <StackIcon className="h-4 w-4" aria-hidden="true" />
+              <span className="sr-only">{stackPairsEnabled ? 'Disable JPEG+RAW stacking' : 'Enable JPEG+RAW stacking'}</span>
             </button>
             <ProjectSettingsButton onClick={onOpenSettings} label="Open application settings" title="Application settings" />
           </div>
@@ -734,23 +725,17 @@ export function MobileBottomBar({
   onSelectPanel,
   onOpenExport,
   canExport,
-  onToggleStack,
-  stackEnabled,
   detailsDisabled,
-  stackTogglePending = false,
 }: {
   activePanel: MobileWorkspacePanel
   onSelectPanel: (panel: MobileWorkspacePanel) => void
   onOpenExport: () => void
   canExport: boolean
-  onToggleStack: () => void
-  stackEnabled: boolean
   detailsDisabled: boolean
-  stackTogglePending?: boolean
 }) {
   return (
     <nav className="border-t border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)]/95 px-3 pb-3 pt-2 text-[11px] text-[var(--text-muted,#6B645B)] shadow-[0_-6px_30px_rgba(31,30,27,0.08)]">
-      <div className="grid grid-cols-5 gap-1">
+      <div className="grid grid-cols-4 gap-1">
         <MobileNavButton
           label="Project"
           icon={<LayoutListIcon className="h-5 w-5" aria-hidden="true" />}
@@ -781,20 +766,6 @@ export function MobileBottomBar({
         >
           <ExportIcon className="h-5 w-5" aria-hidden="true" />
           <span>Export</span>
-        </button>
-        <button
-          type="button"
-          onClick={onToggleStack}
-          aria-pressed={stackEnabled}
-          disabled={stackTogglePending}
-          className={`flex flex-col items-center justify-center rounded-2xl border px-2 py-1 text-center text-[11px] font-semibold transition ${
-            stackEnabled
-              ? 'border-[var(--text,#1F1E1B)] bg-[var(--sand-100,#F3EBDD)] text-[var(--text,#1F1E1B)]'
-              : 'border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] text-[var(--text,#1F1E1B)]'
-          } ${stackTogglePending ? 'opacity-60' : ''}`}
-        >
-          <StackIcon className="h-5 w-5" aria-hidden="true" />
-          <span>Stack</span>
         </button>
       </div>
     </nav>
@@ -1332,6 +1303,15 @@ export function Sidebar({
               Project Overview
             </div>
           )}
+          {isMobilePanel ? (
+            <MobileProjectNav
+              onOverview={() => handleRailSelect('overview')}
+              onImport={() => handleRailSelect('import')}
+              onDate={() => handleRailSelect('date')}
+              onFolder={() => handleRailSelect('folder')}
+              hasDateFilter={Boolean(selectedDayKey)}
+            />
+          ) : null}
           <div id={LEFT_PANEL_CONTENT_ID} className={panelContentClass}>
             <InspectorSection
               id={LEFT_IMPORT_SECTION_ID}
@@ -1536,6 +1516,44 @@ function LeftRail({
           onClick={onSettings ?? onFolder}
         />
       </div>
+    </div>
+  )
+}
+
+function MobileProjectNav({
+  onImport,
+  onOverview,
+  onDate,
+  onFolder,
+  hasDateFilter,
+}: {
+  onImport: () => void
+  onOverview: () => void
+  onDate: () => void
+  onFolder: () => void
+  hasDateFilter: boolean
+}) {
+  const buttons: Array<{ label: string; onClick: () => void; icon: React.ReactNode; active?: boolean }> = [
+    { label: 'Import', onClick: onImport, icon: <ImportIcon className="h-4 w-4" aria-hidden="true" /> },
+    { label: 'Overview', onClick: onOverview, icon: <LayoutListIcon className="h-4 w-4" aria-hidden="true" /> },
+    { label: 'Date', onClick: onDate, icon: <CalendarIcon className="h-4 w-4" aria-hidden="true" />, active: hasDateFilter },
+    { label: 'Folders', onClick: onFolder, icon: <FolderIcon className="h-4 w-4" aria-hidden="true" /> },
+  ]
+  return (
+    <div className="mt-3 flex flex-wrap gap-2 px-1">
+      {buttons.map((button) => (
+        <button
+          key={button.label}
+          type="button"
+          onClick={button.onClick}
+          className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-semibold text-[var(--text,#1F1E1B)] shadow-[0_1px_2px_rgba(0,0,0,0.06)] transition ${
+            button.active ? 'border-[var(--text,#1F1E1B)] bg-[var(--sand-100,#F3EBDD)]' : 'border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)]'
+          }`}
+        >
+          <span className="text-[var(--text-muted,#6B645B)]">{button.icon}</span>
+          {button.label}
+        </button>
+      ))}
     </div>
   )
 }
@@ -2870,6 +2888,7 @@ export function GridView({
   onOpen,
   onSelect,
   selectedIds,
+  columns,
 }: {
   items: Photo[]
   size: number
@@ -2878,10 +2897,11 @@ export function GridView({
   onOpen: (idx: number) => void
   onSelect?: (idx: number, options?: GridSelectOptions) => void
   selectedIds?: Set<string>
+  columns?: number
 }) {
-  const cols = computeCols(containerWidth, size, gap)
+  const cols = columns ?? computeCols(containerWidth, size, gap)
   const twoLine = cols >= 4
-  const template = `repeat(auto-fill, minmax(${size}px, 1fr))`
+  const template = columns ? `repeat(${columns}, minmax(0, 1fr))` : `repeat(auto-fill, minmax(${size}px, 1fr))`
   return (
     <div className="p-3 grid" style={{ gridTemplateColumns: template, gap }}>
       {items.map((p, idx) => (
@@ -2937,6 +2957,8 @@ export function DetailView({
   assetDimensions,
   onZoomChange,
   previewPanRequest,
+  showFilmstrip = true,
+  enableSwipeNavigation = false,
 }: {
   items: Photo[]
   index: number
@@ -2954,6 +2976,8 @@ export function DetailView({
   assetDimensions?: { width: number; height: number } | null
   onZoomChange?: React.Dispatch<React.SetStateAction<number>>
   previewPanRequest?: InspectorPreviewPanCommand | null
+  showFilmstrip?: boolean
+  enableSwipeNavigation?: boolean
 }) {
   const cur = items[index]
   const canPrev = index > 0
@@ -3000,6 +3024,7 @@ export function DetailView({
   }, [])
   const viewerRef = useRef<HTMLDivElement | null>(null)
   const dragStateRef = useRef<{ pointerId: number | null; lastX: number; lastY: number } | null>(null)
+  const swipeStateRef = useRef<{ pointerId: number; startX: number; startTime: number } | null>(null)
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 })
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const [isDragging, setIsDragging] = useState(false)
@@ -3014,6 +3039,60 @@ export function DetailView({
   const zoomValue = useMemo(() => {
     return clampZoomValue(zoom)
   }, [zoom, clampZoomValue])
+  const SWIPE_DISTANCE = 40
+  const SWIPE_MAX_DURATION = 800
+
+  const handleSwipePointerDown = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (!enableSwipeNavigation || zoomValue > 1) return
+      swipeStateRef.current = { pointerId: event.pointerId, startX: event.clientX, startTime: event.timeStamp }
+    },
+    [enableSwipeNavigation, zoomValue],
+  )
+
+  const cancelSwipeTracking = useCallback((pointerId?: number) => {
+    if (pointerId === undefined) {
+      swipeStateRef.current = null
+      return
+    }
+    if (swipeStateRef.current && swipeStateRef.current.pointerId === pointerId) {
+      swipeStateRef.current = null
+    }
+  }, [])
+
+  const triggerSwipeNavigation = useCallback(
+    (direction: 'prev' | 'next') => {
+      const currentIndex = indexRef.current
+      if (direction === 'prev' && currentIndex > 0) {
+        setIndex(Math.max(0, currentIndex - 1))
+      } else if (direction === 'next' && currentIndex < itemsLengthRef.current - 1) {
+        setIndex(Math.min(itemsLengthRef.current - 1, currentIndex + 1))
+      }
+    },
+    [setIndex],
+  )
+
+  const handleSwipePointerUp = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (!enableSwipeNavigation || zoomValue > 1) return
+      const state = swipeStateRef.current
+      if (!state || state.pointerId !== event.pointerId) return
+      const deltaX = event.clientX - state.startX
+      const deltaTime = event.timeStamp - state.startTime
+      if (Math.abs(deltaX) >= SWIPE_DISTANCE && deltaTime <= SWIPE_MAX_DURATION) {
+        if (deltaX < 0) triggerSwipeNavigation('next')
+        else triggerSwipeNavigation('prev')
+      }
+      swipeStateRef.current = null
+    },
+    [enableSwipeNavigation, triggerSwipeNavigation, zoomValue],
+  )
+  const handleSwipePointerCancel = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      cancelSwipeTracking(event.pointerId)
+    },
+    [cancelSwipeTracking],
+  )
 
   useEffect(() => {
     const node = viewerRef.current
@@ -3275,8 +3354,10 @@ export function DetailView({
     return () => observer.disconnect()
   }, [stripEl, ensureThumbVisible])
 
+  const gridTemplateRows = showFilmstrip ? `minmax(0,1fr) ${STRIP_H}px` : 'minmax(0,1fr)'
+
   return (
-    <div className={rootClass} style={{ gridTemplateRows: `minmax(0,1fr) ${STRIP_H}px` }}>
+    <div className={rootClass} style={{ gridTemplateRows }}>
       <div className="relative min-h-0 min-w-0 overflow-hidden">
         {cur ? (
           <>
@@ -3284,12 +3365,24 @@ export function DetailView({
               <div ref={viewerRef} className="relative h-full w-full overflow-hidden rounded-[var(--r-lg,20px)]">
                 <div
                   className="absolute inset-0"
-                  style={{ cursor: interactionCursor }}
-                  onPointerDown={handlePointerDown}
+                  style={{ cursor: interactionCursor, touchAction: zoomValue > 1 || enableSwipeNavigation ? 'none' : 'auto' }}
+                  onPointerDown={(event) => {
+                    handlePointerDown(event)
+                    handleSwipePointerDown(event)
+                  }}
                   onPointerMove={handlePointerMove}
-                  onPointerUp={endPointerInteraction}
-                  onPointerLeave={endPointerInteraction}
-                  onPointerCancel={endPointerInteraction}
+                  onPointerUp={(event) => {
+                    endPointerInteraction(event)
+                    handleSwipePointerUp(event)
+                  }}
+                  onPointerLeave={(event) => {
+                    endPointerInteraction(event)
+                    handleSwipePointerCancel(event)
+                  }}
+                  onPointerCancel={(event) => {
+                    endPointerInteraction(event)
+                    handleSwipePointerCancel(event)
+                  }}
                   onWheel={handleWheelZoom}
                 >
                   <div
@@ -3314,6 +3407,7 @@ export function DetailView({
         )}
       </div>
 
+      {showFilmstrip ? (
       <div className="group relative w-full min-w-0 border-t border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]">
         {items.length > 0 ? (
           <div
@@ -3414,6 +3508,7 @@ export function DetailView({
           )}
         </div>
       </div>
+      ) : null}
     </div>
   )
 }

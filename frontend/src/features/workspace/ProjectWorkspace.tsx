@@ -27,6 +27,8 @@ import {
   InspectorPanel,
   GridView,
   DetailView,
+  MobileBottomBar,
+  MobilePhotosModeToggle,
   EmptyState,
   NoResults,
   computeCols,
@@ -39,6 +41,7 @@ import {
   type MetadataSourceId,
   type InspectorViewportRect,
   type InspectorPreviewPanCommand,
+  type MobileWorkspacePanel,
 } from './components'
 
 const COLOR_SHORTCUT_MAP = {
@@ -83,6 +86,7 @@ const RESIZE_STEP = 16
 const DETAIL_MIN_ZOOM = 1
 const DETAIL_MAX_ZOOM = 4
 const DETAIL_ZOOM_FACTOR = 1.2
+const MOBILE_BREAKPOINT = 768
 
 function clampDetailZoom(value: number): number {
   if (!Number.isFinite(value)) return DETAIL_MIN_ZOOM
@@ -521,10 +525,47 @@ export default function ProjectWorkspace() {
   const prevPhotosRef = useRef<Photo[]>([])
   const currentIndexRef = useRef(0)
   const currentPhotoIdRef = useRef<string | null>(null)
-  const [view, setView] = useState<'grid' | 'detail'>('detail')
+  const [view, setViewState] = useState<'grid' | 'detail'>('detail')
+  const userChangedViewRef = useRef(false)
+  const setView = useCallback((next: 'grid' | 'detail') => {
+    userChangedViewRef.current = true
+    setViewState(next)
+  }, [])
   const [current, setCurrent] = useState(0)
   const [detailZoom, setDetailZoom] = useState(1)
   const [detailViewportRect, setDetailViewportRect] = useState<InspectorViewportRect | null>(null)
+  const [isMobileLayout, setIsMobileLayout] = useState(false)
+  const [activeMobilePanel, setActiveMobilePanel] = useState<MobileWorkspacePanel>('photos')
+  const mobileViewInitializedRef = useRef(false)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const updateLayout = () => {
+      const width = window.innerWidth
+      const height = window.innerHeight
+      const isPortrait = height >= width
+      setIsMobileLayout(width < MOBILE_BREAKPOINT && isPortrait)
+    }
+    updateLayout()
+    window.addEventListener('resize', updateLayout)
+    window.addEventListener('orientationchange', updateLayout)
+    return () => {
+      window.removeEventListener('resize', updateLayout)
+      window.removeEventListener('orientationchange', updateLayout)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!isMobileLayout) {
+      mobileViewInitializedRef.current = false
+      return
+    }
+    if (mobileViewInitializedRef.current) return
+    mobileViewInitializedRef.current = true
+    if (!userChangedViewRef.current && view !== 'grid') {
+      setViewState('grid')
+    }
+  }, [isMobileLayout, view])
   const [detailViewportResetKey, setDetailViewportResetKey] = useState(0)
   const [previewPanRequest, setPreviewPanRequest] = useState<InspectorPreviewPanCommand | null>(null)
   const [selectedPhotoIds, setSelectedPhotoIds] = useState<Set<string>>(() => new Set<string>())
@@ -779,20 +820,30 @@ export default function ProjectWorkspace() {
   }, [photos])
 
   const contentRef = useRef<HTMLDivElement | null>(null)
+  const [contentNode, setContentNode] = useState<HTMLDivElement | null>(null)
   const [contentW, setContentW] = useState(1200)
   const paginatorRef = useRef<HTMLDivElement | null>(null)
-  useEffect(() => {
-    if (!contentRef.current) return
-    const ro = new ResizeObserver((entries) => setContentW(entries[0].contentRect.width))
-    ro.observe(contentRef.current!)
-    return () => ro.disconnect()
+  const setContentRef = useCallback((node: HTMLDivElement | null) => {
+    contentRef.current = node
+    setContentNode(node)
   }, [])
+  useEffect(() => {
+    if (!contentNode) return
+    const ro = new ResizeObserver((entries) => {
+      if (!entries.length) return
+      setContentW(entries[0].contentRect.width)
+    })
+    ro.observe(contentNode)
+    return () => ro.disconnect()
+  }, [contentNode])
 
   const GAP = 12
   const minThumbForSix = Math.max(96, Math.floor((contentW - (6 - 1) * GAP) / 6))
   const [gridSize, setGridSizeState] = useState(Math.max(140, minThumbForSix))
   useEffect(() => setGridSizeState((s) => Math.max(s, minThumbForSix)), [minThumbForSix])
   const setGridSize = (n: number) => setGridSizeState(Math.max(n, minThumbForSix))
+  const mobileGridSize = Math.max(140, Math.floor(Math.max(contentW - GAP, 0) / 2) || 140)
+  const gridSizeForView = isMobileLayout ? mobileGridSize : gridSize
   const effectiveLeftWidth = leftPanelCollapsed ? LEFT_COLLAPSED_WIDTH : leftPanelWidth
   const effectiveRightWidth = rightPanelCollapsed ? RIGHT_COLLAPSED_WIDTH : rightPanelWidth
 
@@ -1367,6 +1418,11 @@ export default function ProjectWorkspace() {
   function goBack() { navigate('/') }
 
   const currentPhoto = visible[current] ?? null
+  useEffect(() => {
+    if (activeMobilePanel === 'details' && !currentPhoto) {
+      setActiveMobilePanel('photos')
+    }
+  }, [activeMobilePanel, currentPhoto])
 
   const handlePhotoSelect = useCallback(
     (idx: number, options?: GridSelectOptions) => {
@@ -1628,6 +1684,49 @@ export default function ProjectWorkspace() {
   }, [assetDetailError])
 
   const hasAny = photos.length > 0
+  const photosWorkspaceContent = !hasAny ? (
+    <div className="flex h-full items-center justify-center overflow-auto p-6">
+      <EmptyState />
+    </div>
+  ) : visible.length === 0 ? (
+    <div className="flex h-full items-center justify-center overflow-auto p-6">
+      <NoResults onReset={resetFilters} />
+    </div>
+  ) : view === 'grid' ? (
+    <div className="h-full overflow-auto">
+      <GridView
+        items={visible}
+        size={gridSizeForView}
+        gap={GAP}
+        containerWidth={contentW}
+        onOpen={(idx) => {
+          setCurrent(idx)
+          setView('detail')
+        }}
+        onSelect={handlePhotoSelect}
+        selectedIds={selectedPhotoIds}
+      />
+    </div>
+  ) : (
+    <DetailView
+      items={visible}
+      index={current}
+      setIndex={setCurrent}
+      className="h-full"
+      selectedIds={selectedPhotoIds}
+      onSelect={handlePhotoSelect}
+      paginatorRef={paginatorRef}
+      zoom={detailZoom}
+      minZoom={DETAIL_MIN_ZOOM}
+      maxZoom={DETAIL_MAX_ZOOM}
+      zoomStep={DETAIL_ZOOM_FACTOR}
+      onViewportChange={setDetailViewportRect}
+      viewportResetKey={detailViewportResetKey}
+      assetDimensions={currentAssetDimensions}
+      onZoomChange={setDetailZoom}
+      previewPanRequest={previewPanRequest}
+    />
+  )
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[var(--surface-subtle,#FBF7EF)] text-[var(--text,#1F1E1B)]">
@@ -1667,6 +1766,7 @@ export default function ProjectWorkspace() {
         selectedCount={selectedPhotoIds.size}
         onOpenExport={() => setExportDialogOpen(true)}
         onOpenSettings={openGeneralSettings}
+        layout={isMobileLayout ? 'mobile' : 'desktop'}
       />
       {experimentalStorageWarning ? (
         <div className="mx-4 mt-3 rounded-3xl border border-red-200 bg-red-50 px-4 py-3 text-[13px] text-red-800">
@@ -1730,141 +1830,182 @@ export default function ProjectWorkspace() {
         </div>
       )}
 
-      <div
-        className="flex-1 min-h-0 grid overflow-hidden"
-        style={{
-          gridTemplateColumns: `${effectiveLeftWidth}px ${HANDLE_WIDTH}px minmax(0,1fr) ${HANDLE_WIDTH}px ${effectiveRightWidth}px`,
-        }}
-      >
-        <Sidebar
-          dateTree={dateTree}
-          projectOverview={projectOverview}
-          onRenameProject={handleRename}
-          renamePending={renameMutation.isPending}
-          renameError={renameErrorMessage}
-          onProjectOverviewChange={handleProjectInfoChange}
-          projectOverviewPending={projectInfoMutation.isPending}
-          projectOverviewError={projectInfoErrorMessage}
-          onOpenImport={() => setImportOpen(true)}
-          onSelectDay={handleDaySelect}
-          selectedDayKey={selectedDayKey}
-          selectedDay={selectedDayNode}
-          onClearDateFilter={clearDateFilter}
-          collapsed={leftPanelCollapsed}
-          onCollapse={() => setLeftPanelCollapsed(true)}
-          onExpand={() => setLeftPanelCollapsed(false)}
-        />
-
-        <button
-          type="button"
-          role="separator"
-          aria-orientation="vertical"
-          aria-valuemin={LEFT_COLLAPSED_WIDTH}
-          aria-valuemax={LEFT_MAX_WIDTH}
-          aria-valuenow={leftPanelCollapsed ? LEFT_COLLAPSED_WIDTH : leftPanelWidth}
-          aria-valuetext={leftPanelCollapsed ? 'Collapsed' : `${Math.round(leftPanelWidth)} pixels`}
-          aria-label="Resize Project Overview panel"
-          tabIndex={0}
-          className="group flex h-full w-full cursor-col-resize items-center justify-center border-x border-[var(--border,#EDE1C6)] bg-[var(--sand-50,#FBF7EF)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)]"
-          onPointerDown={handleLeftHandlePointerDown}
-          onKeyDown={handleLeftHandleKeyDown}
-          onDoubleClick={() => setLeftPanelCollapsed((prev) => !prev)}
-        >
-          <span className="h-10 w-[2px] rounded-full bg-[var(--border,#EDE1C6)] transition-colors group-hover:bg-[var(--text-muted,#6B645B)]" aria-hidden="true" />
-        </button>
-
-        <main ref={contentRef} className="relative flex min-h-0 min-w-0 flex-col bg-[var(--surface,#FFFFFF)]">
-          <div className="flex-1 min-h-0 min-w-0 overflow-hidden">
-            {!hasAny ? (
-              <div className="flex h-full items-center justify-center overflow-auto p-6">
-                <EmptyState />
+      {isMobileLayout ? (
+        <>
+          <div className="flex-1 min-h-0 overflow-hidden pb-24">
+            {activeMobilePanel === 'project' ? (
+              <div className="h-full overflow-y-auto px-3">
+                <Sidebar
+                  dateTree={dateTree}
+                  projectOverview={projectOverview}
+                  onRenameProject={handleRename}
+                  renamePending={renameMutation.isPending}
+                  renameError={renameErrorMessage}
+                  onProjectOverviewChange={handleProjectInfoChange}
+                  projectOverviewPending={projectInfoMutation.isPending}
+                  projectOverviewError={projectInfoErrorMessage}
+                  onOpenImport={() => setImportOpen(true)}
+                  onSelectDay={handleDaySelect}
+                  selectedDayKey={selectedDayKey}
+                  selectedDay={selectedDayNode}
+                  onClearDateFilter={clearDateFilter}
+                  collapsed={false}
+                  onCollapse={() => {}}
+                  onExpand={() => {}}
+                  mode="mobile"
+                />
               </div>
-            ) : visible.length === 0 ? (
-              <div className="flex h-full items-center justify-center overflow-auto p-6">
-                <NoResults onReset={resetFilters} />
-              </div>
-            ) : view === 'grid' ? (
-              <div className="h-full overflow-auto">
-                <GridView
-                  items={visible}
-                  size={gridSize}
-                  gap={GAP}
-                  containerWidth={contentW}
-                  onOpen={(idx) => { setCurrent(idx); setView('detail') }}
-                  onSelect={handlePhotoSelect}
-                  selectedIds={selectedPhotoIds}
+            ) : activeMobilePanel === 'details' ? (
+              <div className="h-full overflow-y-auto px-3">
+                <InspectorPanel
+                  collapsed={false}
+                  onCollapse={() => {}}
+                  onExpand={() => {}}
+                  hasSelection={Boolean(currentPhoto)}
+                  usedProjects={usedProjects}
+                  usedProjectsLoading={assetProjectsLoading}
+                  usedProjectsError={usedProjectsErrorMessage}
+                  metadataSourceId={metadataSourceId}
+                  onChangeMetadataSource={handleMetadataSourceChange}
+                  metadataSourceBusy={metadataSyncPending}
+                  metadataSourceError={metadataSourceActionError}
+                  keyMetadataSections={{ general: generalInspectorFields, capture: captureInspectorFields }}
+                  metadataSummary={metadataSummary}
+                  metadataEntries={metadataEntries}
+                  metadataWarnings={metadataWarnings}
+                  metadataLoading={metadataLoading}
+                  metadataError={metadataErrorMessage}
+                  previewAsset={inspectorPreviewAsset}
+                  detailZoom={detailZoom}
+                  detailMinZoom={DETAIL_MIN_ZOOM}
+                  detailMaxZoom={DETAIL_MAX_ZOOM}
+                  onDetailZoomIn={handleDetailZoomIn}
+                  onDetailZoomOut={handleDetailZoomOut}
+                  onDetailZoomReset={handleDetailZoomReset}
+                  detailViewport={detailViewportRect}
+                  onPreviewPan={handlePreviewPan}
+                  mode="mobile"
                 />
               </div>
             ) : (
-            <DetailView
-              items={visible}
-              index={current}
-              setIndex={setCurrent}
-              className="h-full"
-              selectedIds={selectedPhotoIds}
-              onSelect={handlePhotoSelect}
-              paginatorRef={paginatorRef}
-              zoom={detailZoom}
-              minZoom={DETAIL_MIN_ZOOM}
-              maxZoom={DETAIL_MAX_ZOOM}
-              zoomStep={DETAIL_ZOOM_FACTOR}
-              onViewportChange={setDetailViewportRect}
-              viewportResetKey={detailViewportResetKey}
-              assetDimensions={currentAssetDimensions}
-              onZoomChange={setDetailZoom}
-              previewPanRequest={previewPanRequest}
-            />
+              <div className="flex h-full flex-col">
+                <MobilePhotosModeToggle view={view} onChange={setView} />
+                <div
+                  ref={activeMobilePanel === 'photos' ? setContentRef : undefined}
+                  className="flex-1 min-h-0 min-w-0 overflow-hidden bg-[var(--surface,#FFFFFF)]"
+                >
+                  {photosWorkspaceContent}
+                </div>
+              </div>
             )}
           </div>
-        </main>
-
-        <button
-          type="button"
-          role="separator"
-          aria-orientation="vertical"
-          aria-valuemin={RIGHT_COLLAPSED_WIDTH}
-          aria-valuemax={RIGHT_MAX_WIDTH}
-          aria-valuenow={rightPanelCollapsed ? RIGHT_COLLAPSED_WIDTH : rightPanelWidth}
-          aria-valuetext={rightPanelCollapsed ? 'Collapsed' : `${Math.round(rightPanelWidth)} pixels`}
-          aria-label="Resize Image Details panel"
-          tabIndex={0}
-          className="group flex h-full w-full cursor-col-resize items-center justify-center border-x border-[var(--border,#EDE1C6)] bg-[var(--sand-50,#FBF7EF)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)]"
-          onPointerDown={handleRightHandlePointerDown}
-          onKeyDown={handleRightHandleKeyDown}
-          onDoubleClick={() => setRightPanelCollapsed((prev) => !prev)}
+          <MobileBottomBar
+            activePanel={activeMobilePanel}
+            onSelectPanel={setActiveMobilePanel}
+            onOpenExport={() => setExportDialogOpen(true)}
+            canExport={selectedPhotoIds.size > 0}
+            onToggleStack={() => handleStackToggle(!stackPairsEnabled)}
+            stackEnabled={stackPairsEnabled}
+            detailsDisabled={!currentPhoto}
+            stackTogglePending={stackToggleMutation.isPending}
+          />
+        </>
+      ) : (
+        <div
+          className="flex-1 min-h-0 grid overflow-hidden"
+          style={{
+            gridTemplateColumns: `${effectiveLeftWidth}px ${HANDLE_WIDTH}px minmax(0,1fr) ${HANDLE_WIDTH}px ${effectiveRightWidth}px`,
+          }}
         >
-          <span className="h-10 w-[2px] rounded-full bg-[var(--border,#EDE1C6)] transition-colors group-hover:bg-[var(--text-muted,#6B645B)]" aria-hidden="true" />
-        </button>
+          <Sidebar
+            dateTree={dateTree}
+            projectOverview={projectOverview}
+            onRenameProject={handleRename}
+            renamePending={renameMutation.isPending}
+            renameError={renameErrorMessage}
+            onProjectOverviewChange={handleProjectInfoChange}
+            projectOverviewPending={projectInfoMutation.isPending}
+            projectOverviewError={projectInfoErrorMessage}
+            onOpenImport={() => setImportOpen(true)}
+            onSelectDay={handleDaySelect}
+            selectedDayKey={selectedDayKey}
+            selectedDay={selectedDayNode}
+            onClearDateFilter={clearDateFilter}
+            collapsed={leftPanelCollapsed}
+            onCollapse={() => setLeftPanelCollapsed(true)}
+            onExpand={() => setLeftPanelCollapsed(false)}
+          />
 
-        <InspectorPanel
-          collapsed={rightPanelCollapsed}
-          onCollapse={() => setRightPanelCollapsed(true)}
-          onExpand={() => setRightPanelCollapsed(false)}
-          hasSelection={Boolean(currentPhoto)}
-          usedProjects={usedProjects}
-          usedProjectsLoading={assetProjectsLoading}
-          usedProjectsError={usedProjectsErrorMessage}
-          metadataSourceId={metadataSourceId}
-          onChangeMetadataSource={handleMetadataSourceChange}
-          metadataSourceBusy={metadataSyncPending}
-          metadataSourceError={metadataSourceActionError}
-          keyMetadataSections={{ general: generalInspectorFields, capture: captureInspectorFields }}
-          metadataSummary={metadataSummary}
-          metadataEntries={metadataEntries}
-          metadataWarnings={metadataWarnings}
-          metadataLoading={metadataLoading}
-          metadataError={metadataErrorMessage}
-          previewAsset={inspectorPreviewAsset}
-          detailZoom={detailZoom}
-          detailMinZoom={DETAIL_MIN_ZOOM}
-          detailMaxZoom={DETAIL_MAX_ZOOM}
-          onDetailZoomIn={handleDetailZoomIn}
-          onDetailZoomOut={handleDetailZoomOut}
-          onDetailZoomReset={handleDetailZoomReset}
-          detailViewport={detailViewportRect}
-          onPreviewPan={handlePreviewPan}
-        />
-      </div>
+          <button
+            type="button"
+            role="separator"
+            aria-orientation="vertical"
+            aria-valuemin={LEFT_COLLAPSED_WIDTH}
+            aria-valuemax={LEFT_MAX_WIDTH}
+            aria-valuenow={leftPanelCollapsed ? LEFT_COLLAPSED_WIDTH : leftPanelWidth}
+            aria-valuetext={leftPanelCollapsed ? 'Collapsed' : `${Math.round(leftPanelWidth)} pixels`}
+            aria-label="Resize Project Overview panel"
+            tabIndex={0}
+            className="group flex h-full w-full cursor-col-resize items-center justify-center border-x border-[var(--border,#EDE1C6)] bg-[var(--sand-50,#FBF7EF)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)]"
+            onPointerDown={handleLeftHandlePointerDown}
+            onKeyDown={handleLeftHandleKeyDown}
+            onDoubleClick={() => setLeftPanelCollapsed((prev) => !prev)}
+          >
+            <span className="h-10 w-[2px] rounded-full bg-[var(--border,#EDE1C6)] transition-colors group-hover:bg-[var(--text-muted,#6B645B)]" aria-hidden="true" />
+          </button>
+
+          <main ref={setContentRef} className="relative flex min-h-0 min-w-0 flex-col bg-[var(--surface,#FFFFFF)]">
+            <div className="flex-1 min-h-0 min-w-0 overflow-hidden">{photosWorkspaceContent}</div>
+          </main>
+
+          <button
+            type="button"
+            role="separator"
+            aria-orientation="vertical"
+            aria-valuemin={RIGHT_COLLAPSED_WIDTH}
+            aria-valuemax={RIGHT_MAX_WIDTH}
+            aria-valuenow={rightPanelCollapsed ? RIGHT_COLLAPSED_WIDTH : rightPanelWidth}
+            aria-valuetext={rightPanelCollapsed ? 'Collapsed' : `${Math.round(rightPanelWidth)} pixels`}
+            aria-label="Resize Image Details panel"
+            tabIndex={0}
+            className="group flex h-full w-full cursor-col-resize items-center justify-center border-x border-[var(--border,#EDE1C6)] bg-[var(--sand-50,#FBF7EF)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)]"
+            onPointerDown={handleRightHandlePointerDown}
+            onKeyDown={handleRightHandleKeyDown}
+            onDoubleClick={() => setRightPanelCollapsed((prev) => !prev)}
+          >
+            <span className="h-10 w-[2px] rounded-full bg-[var(--border,#EDE1C6)] transition-colors group-hover:bg-[var(--text-muted,#6B645B)]" aria-hidden="true" />
+          </button>
+
+          <InspectorPanel
+            collapsed={rightPanelCollapsed}
+            onCollapse={() => setRightPanelCollapsed(true)}
+            onExpand={() => setRightPanelCollapsed(false)}
+            hasSelection={Boolean(currentPhoto)}
+            usedProjects={usedProjects}
+            usedProjectsLoading={assetProjectsLoading}
+            usedProjectsError={usedProjectsErrorMessage}
+            metadataSourceId={metadataSourceId}
+            onChangeMetadataSource={handleMetadataSourceChange}
+            metadataSourceBusy={metadataSyncPending}
+            metadataSourceError={metadataSourceActionError}
+            keyMetadataSections={{ general: generalInspectorFields, capture: captureInspectorFields }}
+            metadataSummary={metadataSummary}
+            metadataEntries={metadataEntries}
+            metadataWarnings={metadataWarnings}
+            metadataLoading={metadataLoading}
+            metadataError={metadataErrorMessage}
+            previewAsset={inspectorPreviewAsset}
+            detailZoom={detailZoom}
+            detailMinZoom={DETAIL_MIN_ZOOM}
+            detailMaxZoom={DETAIL_MAX_ZOOM}
+            onDetailZoomIn={handleDetailZoomIn}
+            onDetailZoomOut={handleDetailZoomOut}
+            onDetailZoomReset={handleDetailZoomReset}
+            detailViewport={detailViewportRect}
+            onPreviewPan={handlePreviewPan}
+          />
+        </div>
+      )}
 
       {importOpen && (
         <ErrorBoundary fallback={(

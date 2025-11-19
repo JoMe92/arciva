@@ -186,6 +186,7 @@ export function TopBar({
   selectedCount,
   onOpenExport,
   onOpenSettings,
+  layout = 'desktop',
 }: {
   projectName: string
   onBack: () => void
@@ -206,6 +207,7 @@ export function TopBar({
   selectedCount: number
   onOpenExport: () => void
   onOpenSettings: () => void
+  layout?: 'desktop' | 'mobile'
 }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(projectName)
@@ -335,6 +337,111 @@ export function TopBar({
 
   const sizeControlWidth = 200
   const canExport = selectedCount > 0
+  const isMobileLayout = layout === 'mobile'
+
+  if (isMobileLayout) {
+    return (
+      <header className="sticky top-0 z-50 border-b border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]/95 backdrop-blur">
+        <div className="flex h-14 items-center gap-3 px-3">
+          <button
+            type="button"
+            onClick={onBack}
+            className="inline-flex items-center gap-1 rounded-full border border-[var(--border,#E1D3B9)] px-3 py-1 text-[12px] font-medium text-[var(--text,#1F1E1B)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--stone-trail-brand-focus,#4A463F)]"
+            aria-label="Back to projects"
+          >
+            <ChevronLeftIcon className="h-4 w-4" aria-hidden="true" />
+            <span>Projects</span>
+          </button>
+          <div className="flex min-w-0 flex-1 justify-center">
+            {editing ? (
+              <div className="relative w-full max-w-[220px]">
+                <input
+                  ref={inputRef}
+                  value={draft}
+                  onChange={(event) => setDraft(event.target.value)}
+                  onKeyDown={handleTitleKey}
+                  onBlur={handleBlur}
+                  disabled={renamePending}
+                  aria-label="Project name"
+                  className="h-10 w-full rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-4 text-center text-sm font-semibold text-[var(--text,#1F1E1B)] shadow-inner focus:outline-none focus:ring-2 focus:ring-[var(--stone-trail-brand-focus,#4A463F)]"
+                />
+                {renameError ? <span className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-xs text-[#B42318]">{renameError}</span> : null}
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={startEditing}
+                className="max-w-[220px] truncate text-center text-sm font-semibold text-[var(--text,#1F1E1B)]"
+                title="Rename project"
+              >
+                {projectName}
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              ref={filtersButtonRef}
+              onClick={() => {
+                if (filtersOpen) {
+                  closeFilters()
+                } else {
+                  setFiltersOpen(true)
+                  syncFiltersAnchor()
+                }
+              }}
+              className={`relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border,#E1D3B9)] text-[var(--text,#1F1E1B)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--stone-trail-brand-focus,#4A463F)] ${
+                filtersOpen ? 'bg-[var(--sand-100,#F3EBDD)]' : 'bg-[var(--surface,#FFFFFF)]'
+              }`}
+              aria-haspopup="dialog"
+              aria-expanded={filtersOpen}
+              aria-controls={FILTERS_DIALOG_ID}
+              title={filterLabel}
+            >
+              <FilterIcon className="h-5 w-5" aria-hidden="true" />
+              {filterCount ? <span className="absolute -top-1 -right-1 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[var(--text,#1F1E1B)] px-1 text-[10px] font-semibold text-[var(--surface,#FFFFFF)]">{filterCount}</span> : null}
+              <span className="sr-only">{filterLabel}</span>
+            </button>
+            <button
+              type="button"
+              ref={shortcutsButtonRef}
+              onClick={() => {
+                if (shortcutsOpen) {
+                  closeShortcuts()
+                } else {
+                  setShortcutsOpen(true)
+                  syncShortcutsAnchor()
+                }
+              }}
+              className={`inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border,#E1D3B9)] text-[var(--text,#1F1E1B)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--stone-trail-brand-focus,#4A463F)] ${
+                shortcutsOpen ? 'bg-[var(--sand-100,#F3EBDD)]' : 'bg-[var(--surface,#FFFFFF)]'
+              }`}
+              aria-haspopup="dialog"
+              aria-expanded={shortcutsOpen}
+              aria-controls={SHORTCUTS_LEGEND_ID}
+              title="Shortcuts"
+            >
+              <ShortcutIcon className="h-5 w-5" aria-hidden="true" />
+              <span className="sr-only">Keyboard shortcuts</span>
+            </button>
+            <ProjectSettingsButton onClick={onOpenSettings} label="Open application settings" title="Application settings" />
+          </div>
+        </div>
+        {filtersOpen ? (
+          <FiltersDialog
+            controls={filters}
+            onReset={() => {
+              onResetFilters()
+              closeFilters()
+            }}
+            onClose={closeFilters}
+            anchorRect={filtersAnchorRect}
+          />
+        ) : null}
+        {shortcutsOpen ? <ShortcutsDialog onClose={closeShortcuts} anchorRect={shortcutsAnchorRect} /> : null}
+      </header>
+    )
+  }
 
   return (
     <header className="sticky top-0 z-40 border-b border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]/95 backdrop-blur">
@@ -598,6 +705,135 @@ function OverlayDialog({ id, title, onClose, headerAction, children, maxWidthCla
   )
 }
 
+export type MobileWorkspacePanel = 'project' | 'photos' | 'details'
+
+export function MobilePhotosModeToggle({ view, onChange }: { view: 'grid' | 'detail'; onChange: (next: 'grid' | 'detail') => void }) {
+  return (
+    <div className="px-4 pt-3 pb-2">
+      <div className="inline-flex w-full max-w-sm rounded-full border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] p-1 text-[12px] font-medium text-[var(--text-muted,#6B645B)] shadow-[0_4px_12px_rgba(31,30,27,0.08)]">
+        {(['grid', 'detail'] as const).map((mode) => (
+          <button
+            key={mode}
+            type="button"
+            onClick={() => onChange(mode)}
+            className={`flex-1 rounded-full px-3 py-1 capitalize transition ${
+              view === mode ? 'bg-[var(--sand-100,#F3EBDD)] text-[var(--text,#1F1E1B)] shadow-[0_2px_8px_rgba(31,30,27,0.18)]' : ''
+            }`}
+            aria-pressed={view === mode}
+          >
+            {mode}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+export function MobileBottomBar({
+  activePanel,
+  onSelectPanel,
+  onOpenExport,
+  canExport,
+  onToggleStack,
+  stackEnabled,
+  detailsDisabled,
+  stackTogglePending = false,
+}: {
+  activePanel: MobileWorkspacePanel
+  onSelectPanel: (panel: MobileWorkspacePanel) => void
+  onOpenExport: () => void
+  canExport: boolean
+  onToggleStack: () => void
+  stackEnabled: boolean
+  detailsDisabled: boolean
+  stackTogglePending?: boolean
+}) {
+  return (
+    <nav className="border-t border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)]/95 px-3 pb-3 pt-2 text-[11px] text-[var(--text-muted,#6B645B)] shadow-[0_-6px_30px_rgba(31,30,27,0.08)]">
+      <div className="grid grid-cols-5 gap-1">
+        <MobileNavButton
+          label="Project"
+          icon={<LayoutListIcon className="h-5 w-5" aria-hidden="true" />}
+          active={activePanel === 'project'}
+          onClick={() => onSelectPanel('project')}
+        />
+        <MobileNavButton
+          label="Photos"
+          icon={<FrameIcon className="h-5 w-5" aria-hidden="true" />}
+          active={activePanel === 'photos'}
+          highlight
+          onClick={() => onSelectPanel('photos')}
+        />
+        <MobileNavButton
+          label="Details"
+          icon={<InspectorIcon className="h-5 w-5" aria-hidden="true" />}
+          active={activePanel === 'details'}
+          onClick={() => onSelectPanel('details')}
+          disabled={detailsDisabled}
+        />
+        <button
+          type="button"
+          onClick={onOpenExport}
+          disabled={!canExport}
+          className={`flex flex-col items-center justify-center rounded-2xl border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] px-2 py-1 text-center text-[11px] font-semibold transition ${
+            canExport ? 'text-[var(--text,#1F1E1B)]' : 'text-[var(--text-muted,#6B645B)] opacity-60'
+          }`}
+        >
+          <ExportIcon className="h-5 w-5" aria-hidden="true" />
+          <span>Export</span>
+        </button>
+        <button
+          type="button"
+          onClick={onToggleStack}
+          aria-pressed={stackEnabled}
+          disabled={stackTogglePending}
+          className={`flex flex-col items-center justify-center rounded-2xl border px-2 py-1 text-center text-[11px] font-semibold transition ${
+            stackEnabled
+              ? 'border-[var(--text,#1F1E1B)] bg-[var(--sand-100,#F3EBDD)] text-[var(--text,#1F1E1B)]'
+              : 'border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] text-[var(--text,#1F1E1B)]'
+          } ${stackTogglePending ? 'opacity-60' : ''}`}
+        >
+          <StackIcon className="h-5 w-5" aria-hidden="true" />
+          <span>Stack</span>
+        </button>
+      </div>
+    </nav>
+  )
+}
+
+function MobileNavButton({
+  label,
+  icon,
+  onClick,
+  active,
+  highlight = false,
+  disabled = false,
+}: {
+  label: string
+  icon: React.ReactNode
+  onClick: () => void
+  active?: boolean
+  highlight?: boolean
+  disabled?: boolean
+}) {
+  const activeClasses = active ? 'text-[var(--text,#1F1E1B)]' : 'text-[var(--text-muted,#6B645B)]'
+  const highlightClasses = highlight ? 'border-[var(--text,#1F1E1B)]' : 'border-[var(--border,#EDE1C6)]'
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-pressed={active}
+      className={`flex flex-col items-center justify-center rounded-2xl border bg-[var(--surface,#FFFFFF)] px-2 py-1 text-center text-[11px] font-semibold transition ${
+        disabled ? 'opacity-60' : ''
+      } ${activeClasses} ${highlightClasses}`}
+    >
+      {icon}
+      <span>{label}</span>
+    </button>
+  )
+}
+
 function FiltersDialog({ controls, onReset, onClose, anchorRect }: { controls: WorkspaceFilterControls; onReset: () => void; onClose: () => void; anchorRect?: DOMRect | null }) {
   return (
     <OverlayDialog
@@ -768,6 +1004,7 @@ export function Sidebar({
   collapsed,
   onCollapse,
   onExpand,
+  mode = 'sidebar',
 }: {
   dateTree: DateTreeYearNode[]
   projectOverview: ProjectOverviewData | null
@@ -785,6 +1022,7 @@ export function Sidebar({
   collapsed: boolean
   onCollapse: () => void
   onExpand: () => void
+  mode?: 'sidebar' | 'mobile'
 }) {
   const [expandedYears, setExpandedYears] = useState<Set<string>>(() => new Set())
   const [expandedMonths, setExpandedMonths] = useState<Set<string>>(() => new Set())
@@ -1049,36 +1287,52 @@ export function Sidebar({
 
   const totalPhotos = useMemo(() => dateTree.reduce((sum, year) => sum + year.count, 0), [dateTree])
 
+  const isMobilePanel = mode === 'mobile'
+  const collapsedState = isMobilePanel ? false : collapsed
+  const panelContainerClass = isMobilePanel
+    ? 'flex h-full min-h-0 flex-col gap-4 overflow-y-auto px-1'
+    : 'flex h-full min-h-0 flex-col overflow-hidden rounded-[var(--r-lg,20px)] border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] p-4 shadow-[0_30px_80px_rgba(31,30,27,0.16)]'
+  const panelContentClass = isMobilePanel
+    ? 'flex flex-1 min-h-0 flex-col gap-3 pb-4'
+    : 'flex flex-1 min-h-0 flex-col gap-3 overflow-y-auto pr-2'
+
   return (
     <aside
       id={LEFT_PANEL_ID}
       role="complementary"
       aria-label="Project Overview panel"
-      className="relative h-full min-h-0 px-2 py-4"
-      data-state={collapsed ? 'collapsed' : 'expanded'}
+      className={`relative h-full min-h-0 ${isMobilePanel ? 'px-3 py-4' : 'px-2 py-4'}`}
+      data-state={collapsedState ? 'collapsed' : 'expanded'}
     >
       <div
         data-panel="body"
-        aria-hidden={collapsed}
-        className={`h-full min-h-0 transition-opacity duration-150 ${collapsed ? 'pointer-events-none opacity-0' : 'opacity-100'}`}
+        aria-hidden={collapsedState}
+        className={`h-full min-h-0 ${isMobilePanel ? '' : `transition-opacity duration-150 ${collapsedState ? 'pointer-events-none opacity-0' : 'opacity-100'}`}`}
       >
-        <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-[var(--r-lg,20px)] border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] p-4 shadow-[0_30px_80px_rgba(31,30,27,0.16)]">
-          <header className="sticky top-0 z-10 border-b border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] pb-3">
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                aria-label="Collapse Project Overview panel"
-                aria-controls={LEFT_PANEL_CONTENT_ID}
-                onClick={onCollapse}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border,#EDE1C6)] text-[var(--text,#1F1E1B)] transition hover:border-[var(--text,#1F1E1B)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)]"
-              >
-                <ChevronLeftIcon className="h-4 w-4" aria-hidden="true" />
-              </button>
-              <LayoutListIcon className="h-4 w-4 text-[var(--text,#1F1E1B)]" aria-hidden="true" />
-              <span className="text-sm font-semibold text-[var(--text,#1F1E1B)]">Project Overview</span>
+        <div className={panelContainerClass}>
+          {!isMobilePanel ? (
+            <header className="sticky top-0 z-10 border-b border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] pb-3">
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  aria-label="Collapse Project Overview panel"
+                  aria-controls={LEFT_PANEL_CONTENT_ID}
+                  onClick={onCollapse}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border,#EDE1C6)] text-[var(--text,#1F1E1B)] transition hover:border-[var(--text,#1F1E1B)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)]"
+                >
+                  <ChevronLeftIcon className="h-4 w-4" aria-hidden="true" />
+                </button>
+                <LayoutListIcon className="h-4 w-4 text-[var(--text,#1F1E1B)]" aria-hidden="true" />
+                <span className="text-sm font-semibold text-[var(--text,#1F1E1B)]">Project Overview</span>
+              </div>
+            </header>
+          ) : (
+            <div className="flex items-center gap-2 px-1 text-sm font-semibold text-[var(--text,#1F1E1B)]">
+              <LayoutListIcon className="h-4 w-4" aria-hidden="true" />
+              Project Overview
             </div>
-          </header>
-          <div id={LEFT_PANEL_CONTENT_ID} className="flex flex-1 min-h-0 flex-col gap-3 overflow-y-auto pr-2">
+          )}
+          <div id={LEFT_PANEL_CONTENT_ID} className={panelContentClass}>
             <InspectorSection
               id={LEFT_IMPORT_SECTION_ID}
               ref={importSectionRef}
@@ -1181,27 +1435,29 @@ export function Sidebar({
           </div>
         </div>
       </div>
-      <div
-        data-panel="rail"
-        aria-hidden={!collapsed}
-        className={`pointer-events-none absolute inset-0 flex items-center justify-center px-1 py-2 transition-opacity duration-150 ${collapsed ? 'opacity-100' : 'opacity-0'}`}
-      >
-        {collapsed ? (
-          <LeftRail
-            onExpand={onExpand}
-            onOverview={() => handleRailSelect('overview')}
-            onImport={() => handleRailSelect('import')}
-            onDate={() => handleRailSelect('date')}
-            onFolder={() => handleRailSelect('folder')}
-            onSettings={() => handleRailSelect('folder')}
-            overviewExpanded={overviewSectionOpen}
-            importExpanded={importSectionOpen}
-            dateExpanded={dateSectionOpen}
-            folderExpanded={folderSectionOpen}
-            hasDateFilter={Boolean(selectedDayKey)}
-          />
-        ) : null}
-      </div>
+      {!isMobilePanel ? (
+        <div
+          data-panel="rail"
+          aria-hidden={!collapsed}
+          className={`pointer-events-none absolute inset-0 flex items-center justify-center px-1 py-2 transition-opacity duration-150 ${collapsed ? 'opacity-100' : 'opacity-0'}`}
+        >
+          {collapsed ? (
+            <LeftRail
+              onExpand={onExpand}
+              onOverview={() => handleRailSelect('overview')}
+              onImport={() => handleRailSelect('import')}
+              onDate={() => handleRailSelect('date')}
+              onFolder={() => handleRailSelect('folder')}
+              onSettings={() => handleRailSelect('folder')}
+              overviewExpanded={overviewSectionOpen}
+              importExpanded={importSectionOpen}
+              dateExpanded={dateSectionOpen}
+              folderExpanded={folderSectionOpen}
+              hasDateFilter={Boolean(selectedDayKey)}
+            />
+          ) : null}
+        </div>
+      ) : null}
     </aside>
   )
 }
@@ -1319,6 +1575,7 @@ export function InspectorPanel({
   onDetailZoomReset,
   detailViewport,
   onPreviewPan,
+  mode = 'sidebar',
 }: {
   collapsed: boolean
   onCollapse: () => void
@@ -1346,6 +1603,7 @@ export function InspectorPanel({
   onDetailZoomReset: () => void
   detailViewport: InspectorViewportRect | null
   onPreviewPan?: (position: { x: number; y: number }) => void
+  mode?: 'sidebar' | 'mobile'
 }) {
   const keyDataSectionRef = useRef<HTMLDivElement | null>(null)
   const projectsSectionRef = useRef<HTMLDivElement | null>(null)
@@ -1367,6 +1625,14 @@ export function InspectorPanel({
       })),
     )
   }, [metadataGroups])
+  const isMobilePanel = mode === 'mobile'
+  const collapsedState = isMobilePanel ? false : collapsed
+  const panelShellClass = isMobilePanel
+    ? 'flex h-full min-h-0 flex-col gap-3 overflow-y-auto px-1'
+    : 'flex h-full min-h-0 flex-col overflow-hidden rounded-[var(--r-lg,20px)] border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] p-4 shadow-[0_30px_80px_rgba(31,30,27,0.16)]'
+  const panelContentClass = isMobilePanel
+    ? 'flex flex-1 min-h-0 flex-col gap-3 pb-4'
+    : 'flex flex-1 min-h-0 flex-col gap-3 overflow-y-auto pr-2'
   const mergedInspectorFields = useMemo(() => {
     const map = new Map<string, string>()
     generalFields.forEach((field) => {
@@ -1438,31 +1704,38 @@ export function InspectorPanel({
       id={RIGHT_PANEL_ID}
       role="complementary"
       aria-label="Image Details panel"
-      className="relative h-full min-h-0 px-2 py-4"
-      data-state={collapsed ? 'collapsed' : 'expanded'}
+      className={`relative h-full min-h-0 ${isMobilePanel ? 'px-3 py-4' : 'px-2 py-4'}`}
+      data-state={collapsedState ? 'collapsed' : 'expanded'}
     >
       <div
         data-panel="body"
-        aria-hidden={collapsed}
-        className={`h-full min-h-0 transition-opacity duration-150 ${collapsed ? 'pointer-events-none opacity-0' : 'opacity-100'}`}
+        aria-hidden={collapsedState}
+        className={`h-full min-h-0 ${isMobilePanel ? '' : `transition-opacity duration-150 ${collapsedState ? 'pointer-events-none opacity-0' : 'opacity-100'}`}`}
       >
-        <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-[var(--r-lg,20px)] border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] p-4 shadow-[0_30px_80px_rgba(31,30,27,0.16)]">
-          <header className="sticky top-0 z-10 border-b border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] pb-3">
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                aria-label="Collapse Image Details panel"
-                aria-controls={RIGHT_PANEL_CONTENT_ID}
-                onClick={onCollapse}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border,#EDE1C6)] text-[var(--text,#1F1E1B)] transition hover:border-[var(--text,#1F1E1B)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)]"
-              >
-                <ChevronRightIcon className="h-4 w-4" aria-hidden="true" />
-              </button>
-              <InspectorIcon className="h-4 w-4 text-[var(--text,#1F1E1B)]" aria-hidden="true" />
-              <span className="text-sm font-semibold text-[var(--text,#1F1E1B)]">Image Details</span>
+        <div className={panelShellClass}>
+          {!isMobilePanel ? (
+            <header className="sticky top-0 z-10 border-b border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] pb-3">
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  aria-label="Collapse Image Details panel"
+                  aria-controls={RIGHT_PANEL_CONTENT_ID}
+                  onClick={onCollapse}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border,#EDE1C6)] text-[var(--text,#1F1E1B)] transition hover:border-[var(--text,#1F1E1B)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)]"
+                >
+                  <ChevronRightIcon className="h-4 w-4" aria-hidden="true" />
+                </button>
+                <InspectorIcon className="h-4 w-4 text-[var(--text,#1F1E1B)]" aria-hidden="true" />
+                <span className="text-sm font-semibold text-[var(--text,#1F1E1B)]">Image Details</span>
+              </div>
+            </header>
+          ) : (
+            <div className="flex items-center gap-2 px-1 text-sm font-semibold text-[var(--text,#1F1E1B)]">
+              <InspectorIcon className="h-4 w-4" aria-hidden="true" />
+              Image Details
             </div>
-          </header>
-          <div id={RIGHT_PANEL_CONTENT_ID} className="flex flex-1 min-h-0 flex-col gap-3 overflow-y-auto pr-2">
+          )}
+          <div id={RIGHT_PANEL_CONTENT_ID} className={panelContentClass}>
             <InspectorPreviewCard
               preview={previewAsset}
               hasSelection={hasSelection}
@@ -1547,20 +1820,22 @@ export function InspectorPanel({
           </div>
         </div>
       </div>
-      <div
-        data-panel="rail"
-        aria-hidden={!collapsed}
-        className={`pointer-events-none absolute inset-0 flex items-center justify-center px-1 py-2 transition-opacity duration-150 ${collapsed ? 'opacity-100' : 'opacity-0'}`}
-      >
-        {collapsed ? (
-          <InspectorRail
-            onExpand={onExpand}
-            onKeyData={() => handleRailSelect('keyData')}
-            onProjects={() => handleRailSelect('projects')}
-            onMetadata={() => handleRailSelect('metadata')}
-          />
-        ) : null}
-      </div>
+      {!isMobilePanel ? (
+        <div
+          data-panel="rail"
+          aria-hidden={!collapsed}
+          className={`pointer-events-none absolute inset-0 flex items-center justify-center px-1 py-2 transition-opacity duration-150 ${collapsed ? 'opacity-100' : 'opacity-0'}`}
+        >
+          {collapsed ? (
+            <InspectorRail
+              onExpand={onExpand}
+              onKeyData={() => handleRailSelect('keyData')}
+              onProjects={() => handleRailSelect('projects')}
+              onMetadata={() => handleRailSelect('metadata')}
+            />
+          ) : null}
+        </div>
+      ) : null}
     </aside>
   )
 }
@@ -2547,6 +2822,46 @@ function CheckIcon(props: React.SVGProps<SVGSVGElement>) {
   )
 }
 
+function FilterIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M4 5h12" />
+      <path d="M6.5 10h7" />
+      <path d="M9 15h2" />
+      <circle cx="8" cy="10" r="1.5" />
+      <circle cx="12" cy="15" r="1.5" />
+    </svg>
+  )
+}
+
+function ShortcutIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <rect x="3.5" y="3.5" width="13" height="13" rx="2" />
+      <rect x="6.5" y="6.5" width="7" height="7" rx="1" />
+    </svg>
+  )
+}
+
+function ExportIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M10 13V4" />
+      <path d="m6.5 7.5 3.5-3.5 3.5 3.5" />
+      <path d="M4 12.5v3A1.5 1.5 0 0 0 5.5 17h9A1.5 1.5 0 0 0 16 15.5v-3" />
+    </svg>
+  )
+}
+
+function StackIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <rect x="4.5" y="5" width="11" height="6" rx="1.2" />
+      <rect x="6" y="9" width="11" height="6" rx="1.2" />
+    </svg>
+  )
+}
+
 export function GridView({
   items,
   size,
@@ -3270,4 +3585,3 @@ export function NoResults({ onReset }: { onReset: () => void }) {
     </div>
   )
 }
-

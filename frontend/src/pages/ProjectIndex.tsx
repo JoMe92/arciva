@@ -3,6 +3,7 @@ import { AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import StoneTrailLogo from '../components/StoneTrailLogo'
+import ProjectCard from '../components/ProjectCard'
 import { useTheme } from '../shared/theme'
 import Splash from '../components/Splash'
 import { Project } from '../features/projects/types'
@@ -20,6 +21,8 @@ import { createProject, deleteProject, listProjects, type ProjectApiResponse } f
 import { updateAssetPreview } from '../shared/api/assets'
 import DeleteModal from '../components/modals/DeleteModal'
 import ProjectSettingsButton from '../components/ProjectSettingsButton'
+import SettingsIcon from '../shared/icons/SettingsIcon'
+import { useMobileLayout } from '../shared/hooks/useMobileLayout'
 import { useGeneralSettings } from '../shared/settings/general'
 import type { GeneralSettings } from '../shared/settings/general'
 
@@ -364,6 +367,121 @@ const FilterBar: React.FC<{
   )
 }
 
+const ArchiveIcon: React.FC<{ className?: string }> = ({ className = 'h-5 w-5' }) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.6"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+    aria-hidden
+  >
+    <rect x="3.5" y="5" width="17" height="4.5" rx="1.8" />
+    <path d="M5 9.5V18a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 18V9.5" />
+    <path d="M9 14h6" />
+  </svg>
+)
+
+const MobileTopBar: React.FC<{
+  filtersOpen: boolean
+  filterCount: number
+  onToggleFilters: () => void
+  filterPanelId: string
+}> = ({ filtersOpen, filterCount, onToggleFilters, filterPanelId }) => {
+  const { mode, toggle } = useTheme()
+  const filterButtonActive = filtersOpen || filterCount > 0
+  return (
+    <div className="fixed inset-x-0 top-0 z-50 border-b border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]/95 backdrop-blur">
+      <div className="px-4 py-3 flex items-center justify-between gap-3">
+        <StoneTrailLogo className="text-base" showLabel={false} mode={mode} onToggleTheme={toggle} />
+        <button
+          type="button"
+          onClick={onToggleFilters}
+          className={`inline-flex h-11 min-w-[120px] items-center justify-center rounded-full border px-4 text-[13px] font-medium transition ${
+            filterButtonActive
+              ? 'border-[var(--text,#1F1E1B)] text-[var(--text,#1F1E1B)]'
+              : 'border-[var(--border,#E1D3B9)] text-[var(--text-muted,#6B645B)] hover:border-[var(--text-muted,#6B645B)]'
+          }`}
+          aria-expanded={filtersOpen}
+          aria-controls={filterPanelId}
+        >
+          {filterCount ? `Filters (${filterCount})` : 'Filters'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+const MobileActionBar: React.FC<{
+  archiveMode: boolean
+  onToggleArchive: () => void
+  onCreate: () => void
+  onOpenSettings: () => void
+}> = ({ archiveMode, onToggleArchive, onCreate, onOpenSettings }) => (
+  <div className="fixed inset-x-0 bottom-0 z-50 border-t border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]/95 px-4 py-3 backdrop-blur">
+    <div className="flex items-center gap-3">
+      <button
+        type="button"
+        onClick={onToggleArchive}
+        className={`flex h-14 flex-1 flex-col items-center justify-center rounded-2xl border border-transparent text-[12px] font-semibold ${
+          archiveMode ? 'text-[var(--text,#1F1E1B)]' : 'text-[var(--text-muted,#6B645B)]'
+        }`}
+        aria-pressed={archiveMode}
+      >
+        <ArchiveIcon className="h-5 w-5" />
+        <span>Archive</span>
+      </button>
+      <button
+        type="button"
+        onClick={onCreate}
+        className="inline-flex h-14 shrink-0 items-center rounded-full bg-[var(--primary,#A56A4A)] px-6 text-[var(--primary-contrast,#FFFFFF)] text-[13px] font-semibold tracking-tight shadow-[0_12px_24px_rgba(31,30,27,0.2)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus,#6B7C7A)]"
+      >
+        <span className="mr-2 text-xl leading-none">＋</span>
+        New project
+      </button>
+      <button
+        type="button"
+        onClick={onOpenSettings}
+        className="flex h-14 flex-1 flex-col items-center justify-center rounded-2xl border border-transparent text-[12px] font-semibold text-[var(--text,#1F1E1B)]"
+      >
+        <SettingsIcon className="h-5 w-5" />
+        <span>Settings</span>
+      </button>
+    </div>
+  </div>
+)
+
+const MobileProjectFeed: React.FC<{
+  projects: Project[]
+  onOpen: (id: string) => void
+  onArchive: (id: string) => void
+  onUnarchive: (id: string) => void
+  archiveMode: boolean
+  onEdit: (p: Project) => void
+  onSelectPrimary?: (projectId: string, assetId: string) => Promise<void>
+}> = ({ projects, onOpen, onArchive, onUnarchive, archiveMode, onEdit, onSelectPrimary }) => {
+  if (!projects.length) return null
+  return (
+    <div className="space-y-6">
+      {projects.map((project) => (
+        <ProjectCard
+          key={project.id}
+          p={project}
+          onOpen={onOpen}
+          onArchive={onArchive}
+          onUnarchive={onUnarchive}
+          archiveMode={archiveMode}
+          onEdit={onEdit}
+          onSelectPrimary={onSelectPrimary}
+          variant="feed"
+        />
+      ))}
+    </div>
+  )
+}
+
 export default function ProjectIndex() {
   const navigate = useNavigate()
   const [ready, setReady] = useState(false)
@@ -389,6 +507,7 @@ export default function ProjectIndex() {
   const handleGeneralSettingsSave = useCallback((nextSettings: GeneralSettings) => {
     setGeneralSettings(nextSettings)
   }, [setGeneralSettings])
+  const isMobileLayout = useMobileLayout()
 
   useEffect(() => { const t = setTimeout(() => setReady(true), 400); return () => clearTimeout(t) }, [])
 
@@ -654,9 +773,30 @@ export default function ProjectIndex() {
   )
 
   const showLoadingSkeleton = loadingProjects && !apiProjects
+  const headerTitle = archiveMode ? 'Archive' : 'Project Cards'
+  const headerCopy = archiveMode
+    ? 'Archived projects are hidden from the main view.'
+    : 'A Project Card is your project hub—context, assets, and progress, neatly linked and searchable.'
+  const stateBlocks = (
+    <>
+      {projectsError && (
+        <StateHint message={`Could not load projects from server: ${projectsErrorObj?.message ?? 'Unknown error'}`} />
+      )}
+      {createError && (
+        <StateHint message={`Project could not be created: ${createError}`} actionLabel="Try again" onAction={openCreateModal} />
+      )}
+      {!loadingProjects && !filtered.length && (
+        <StateHint
+          message={hasAnyFilters ? 'No projects match your current filters.' : 'No projects yet — create one to get started.'}
+          actionLabel={hasAnyFilters ? 'Clear filters' : 'Create project'}
+          onAction={hasAnyFilters ? clearFilters : openCreateModal}
+        />
+      )}
+    </>
+  )
 
-  return (
-    <div className="min-h-screen bg-[var(--surface-subtle,#FBF7EF)]">
+  const desktopContent = (
+    <>
       <div className="sticky top-0 z-40">
         <AppBar
           onCreate={openCreateModal}
@@ -693,28 +833,10 @@ export default function ProjectIndex() {
       </div>
       <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-10">
         <header className="mb-4">
-          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-[var(--text,#1F1E1B)]">
-            {archiveMode ? 'Archive' : 'Project Cards'}
-          </h1>
-          <p className="text-sm text-[var(--text-muted,#6B645B)]">
-            {archiveMode ? 'Archived projects are hidden from the main view.' : 'A Project Card is your project hub—context, assets, and progress, neatly linked and searchable.'}
-          </p>
+          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-[var(--text,#1F1E1B)]">{headerTitle}</h1>
+          <p className="text-sm text-[var(--text-muted,#6B645B)]">{headerCopy}</p>
         </header>
-
-        {projectsError && (
-          <StateHint message={`Could not load projects from server: ${projectsErrorObj?.message ?? 'Unknown error'}`} />
-        )}
-        {createError && (
-          <StateHint message={`Project could not be created: ${createError}`} actionLabel="Try again" onAction={openCreateModal} />
-        )}
-        {!loadingProjects && !filtered.length && (
-          <StateHint
-            message={hasAnyFilters ? 'No projects match your current filters.' : 'No projects yet — create one to get started.'}
-            actionLabel={hasAnyFilters ? 'Clear filters' : 'Create project'}
-            onAction={hasAnyFilters ? clearFilters : openCreateModal}
-          />
-        )}
-
+        {stateBlocks}
         {showLoadingSkeleton ? (
           <ProjectGridSkeleton />
         ) : (
@@ -729,21 +851,85 @@ export default function ProjectIndex() {
             onSelectPrimary={handleSelectPrimary}
           />
         )}
-
-        <ProjectSettingsDialog
-          open={editOpen}
-          project={editProject}
-          onClose={closeEditor}
-          onSave={handleSave}
-          onOpen={(id) => { update(id); navigate(`/projects/${id}`) }}
-          archived={editProject ? isArchived(editProject.id) : false}
-          onArchive={onArchive}
-          onUnarchive={onUnarchive}
-          existingTags={allTags}
-          onRequestDelete={handleRequestDelete}
-        />
       </main>
+    </>
+  )
 
+  const mobileContent = (
+    <>
+      <MobileTopBar
+        filtersOpen={filtersOpen}
+        filterCount={filterCount}
+        onToggleFilters={toggleFilters}
+        filterPanelId={FILTER_PANEL_ID}
+      />
+      <AnimatePresence>{!ready && <Splash />}</AnimatePresence>
+      <main className="px-4 pt-24 pb-32">
+        {filtersOpen ? (
+          <div className="mb-6">
+            <FilterBar
+              id={FILTER_PANEL_ID}
+              projects={baseProjects}
+              q={q}
+              setQ={setQ}
+              client={client}
+              setClient={setClient}
+              year={year}
+              setYear={setYear}
+              month={month}
+              setMonth={setMonth}
+              tags={tags}
+              setTags={setTags}
+              onClearFilters={clearFilters}
+            />
+          </div>
+        ) : null}
+        <header className="mb-5">
+          <p className="text-[11px] uppercase tracking-[0.25em] text-[var(--text-muted,#6B645B)]">Arciva</p>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-[var(--text,#1F1E1B)]">{headerTitle}</h1>
+          <p className="mt-1 text-[13px] text-[var(--text-muted,#6B645B)]">{headerCopy}</p>
+        </header>
+        {stateBlocks}
+        {showLoadingSkeleton ? (
+          <ProjectGridSkeleton />
+        ) : (
+          <MobileProjectFeed
+            projects={filtered}
+            onOpen={onOpen}
+            onArchive={onArchive}
+            onUnarchive={onUnarchive}
+            archiveMode={archiveMode}
+            onEdit={openEditor}
+            onSelectPrimary={handleSelectPrimary}
+          />
+        )}
+      </main>
+      <MobileActionBar
+        archiveMode={archiveMode}
+        onToggleArchive={handleToggleArchive}
+        onCreate={openCreateModal}
+        onOpenSettings={openGeneralSettings}
+      />
+    </>
+  )
+
+  const layout = isMobileLayout ? mobileContent : desktopContent
+
+  return (
+    <div className="min-h-screen bg-[var(--surface-subtle,#FBF7EF)]">
+      {layout}
+      <ProjectSettingsDialog
+        open={editOpen}
+        project={editProject}
+        onClose={closeEditor}
+        onSave={handleSave}
+        onOpen={(id) => { update(id); navigate(`/projects/${id}`) }}
+        archived={editProject ? isArchived(editProject.id) : false}
+        onArchive={onArchive}
+        onUnarchive={onUnarchive}
+        existingTags={allTags}
+        onRequestDelete={handleRequestDelete}
+      />
       <CreateModal
         open={modalOpen}
         onClose={closeCreateModal}

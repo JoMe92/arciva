@@ -19,8 +19,8 @@ MAX_PREVIEW_IMAGES = 36
 def _thumb_url(asset: models.Asset, storage: PosixStorage) -> str | None:
     if not asset.sha256:
         return None
-    path = storage.derivative_path(asset.sha256, "thumb_256", "jpg")
-    if path.exists():
+    path = storage.find_derivative(asset.sha256, "thumb_256", "jpg")
+    if path:
         return f"/v1/assets/{asset.id}/thumbs/256"
     return None
 

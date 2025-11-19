@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import Optional
 from uuid import UUID
 
@@ -12,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .. import models, schemas
 from ..db import get_db
 from ..services import bulk_image_exports
+from ..storage import PosixStorage
 
 logger = logging.getLogger("arciva.bulk_image_exports.api")
 
@@ -23,7 +23,11 @@ def _download_url(job: models.BulkImageExport) -> Optional[str]:
         return None
     if not job.artifact_path:
         return None
-    path = Path(job.artifact_path)
+    storage = PosixStorage.from_env()
+    try:
+        path = storage.path_from_key(job.artifact_path)
+    except ValueError:
+        return None
     if not path.is_file():
         return None
     return f"/v1/bulk-image-exports/{job.id}/download"
@@ -112,7 +116,11 @@ async def download_bulk_image_export(
         raise HTTPException(status_code=409, detail="Export is not ready")
     if not job.artifact_path:
         raise HTTPException(status_code=410, detail="Export artifact unavailable")
-    path = Path(job.artifact_path)
+    storage = PosixStorage.from_env()
+    try:
+        path = storage.path_from_key(job.artifact_path)
+    except ValueError:
+        raise HTTPException(status_code=410, detail="Export artifact unavailable")
     if not path.is_file():
         raise HTTPException(status_code=410, detail="Export artifact missing")
     filename = job.artifact_filename or f"arciva-images-{job.id.hex[:8]}.zip"

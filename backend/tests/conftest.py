@@ -11,7 +11,9 @@ if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
 _DEFAULT_DB_PATH = Path(tempfile.gettempdir()) / "film_cabinet_test.db"
-os.environ.setdefault("DATABASE_URL", f"sqlite+aiosqlite:///{_DEFAULT_DB_PATH}")
+_DEFAULT_MEDIA_ROOT = Path(tempfile.gettempdir()) / "film_cabinet_test_media"
+os.environ.setdefault("APP_DB_PATH", str(_DEFAULT_DB_PATH))
+os.environ.setdefault("APP_MEDIA_ROOT", str(_DEFAULT_MEDIA_ROOT))
 
 import pytest
 import pytest_asyncio
@@ -51,6 +53,8 @@ def test_settings(temp_fs_root):
         app_env = "test"
         secret_key = "test"
         allowed_origins = ["*"]
+        app_db_path = str(db_path)
+        app_media_root = str(temp_fs_root)
         database_url = db_url
         redis_url = "redis://127.0.0.1:6379/0"
         fs_root = str(temp_fs_root)
@@ -65,7 +69,8 @@ def test_settings(temp_fs_root):
         export_retention_hours = 24
 
     # Ensure env var points to test DB before importing app modules
-    os.environ["DATABASE_URL"] = _S.database_url
+    os.environ["APP_DB_PATH"] = _S.app_db_path
+    os.environ["APP_MEDIA_ROOT"] = _S.app_media_root
     return _S()
 
 

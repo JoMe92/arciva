@@ -66,6 +66,7 @@ import ExportDialog from './ExportDialog'
 import DialogHeader from '../../components/DialogHeader'
 import GeneralSettingsDialog from '../../components/modals/GeneralSettingsDialog'
 import { useGeneralSettings } from '../../shared/settings/general'
+import { useExperimentalStorageSettings } from '../../shared/settings/experimentalImageStorage'
 import type { GeneralSettings } from '../../shared/settings/general'
 import { withBase } from '../../shared/api/base'
 
@@ -532,12 +533,14 @@ export default function ProjectWorkspace() {
   const suppressSelectionSyncRef = useRef(false)
   const [exportDialogOpen, setExportDialogOpen] = useState(false)
   const { settings: generalSettings, setSettings: setGeneralSettings } = useGeneralSettings()
+  const experimentalUiEnabled = import.meta.env.DEV
+  const { data: experimentalStorageSettings } = useExperimentalStorageSettings({ enabled: experimentalUiEnabled })
+  const experimentalStorageWarning = experimentalUiEnabled && experimentalStorageSettings?.enabled && experimentalStorageSettings.warning_active
   const [generalSettingsOpen, setGeneralSettingsOpen] = useState(false)
   const openGeneralSettings = useCallback(() => setGeneralSettingsOpen(true), [])
   const closeGeneralSettings = useCallback(() => setGeneralSettingsOpen(false), [])
   const handleGeneralSettingsSave = useCallback((nextSettings: GeneralSettings) => {
     setGeneralSettings(nextSettings)
-    setGeneralSettingsOpen(false)
   }, [setGeneralSettings])
   const resolveActionTargetIds = useCallback((primaryId: string | null) => {
     if (primaryId && selectedPhotoIds.has(primaryId)) {
@@ -1665,6 +1668,11 @@ export default function ProjectWorkspace() {
         onOpenExport={() => setExportDialogOpen(true)}
         onOpenSettings={openGeneralSettings}
       />
+      {experimentalStorageWarning ? (
+        <div className="mx-4 mt-3 rounded-3xl border border-red-200 bg-red-50 px-4 py-3 text-[13px] text-red-800">
+          Experimental storage configuration: one or more paths are not available. Some images may be missing until all configured drives are available.
+        </div>
+      ) : null}
       {uploadBanner && (
         <div className="pointer-events-none fixed bottom-6 right-6 z-50">
           <div

@@ -17,8 +17,11 @@ logger = logging.getLogger("arciva.annotations")
 
 def _resolve_asset_path(asset: models.Asset, storage: PosixStorage) -> Path | None:
     if asset.storage_uri:
-        path = Path(asset.storage_uri)
-        if path.exists():
+        try:
+            path = storage.path_from_key(asset.storage_uri)
+        except ValueError:
+            path = None
+        if path and path.exists():
             return path
     if asset.sha256:
         ext = Path(asset.original_filename or "").suffix or ".bin"

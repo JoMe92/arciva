@@ -30,8 +30,8 @@ def _warnings_from_text(data: str | None) -> list[str]:
 def _thumb_url(asset: models.Asset, storage: PosixStorage) -> str | None:
     if not asset.sha256:
         return None
-    path = storage.derivative_path(asset.sha256, "thumb_256", "jpg")
-    if path.exists():
+    path = storage.find_derivative(asset.sha256, "thumb_256", "jpg")
+    if path:
         return f"/v1/assets/{asset.id}/thumbs/256"
     return None
 
@@ -39,8 +39,8 @@ def _thumb_url(asset: models.Asset, storage: PosixStorage) -> str | None:
 def _preview_url(asset: models.Asset, storage: PosixStorage) -> str | None:
     if not asset.sha256:
         return None
-    path = storage.derivative_path(asset.sha256, "preview_raw", "jpg")
-    if path.exists():
+    path = storage.find_derivative(asset.sha256, "preview_raw", "jpg")
+    if path:
         return f"/v1/assets/{asset.id}/preview"
     return None
 
@@ -343,8 +343,11 @@ async def _ensure_asset_metadata_populated(
 
     source_path: Path | None = None
     if asset.storage_uri:
-        candidate = Path(asset.storage_uri)
-        if candidate.exists():
+        try:
+            candidate = storage.path_from_key(asset.storage_uri)
+        except ValueError:
+            candidate = None
+        if candidate and candidate.exists():
             source_path = candidate
 
     if source_path is None and asset.sha256:
@@ -567,8 +570,8 @@ async def get_derivative(asset_id: UUID, variant: str, db: AsyncSession = Depend
     if not asset or not asset.sha256:
         raise HTTPException(404, "asset not ready")
     storage = PosixStorage.from_env()
-    path = storage.derivative_path(asset.sha256, variant, "jpg")
-    if not path.exists():
+    path = storage.find_derivative(asset.sha256, variant, "jpg")
+    if not path:
         raise HTTPException(404, "derivative not found")
     return FileResponse(path=str(path), media_type="image/jpeg")
 

@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .. import models, schemas
 from ..db import SessionLocal
 from ..deps import get_settings
+from ..storage import PosixStorage
 
 logger = logging.getLogger("arciva.exports")
 
@@ -162,6 +163,7 @@ async def _load_assets_for_job(db: AsyncSession, job: models.ExportJob, settings
 
 async def process_export_job(job_id: UUID) -> None:
     settings_obj = get_settings()
+    storage = PosixStorage.from_env()
     async with SessionLocal() as db:
         job = await db.get(models.ExportJob, job_id)
         if not job:
@@ -205,7 +207,10 @@ async def process_export_job(job_id: UUID) -> None:
                 asset = asset_map.get(asset_id)
                 if not asset or not asset.storage_uri:
                     raise RuntimeError(f"Asset {asset_id} missing storage path")
-                source_path = Path(asset.storage_uri)
+                try:
+                    source_path = storage.path_from_key(asset.storage_uri)
+                except ValueError as exc:
+                    raise RuntimeError(f"Invalid storage key for asset {asset_id}: {exc}") from exc
                 if not source_path.exists():
                     raise RuntimeError(f"Asset source missing on disk: {source_path}")
 
@@ -234,7 +239,10 @@ async def process_export_job(job_id: UUID) -> None:
             await asyncio.to_thread(_make_zip_archive, files_dir, archive_path)
             shutil.rmtree(files_dir, ignore_errors=True)
 
-            job.artifact_path = str(archive_path)
+            try:
+                job.artifact_path = storage.storage_key_for(archive_path)
+            except ValueError:
+                job.artifact_path = str(archive_path)
             job.artifact_filename = archive_name
             job.artifact_size = archive_path.stat().st_size if archive_path.exists() else None
             job.status = models.ExportJobStatus.COMPLETED
@@ -263,6 +271,7 @@ def _make_zip_archive(source_dir: Path, archive_path: Path) -> None:
 
 async def cleanup_export_jobs() -> None:
     settings = get_settings()
+    storage = PosixStorage.from_env()
     cutoff = datetime.now(timezone.utc) - timedelta(hours=settings.export_retention_hours)
     async with SessionLocal() as db:
         rows = (
@@ -277,7 +286,13 @@ async def cleanup_export_jobs() -> None:
 
         removed: list[UUID] = []
         for job in rows:
-            path = Path(job.artifact_path) if job.artifact_path else None
+            path: Path | None = None
+            if job.artifact_path:
+                try:
+                    path = storage.path_from_key(job.artifact_path)
+                except ValueError:
+                    path = None
+                    logger.warning("cleanup_export_jobs: invalid artifact path job=%s", job.id)
             if path and path.exists():
                 try:
                     if path.is_file():

@@ -20,7 +20,7 @@ async def _seed_asset(session, project_id: uuid.UUID, filename: str, mime: str) 
         mime=mime,
         size_bytes=123,
         status=models.AssetStatus.READY,
-        storage_uri=str(original_path),
+        storage_uri=storage.storage_key_for(original_path),
         sha256=sha,
         reference_count=1,
     )

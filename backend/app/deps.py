@@ -1,10 +1,12 @@
 # backend/app/deps.py
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from functools import lru_cache
-from typing import List, Optional
+from typing import Any, List, Optional
 from pathlib import Path
-import os, json
+import logging
+import os
+import json
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=False, extra="ignore")
@@ -15,14 +17,19 @@ class Settings(BaseSettings):
     # Default to both localhost and loopback since browsers treat them as different origins.
     allowed_origins: List[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
 
-    database_url: str
+    app_db_path: str
+    app_media_root: str
+    database_url: str = ""
     redis_url: str = "redis://127.0.0.1:6379/0"
 
-    fs_root: str = str(Path.home() / "photo-store")
-    fs_uploads_dir: str = str(Path.home() / "photo-store" / "uploads")
-    fs_originals_dir: str = str(Path.home() / "photo-store" / "originals")
-    fs_derivatives_dir: str = str(Path.home() / "photo-store" / "derivatives")
-    fs_exports_dir: str = str(Path.home() / "photo-store" / "exports")
+    fs_root: str = ""
+    fs_uploads_dir: str = ""
+    fs_originals_dir: str = ""
+    fs_derivatives_dir: str = ""
+    fs_exports_dir: str = ""
+    photo_store_locations: List[dict[str, Any]] = Field(default_factory=list)
+    photo_store_state: dict[str, Any] | None = None
+    experimental_photo_store_enabled: bool = False
 
     thumb_sizes: List[int] = [256]
     max_upload_mb: int = 200
@@ -58,15 +65,92 @@ class Settings(BaseSettings):
             return [v]
         return v
 
+_config_logger = logging.getLogger("arciva.config")
+
+def _fail_config(message: str) -> None:
+    _config_logger.error(message)
+    raise RuntimeError(message)
+
+def _normalize_path(raw: str, *, name: str) -> Path:
+    candidate = Path(raw).expanduser()
+    if not candidate.is_absolute():
+        _fail_config(f"{name} must be an absolute path (got {raw!r}).")
+    try:
+        return candidate.resolve(strict=False)
+    except FileNotFoundError:
+        return candidate
+
+def _check_directory_access(path: Path, *, description: str) -> None:
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:  # pragma: no cover - depends on host FS
+        _fail_config(f"Unable to create {description} at {path}: {exc}")
+    test_file = path / ".arciva-path-check"
+    try:
+        test_file.write_text("ok", encoding="utf-8")
+        test_file.unlink(missing_ok=True)
+    except OSError as exc:  # pragma: no cover - depends on host FS
+        _fail_config(f"{description} is not writable ({path}): {exc}")
+
+def _validate_db_path(raw: str) -> Path:
+    if not raw:
+        _fail_config("APP_DB_PATH is required.")
+    path = _normalize_path(raw, name="APP_DB_PATH")
+    if path.suffix.lower() != ".db":
+        _fail_config(f"APP_DB_PATH must point to a .db file (got {path.name}).")
+    _check_directory_access(path.parent, description="database directory")
+    try:
+        with open(path, "ab"):
+            os.utime(path, None)
+    except OSError as exc:  # pragma: no cover - depends on host FS
+        _fail_config(f"Cannot access database file {path}: {exc}")
+    return path
+
+def _validate_media_root(raw: str) -> Path:
+    if not raw:
+        _fail_config("APP_MEDIA_ROOT is required.")
+    path = _normalize_path(raw, name="APP_MEDIA_ROOT")
+    _check_directory_access(path, description="media root")
+    return path
+
+def _subdir(root: Path, name: str) -> Path:
+    sub = root / name
+    _check_directory_access(sub, description=f"media subdirectory '{name}'")
+    return sub
+
 @lru_cache
 def get_settings() -> Settings:
     s = Settings()
-    fs_paths = [s.fs_root, s.fs_uploads_dir, s.fs_originals_dir, s.fs_derivatives_dir, s.fs_exports_dir]
-    for p in fs_paths:
-        os.makedirs(p, exist_ok=True)
+    db_path = _validate_db_path(s.app_db_path)
+    media_root = _validate_media_root(s.app_media_root)
+    _config_logger.info("Validated APP_DB_PATH -> %s", db_path)
+    _config_logger.info("Validated APP_MEDIA_ROOT -> %s", media_root)
+    db_dir = db_path.parent.resolve()
+    media_resolved = media_root.resolve()
+    try:
+        db_dir.relative_to(media_resolved)
+    except ValueError:
+        pass
+    else:
+        _fail_config("APP_DB_PATH must not be located inside APP_MEDIA_ROOT; choose a separate directory.")
+    uploads = _subdir(media_root, "uploads")
+    originals = _subdir(media_root, "originals")
+    derivatives = _subdir(media_root, "derivatives")
+    exports = _subdir(media_root, "exports")
+    s.app_db_path = str(db_path)
+    s.database_url = f"sqlite+aiosqlite:///{db_path}"
+    s.fs_root = str(media_root)
+    s.fs_uploads_dir = str(uploads)
+    s.fs_originals_dir = str(originals)
+    s.fs_derivatives_dir = str(derivatives)
+    s.fs_exports_dir = str(exports)
+    setattr(s, "experimental_photo_store_enabled", False)
+    setattr(s, "photo_store_locations", [])
+    setattr(s, "photo_store_state", None)
     logs_path = Path(s.logs_dir).expanduser()
     if not logs_path.is_absolute():
         logs_path = Path.cwd() / logs_path
     logs_path.mkdir(parents=True, exist_ok=True)
     s.logs_dir = str(logs_path)
+    _config_logger.info("Allowed origins: %s", ", ".join(s.allowed_origins) or "<none>")
     return s

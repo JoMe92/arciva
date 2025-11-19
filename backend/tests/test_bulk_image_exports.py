@@ -48,7 +48,7 @@ async def test_bulk_image_export_flow(client, TestSessionLocal):
             mime="image/jpeg",
             size_bytes=10,
             status=models.AssetStatus.READY,
-            storage_uri=str(source_path),
+            storage_uri=storage.storage_key_for(source_path),
             taken_at=datetime(2024, 3, 14, 12, 0, tzinfo=timezone.utc),
         )
         session.add(asset)

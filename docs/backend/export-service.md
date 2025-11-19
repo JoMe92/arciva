@@ -1,6 +1,6 @@
 # Backend: Image Export Service – Specification
 
-This document describes how the backend must implement the photo export service so that a web-based frontend can create and download export bundles from a remote server. It assumes the current architecture (FastAPI app, SQLAlchemy/PostgreSQL, POSIX storage, ARQ worker backed by Redis) and should be detailed enough for implementation without constraining library-level choices.
+This document describes how the backend must implement the photo export service so that a web-based frontend can create and download export bundles from a remote server. It assumes the current architecture (FastAPI app, SQLAlchemy with a SQLite catalog, POSIX storage, ARQ worker backed by Redis) and should be detailed enough for implementation without constraining library-level choices.
 
 ---
 
@@ -19,7 +19,7 @@ Out of scope: frontend UI, client-side filesystem APIs, advanced auth beyond pro
 1. **FastAPI router** exposes `/api/export-jobs` endpoints.
 2. **Export service layer** encapsulates validation, job creation, storage orchestration, and progress persistence.
 3. **Worker/ARQ task** performs the heavy lifting: reads source assets, renders conversions, generates optional contact sheet, builds output directory, packages ZIP, and updates the ExportJob record throughout the lifecycle.
-4. **Storage layout**: a configurable base directory (e.g., `FS_EXPORTS_DIR`) contains per-job working directories and generated archives. Working data should not pollute originals/derivatives folders.
+4. **Storage layout**: `${APP_MEDIA_ROOT}/exports` contains per-job working directories and generated archives. Working data should not pollute originals/derivatives folders.
 5. **Cleanup task**: scheduled job removes artifacts older than a retention window, keeping metadata while unlinking binary files to avoid unbounded storage growth.
 
 ---
@@ -128,7 +128,7 @@ Transition rules must prevent regression (e.g., no moving from completed back to
 ### Step 1: Validation & Preparation
 1. Lock job row (`SELECT FOR UPDATE`) to avoid double processing.
 2. Re-validate that assets still exist and user still has access (in case they were removed after queueing).
-3. Create per-job working directory: `${FS_EXPORTS_DIR}/{job_id}/work`.
+3. Create per-job working directory: `${APP_MEDIA_ROOT}/exports/{job_id}/work`.
 4. Create output directory inside work dir honoring `logical_location` (e.g., `work/Client_A/Delivery/...`). Ensure directories are created within the job sandbox only.
 
 ### Step 2: Source Resolution
@@ -158,7 +158,7 @@ Transition rules must prevent regression (e.g., no moving from completed back to
 ### Step 5: Packaging
 - Hosted/default mode: zip the entire logical export directory.
   - Use Python `zipfile` with `ZIP_DEFLATED`.
-  - Archive path: `${FS_EXPORTS_DIR}/{job_id}/export.zip`.
+  - Archive path: `${APP_MEDIA_ROOT}/exports/{job_id}/export.zip`.
   - Store absolute path/URI in `artifact_uri`.
   - Remove intermediate files only after zipping succeeds, or keep them until cleanup if needed for debugging.
 - Self-hosted optional mode:
@@ -210,8 +210,8 @@ Transition rules must prevent regression (e.g., no moving from completed back to
 
 ## 8. Configuration & Deployment Considerations
 - New environment variables:
-  - `FS_EXPORTS_DIR` – absolute path where job directories live (default: `${FS_ROOT}/exports`).
-  - `EXPORT_ARTIFACT_RETENTION_HOURS` – TTL for download artifacts.
+  - `APP_MEDIA_ROOT` already provides `${APP_MEDIA_ROOT}/exports` for job artifacts—ensure the directory is writable.
+  - `EXPORT_ARTIFACT_RETENTION_HOURS` – TTL for download artifacts (mirrors `export_retention_hours` in settings).
   - `EXPORT_MAX_PARALLEL_JOBS` – limit worker concurrency (enforced via ARQ or semaphore).
   - `EXPORT_QUEUE_NAME` – ARQ queue; default `exports`.
   - `EXPORT_ALLOW_SELF_HOSTED_TARGETS` – flag to honor `self_hosted_target`.

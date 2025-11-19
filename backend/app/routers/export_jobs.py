@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import List, Optional
 from uuid import UUID
 
@@ -13,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .. import models, schemas
 from ..db import get_db
 from ..services.export_jobs import process_export_job, cleanup_export_jobs
+from ..storage import PosixStorage
 
 logger = logging.getLogger("arciva.export_jobs")
 
@@ -24,7 +24,11 @@ def _download_url(job: models.ExportJob) -> Optional[str]:
         return None
     if not job.artifact_path:
         return None
-    path = Path(job.artifact_path)
+    storage = PosixStorage.from_env()
+    try:
+        path = storage.path_from_key(job.artifact_path)
+    except ValueError:
+        return None
     if not path.is_file():
         return None
     return f"/v1/export-jobs/{job.id}/download"
@@ -125,7 +129,11 @@ async def download_export_job(
         raise HTTPException(status_code=409, detail="Export job not completed")
     if not job.artifact_path:
         raise HTTPException(status_code=410, detail="Export artifact unavailable")
-    path = Path(job.artifact_path)
+    storage = PosixStorage.from_env()
+    try:
+        path = storage.path_from_key(job.artifact_path)
+    except ValueError:
+        raise HTTPException(status_code=410, detail="Export artifact unavailable")
     if not path.is_file():
         raise HTTPException(status_code=410, detail="Export artifact missing")
     filename = job.artifact_filename or f"arciva-export-{job.id.hex[:8]}.zip"

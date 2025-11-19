@@ -41,8 +41,9 @@ APP_ENV=dev
 ALLOWED_ORIGINS__0=http://localhost:5173
 ALLOWED_ORIGINS__1=http://127.0.0.1:5173
 
-# Async SQLAlchemy URL for Postgres (local defaults)
-DATABASE_URL=postgresql+asyncpg://arciva:1234@127.0.0.1:5432/arciva_dev
+# Runtime data locations
+APP_DB_PATH=${HOME}/arciva-data/db/app.db
+APP_MEDIA_ROOT=${HOME}/arciva-data/media
 # Redis URL for tasks/caching (local default)
 REDIS_URL=redis://127.0.0.1:6379/0
 # App secret (dev only!)
@@ -50,7 +51,7 @@ SECRET_KEY=dev-secret-change-me
 # Conda environment name
 CONDA_ENV=arciva
 # Infra control: auto | true | false
-# auto → if local Postgres/Redis are already running on 5432/6379, skip Docker
+# auto → if local Redis is already running on 6379, skip Docker
 USE_DOCKER=auto
 ENV
   fi
@@ -151,6 +152,36 @@ configure_perl_libs() {
   info "Configured PERL5LIB for exiftool"
 }
 
+prepare_data_env() {
+  local base="${APP_DATA_ROOT:-${STATE_DIR}/app-data}"
+  local db_path="${APP_DB_PATH:-${base}/db/app.db}"
+  local media_root="${APP_MEDIA_ROOT:-${base}/media}"
+  mkdir -p "$(dirname "${db_path}")"
+  mkdir -p "${media_root}"/{uploads,originals,derivatives,exports}
+  export APP_DB_PATH="${db_path}"
+  export APP_MEDIA_ROOT="${media_root}"
+}
+
+cmd_setup() {
+  ensure_env
+  ensure_exiftool_path
+  prepare_data_env
+  bold "Running initial setup (DB schema + media folders)"
+  pushd "${ROOT_DIR}" >/dev/null
+  PYTHONPATH="${ROOT_DIR}" python - <<'PY'
+import asyncio
+from backend.app.db import engine, Base
+
+async def init():
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+asyncio.run(init())
+PY
+  popd >/dev/null
+  info "Setup complete. You can now run 'pixi run dev-stack'."
+}
+
 write_compose() {
   cat > "${COMPOSE_FILE}" <<'YAML'
 services:
@@ -209,7 +240,6 @@ ensure_compose_up() {
   is_port_open 127.0.0.1 6379 && HOST_REDIS_PORT=6380
   export HOST_DB_PORT HOST_REDIS_PORT
 
-  export NEW_DATABASE_URL="postgresql+asyncpg://arciva:arciva@127.0.0.1:${HOST_DB_PORT}/arciva"
   export NEW_REDIS_URL="redis://127.0.0.1:${HOST_REDIS_PORT}/0"
 
   write_compose
@@ -255,19 +285,18 @@ start_backend() {
 
   info "Env check → ALLOWED_ORIGINS='${ALLOWED_ORIGINS-}' ALLOWED_ORIGINS__0='${ALLOWED_ORIGINS__0-}' ALLOWED_ORIGINS__1='${ALLOWED_ORIGINS__1-}'"
   info "Starting FastAPI dev server"
+  prepare_data_env
 
   if command -v conda >/dev/null 2>&1 || command -v micromamba >/dev/null 2>&1; then
     conda_activate
     info "Conda env: ${CONDA_ENV:-arciva}"
-    DATABASE_URL="${NEW_DATABASE_URL:-$DATABASE_URL}" \
-      REDIS_URL="${NEW_REDIS_URL:-$REDIS_URL}" \
+    REDIS_URL="${NEW_REDIS_URL:-$REDIS_URL}" \
       python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload \
       >>"${LOG_DIR}/backend.out.log" 2>>"${LOG_DIR}/backend.err.log" &
   elif [[ -f "pyproject.toml" && -f "poetry.lock" && $(command -v poetry) ]]; then
     info "Using poetry env"
     poetry install --no-interaction >>"${LOG_DIR}/backend.install.log" 2>&1 || true
-    DATABASE_URL="${NEW_DATABASE_URL:-$DATABASE_URL}" \
-      REDIS_URL="${NEW_REDIS_URL:-$REDIS_URL}" \
+    REDIS_URL="${NEW_REDIS_URL:-$REDIS_URL}" \
       poetry run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload \
       >>"${LOG_DIR}/backend.out.log" 2>>"${LOG_DIR}/backend.err.log" &
   else
@@ -278,8 +307,7 @@ start_backend() {
       "${VENV_DIR}/bin/pip" install 'uvicorn[standard]' fastapi 'sqlalchemy[asyncio]' asyncpg pydantic pydantic-settings pillow >/dev/null || true
     fi
     info "Starting FastAPI dev server (venv)"
-    DATABASE_URL="${NEW_DATABASE_URL:-$DATABASE_URL}" \
-      REDIS_URL="${NEW_REDIS_URL:-$REDIS_URL}" \
+    REDIS_URL="${NEW_REDIS_URL:-$REDIS_URL}" \
       "${VENV_DIR}/bin/uvicorn" app.main:app --host 0.0.0.0 --port 8000 --reload \
       >>"${LOG_DIR}/backend.out.log" 2>>"${LOG_DIR}/backend.err.log" &
   fi
@@ -323,8 +351,8 @@ start_worker() {
       conda_activate
     fi
     info "Starting worker"
+    prepare_data_env
     PYTHONPATH="${ROOT_DIR}" \
-      DATABASE_URL="${NEW_DATABASE_URL:-$DATABASE_URL}" \
       REDIS_URL="${NEW_REDIS_URL:-$REDIS_URL}" \
       python -m arq backend.worker.worker.WorkerSettings \
       >>"${LOG_DIR}/worker.out.log" 2>>"${LOG_DIR}/worker.err.log" &
@@ -344,11 +372,12 @@ PY
 }
 
 print_endpoints() {
+  local db_path=${APP_DB_PATH:-${STATE_DIR}/app-data/db/app.db}
   bold "
 Dev environment is up!"
   echo "Backend API     → http://localhost:8000 (OpenAPI at /docs)"
   echo "Frontend (Vite) → http://localhost:5173"
-  echo "Postgres        → ${NEW_DATABASE_URL:-$DATABASE_URL}"
+  echo "SQLite DB       → ${db_path}"
   echo "Redis           → ${NEW_REDIS_URL:-$REDIS_URL}"
   echo "Logs            → ${LOG_DIR} (backend.*, frontend.*, worker.*)"
 }
@@ -358,8 +387,7 @@ cmd_up() {
   ensure_exiftool_path
   clear_old_logs
   ensure_compose_up
-  DB_PORT="${HOST_DB_PORT:-5432}"; REDIS_PORT="${HOST_REDIS_PORT:-6379}"
-  wait_tcp localhost "$DB_PORT" 60 || fail "Postgres did not become ready on $DB_PORT"
+  REDIS_PORT="${HOST_REDIS_PORT:-6379}"
   wait_tcp localhost "$REDIS_PORT" 60 || fail "Redis did not become ready on $REDIS_PORT"
   start_backend
   wait_tcp localhost 8000 60 || warn "Backend port 8000 not reachable yet"
@@ -432,12 +460,13 @@ dump_logs() {
 main() {
   case "${1:-up}" in
     up) cmd_up ;;
+    setup) cmd_setup ;;
     down) cmd_down ;;
     logs) cmd_logs ;;
     ps) cmd_ps ;;
     doctor) doctor ;;
     dump-logs) dump_logs ;;
-    *) echo "Unknown command: $1"; echo "Usage: $0 {up|down|logs|ps|doctor|dump-logs}"; exit 1 ;;
+    *) echo "Unknown command: $1"; echo "Usage: $0 {up|down|setup|logs|ps|doctor|dump-logs}"; exit 1 ;;
   esac
 }
 

@@ -45,6 +45,7 @@ node_modules/
 # Builds & caches
 dist/
 .vite/
+dev-dist/
 .parcel-cache/
 .turbo/
 .next/

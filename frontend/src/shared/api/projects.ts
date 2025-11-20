@@ -1,3 +1,5 @@
+import { withBase } from './base'
+
 export type ProjectCreatePayload = {
   title: string
   client?: string
@@ -34,13 +36,12 @@ export type ProjectUpdatePayload = {
   stack_pairs_enabled?: boolean
 }
 
-function getBaseUrl() {
-  const envUrl = import.meta.env.VITE_API_BASE_URL
-  return typeof envUrl === 'string' && envUrl.length > 0 ? envUrl.replace(/\/$/, '') : 'http://127.0.0.1:8000'
-}
-
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${getBaseUrl()}${path}`, {
+  const url = withBase(path)
+  if (!url) {
+    throw new Error(`Failed to resolve API path for ${path}`)
+  }
+  const res = await fetch(url, {
     headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
     ...init,
   })

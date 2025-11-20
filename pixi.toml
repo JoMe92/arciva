@@ -53,6 +53,10 @@ env = { PYTHONPATH = "." }
 [tasks.dev-stack]
 cmd = "./dev.sh up"
 
+[tasks.dev-stack-pwa]
+cmd = "./dev.sh up"
+env = { ENABLE_PWA_DEV = "true", FRONTEND_DEV_HOST = "arciva.local" }
+
 [tasks.down]
 cmd = "./dev.sh down"
 

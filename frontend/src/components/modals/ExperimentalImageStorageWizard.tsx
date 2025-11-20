@@ -17,6 +17,12 @@ type ExperimentalImageStorageWizardProps = {
 
 type WizardStep = 1 | 2 | 3
 
+const clampWizardStep = (value: number): WizardStep => {
+  if (value <= 1) return 1
+  if (value >= 3) return 3
+  return value as WizardStep
+}
+
 const STEP_META: Record<WizardStep, { title: string; caption: string }> = {
   1: {
     title: 'Choose new image storage path',
@@ -124,12 +130,12 @@ const ExperimentalImageStorageWizard: React.FC<ExperimentalImageStorageWizardPro
 
   const proceedToNext = useCallback(() => {
     if (!canProceed || step >= 3) return
-    setStep((prev) => Math.min(3, (prev + 1) as WizardStep))
+    setStep((prev) => clampWizardStep(prev + 1))
   }, [canProceed, step])
 
   const goBack = useCallback(() => {
     if (step === 1) return
-    setStep((prev) => Math.max(1, (prev - 1) as WizardStep))
+    setStep((prev) => clampWizardStep(prev - 1))
   }, [step])
 
   const handleApply = useCallback(async () => {

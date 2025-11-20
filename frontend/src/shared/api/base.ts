@@ -1,4 +1,17 @@
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? ''
+const API_BASE = (() => {
+  const configuredBase = (import.meta.env.VITE_API_BASE_URL ?? '').trim()
+  if (configuredBase) {
+    return configuredBase.replace(/\/+$/, '')
+  }
+  if (typeof window === 'undefined') {
+    return ''
+  }
+  const apiPort = (import.meta.env.VITE_API_PORT ?? '8000').toString()
+  const protocol = window.location.protocol || 'http:'
+  const hostname = window.location.hostname || 'localhost'
+  const inferredBase = `${protocol}//${hostname}:${apiPort}`
+  return inferredBase.replace(/\/+$/, '')
+})()
 
 export function withBase(path: string | null | undefined): string | null {
   if (!path) return null
@@ -17,4 +30,3 @@ export function requireBase(path: string): string {
 }
 
 export { API_BASE }
-

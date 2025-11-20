@@ -23,7 +23,9 @@ const ProjectCard: React.FC<{
   onEdit: (p: Project) => void
   onSelectPrimary?: (projectId: string, assetId: string) => Promise<void>
   compact?: boolean
-}> = ({ p, onOpen, onEdit, onSelectPrimary, compact = false }) => {
+  variant?: 'grid' | 'feed'
+}> = ({ p, onOpen, onEdit, onSelectPrimary, compact = false, variant = 'grid' }) => {
+  const feedMode = variant === 'feed'
   const placeholderRatio = placeholderRatioForAspect(p.aspect)
   const previews = React.useMemo(() => {
     const list = (p.previewImages ?? [])
@@ -182,15 +184,38 @@ const ProjectCard: React.FC<{
   }, [p.tags])
   const hasTags = tags.length > 0
 
+  const rootClassName = feedMode
+    ? 'relative rounded-[32px] border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] shadow-[0_18px_42px_rgba(31,30,27,0.12)] overflow-hidden'
+    : 'relative'
+  const footerClassName = feedMode
+    ? 'bg-[var(--surface,#FFFFFF)] px-4 pt-4 pb-5 sm:px-5'
+    : 'rounded-b-xl border border-[var(--border,#E1D3B9)] border-t-0 bg-[var(--surface,#FFFFFF)] px-1.5 sm:px-2 md:px-3 pt-2 pb-3'
+  const tagShellClassName = feedMode
+    ? 'project-card-tags rounded-2xl border border-[var(--border,#E1D3B9)]/80 bg-[var(--surface-subtle,#FBF7EF)] px-3 py-2 min-h-[46px]'
+    : 'project-card-tags rounded-xl border border-[var(--border,#E1D3B9)]/80 bg-[var(--surface-subtle,#FBF7EF)] px-2 py-1.5 min-h-[52px]'
+  const titleClassName = feedMode
+    ? 'text-[15px] sm:text-base font-semibold tracking-tight text-[var(--text,#1F1E1B)]'
+    : 'text-[13px] font-medium tracking-tight text-[var(--text,#1F1E1B)]'
+  const clientClassName = feedMode
+    ? 'text-xs uppercase tracking-widest text-[var(--text-muted,#6B645B)]'
+    : 'text-[11px] uppercase tracking-wide text-[var(--text-muted,#6B645B)]'
+
   return (
-    <div className="relative">
+    <div className={rootClassName}>
       {/* Bildbereich: nur Navigation/Preview */}
       <div
         tabIndex={0}
         aria-label={`Preview project: ${p.title}`}
         data-testid={`project-card-${p.id}`}
+        role={feedMode ? 'button' : undefined}
+        onClick={feedMode ? () => onOpen(p.id) : undefined}
         onKeyDown={(e) => {
           const key = (e.key || '').toLowerCase()
+          if (feedMode && (key === 'enter' || key === ' ' || key === 'spacebar')) {
+            e.preventDefault()
+            onOpen(p.id)
+            return
+          }
           if ((key === 'arrowleft' || key === 'arrowright') && previews.length > 1) {
             e.preventDefault()
             if (key === 'arrowleft') {
@@ -205,7 +230,9 @@ const ProjectCard: React.FC<{
         onFocus={handleFocus}
         onBlur={handleBlur}
         onWheel={handleWheel}
-        className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus,#6B7C7A)] rounded-xl"
+        className={`block focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus,#6B7C7A)] rounded-xl ${
+          feedMode ? 'cursor-pointer active:scale-[0.995]' : ''
+        }`}
       >
         <div className="overflow-hidden rounded-t-xl bg-[var(--placeholder-bg-beige,#F3EBDD)] relative">
           {/* identischer Medien-Wrapper mit vertikalem Limit */}
@@ -266,12 +293,11 @@ const ProjectCard: React.FC<{
           )}
         </div>
       </div>
-
       {/* white footer at the bottom */}
-      <div className="rounded-b-xl border border-[var(--border,#E1D3B9)] border-t-0 bg-[var(--surface,#FFFFFF)] px-1.5 sm:px-2 md:px-3 pt-2 pb-3">
+      <div className={footerClassName}>
         {hasTags && (
           <div className="mb-2">
-            <div className="project-card-tags rounded-xl border border-[var(--border,#E1D3B9)]/80 bg-[var(--surface-subtle,#FBF7EF)] px-2 py-1.5 min-h-[52px]">
+            <div className={tagShellClassName}>
               <div className="tag-strip flex flex-nowrap gap-1.5 text-[11px] text-[var(--text-muted,#6B645B)]" role="list" aria-label="Project tags">
                 {tags.map((tag, index) => (
                   <span
@@ -286,32 +312,57 @@ const ProjectCard: React.FC<{
             </div>
           </div>
         )}
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <div className="text-[13px] font-medium tracking-tight text-[var(--text,#1F1E1B)]">{p.title}</div>
-            <div className="text-[11px] uppercase tracking-wide text-[var(--text-muted,#6B645B)]">{p.client}</div>
+        <div className={`flex items-start gap-3 ${feedMode ? '' : 'justify-between'}`}>
+          <div className="min-w-0 flex-1">
+            <div className={titleClassName}>{p.title}</div>
+            <div className={clientClassName}>{p.client || 'UNASSIGNED'}</div>
           </div>
-          <div className="flex items-center gap-1" role="group" aria-label="Project actions">
-            <button
-              type="button"
-              onClick={() => onOpen(p.id)}
-              className="h-8 px-3 rounded-full bg-[var(--primary,#A56A4A)] text-[var(--primary-contrast,#FFFFFF)] text-[12px] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus,#6B7C7A)]"
-              aria-label={`Open ${p.title}`}
-              data-testid="card-footer-open"
-            >
-              Open
-            </button>
+          {feedMode ? (
             <button
               type="button"
               onClick={() => onEdit(p)}
-              className="h-8 px-3 rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] text-[12px] hover:border-[var(--text-muted,#6B645B)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus,#6B7C7A)]"
-              aria-label="Edit project"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] text-xl text-[var(--text-muted,#6B645B)] shadow-sm transition hover:border-[var(--text-muted,#6B645B)]"
+              aria-label={`Edit ${p.title}`}
               data-testid="card-footer-edit"
             >
-              Edit
+              ⋯
+            </button>
+          ) : (
+            <div className="flex items-center gap-1" role="group" aria-label="Project actions">
+              <button
+                type="button"
+                onClick={() => onOpen(p.id)}
+                className="h-8 px-3 rounded-full bg-[var(--primary,#A56A4A)] text-[var(--primary-contrast,#FFFFFF)] text-[12px] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus,#6B7C7A)]"
+                aria-label={`Open ${p.title}`}
+                data-testid="card-footer-open"
+              >
+                Open
+              </button>
+              <button
+                type="button"
+                onClick={() => onEdit(p)}
+                className="h-8 px-3 rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] text-[12px] hover:border-[var(--text-muted,#6B645B)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus,#6B7C7A)]"
+                aria-label="Edit project"
+                data-testid="card-footer-edit"
+              >
+                Edit
+              </button>
+            </div>
+          )}
+        </div>
+        {feedMode ? (
+          <div className="mt-4">
+            <button
+              type="button"
+              onClick={() => onOpen(p.id)}
+              className="h-11 w-full rounded-full bg-[var(--primary,#A56A4A)] text-[var(--primary-contrast,#FFFFFF)] text-[13px] font-semibold tracking-tight shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus,#6B7C7A)]"
+              aria-label={`Open ${p.title}`}
+              data-testid="card-footer-open"
+            >
+              Open project
             </button>
           </div>
-        </div>
+        ) : null}
       </div>
     </div>
   )

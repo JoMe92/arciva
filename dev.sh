@@ -325,19 +325,26 @@ start_frontend() {
   [[ -d "${FRONTEND_DIR}" ]] || { warn "Frontend directory not found at ${FRONTEND_DIR}; skipping."; return; }
   pushd "${FRONTEND_DIR}" >/dev/null
   local pm; pm=$(pkg_manager)
+  local dev_host=${FRONTEND_DEV_HOST:-0.0.0.0}
+  local script_args=(--host "${dev_host}")
+  if [[ -n "${FRONTEND_DEV_EXTRA_ARGS:-}" ]]; then
+    # shellcheck disable=SC2206
+    local extra_parts=( ${FRONTEND_DEV_EXTRA_ARGS} )
+    script_args+=("${extra_parts[@]}")
+  fi
   info "Using frontend package manager: ${pm}"
   case "$pm" in
     pnpm)
       [[ -d node_modules ]] || pnpm install >>"${LOG_DIR}/frontend.install.log" 2>&1
-      pnpm run dev -- --host 0.0.0.0 >>"${LOG_DIR}/frontend.out.log" 2>>"${LOG_DIR}/frontend.err.log" &
+      pnpm run dev -- "${script_args[@]}" >>"${LOG_DIR}/frontend.out.log" 2>>"${LOG_DIR}/frontend.err.log" &
       ;;
     yarn)
       [[ -d node_modules ]] || yarn install >>"${LOG_DIR}/frontend.install.log" 2>&1
-      yarn dev --host 0.0.0.0 >>"${LOG_DIR}/frontend.out.log" 2>>"${LOG_DIR}/frontend.err.log" &
+      yarn dev "${script_args[@]}" >>"${LOG_DIR}/frontend.out.log" 2>>"${LOG_DIR}/frontend.err.log" &
       ;;
     npm)
       [[ -d node_modules ]] || npm ci >>"${LOG_DIR}/frontend.install.log" 2>&1 || npm install >>"${LOG_DIR}/frontend.install.log" 2>&1
-      npm run dev -- --host 0.0.0.0 >>"${LOG_DIR}/frontend.out.log" 2>>"${LOG_DIR}/frontend.err.log" &
+      npm run dev -- "${script_args[@]}" >>"${LOG_DIR}/frontend.out.log" 2>>"${LOG_DIR}/frontend.err.log" &
       ;;
   esac
   FRONTEND_PID=$!

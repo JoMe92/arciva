@@ -54,6 +54,7 @@ describe('TopBar layout', () => {
       stackTogglePending: false,
       selectedCount: 3,
       onOpenExport: vi.fn(),
+      onOpenSettings: vi.fn(),
     } as const
 
     const { rerender } = render(

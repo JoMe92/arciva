@@ -5,6 +5,7 @@ import ProjectIndex from '../pages/ProjectIndex'
 import ProjectWorkspace from '../features/workspace'
 import { BulkExportProvider } from '../shared/bulkExport/BulkImageExportContext'
 import BulkExportIndicator from '../components/BulkExportIndicator'
+import PwaInstallPrompt from '../components/PwaInstallPrompt'
 
 export default function App() {
   const [client] = useState(() => new QueryClient())
@@ -21,6 +22,7 @@ export default function App() {
           </Routes>
         </BrowserRouter>
         <BulkExportIndicator />
+        <PwaInstallPrompt />
       </BulkExportProvider>
     </QueryClientProvider>
   )

@@ -186,3 +186,84 @@ body {
   background-color: rgba(137, 125, 110, 0.8);
   border-radius: 9999px;
 }
+
+.install-hint {
+  position: fixed;
+  right: 1.25rem;
+  bottom: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-width: 320px;
+  z-index: 60;
+}
+
+.install-hint__card {
+  background-color: var(--surface, #ffffff);
+  border: 1px solid var(--border, #e3dbcf);
+  border-radius: 16px;
+  padding: 1rem 1.25rem;
+  box-shadow: 0 12px 40px rgba(31, 30, 27, 0.15);
+}
+
+.install-hint__card--info {
+  background-color: var(--surface-frosted, rgba(255, 255, 255, 0.85));
+  backdrop-filter: blur(8px);
+}
+
+.install-hint__title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text, #1f1e1b);
+}
+
+.install-hint__body {
+  margin: 0.25rem 0 0;
+  font-size: 0.85rem;
+  color: var(--text-muted, #6b645b);
+}
+
+.install-hint__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.install-hint__cta,
+.install-hint__dismiss {
+  border-radius: 9999px;
+  padding: 0.35rem 0.95rem;
+  border: none;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  background: transparent;
+  color: var(--text, #1f1e1b);
+}
+
+.install-hint__cta {
+  background-color: var(--primary, #a56a4a);
+  color: var(--primary-contrast, #ffffff);
+  box-shadow: 0 6px 14px rgba(165, 106, 74, 0.35);
+}
+
+.install-hint__cta:focus-visible,
+.install-hint__dismiss:focus-visible {
+  outline: 2px solid var(--focus-ring, #c78772);
+  outline-offset: 2px;
+}
+
+.install-hint__dismiss {
+  background-color: transparent;
+  color: var(--text-muted, #6b645b);
+}
+
+@media (max-width: 600px) {
+  .install-hint {
+    left: 1rem;
+    right: 1rem;
+    max-width: none;
+  }
+}

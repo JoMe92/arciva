@@ -7,6 +7,7 @@ from pathlib import Path
 import logging
 import os
 import json
+import socket
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=False, extra="ignore")
@@ -37,6 +38,8 @@ class Settings(BaseSettings):
     logs_dir: str = "logs"
     exiftool_path: str = "exiftool"
     export_retention_hours: int = 24
+    allow_lan_frontend_origins: bool = True
+    dev_frontend_port: int = 5173
 
     @field_validator("allowed_origins", mode="before")
     @classmethod
@@ -113,6 +116,23 @@ def _validate_media_root(raw: str) -> Path:
     _check_directory_access(path, description="media root")
     return path
 
+def _detect_local_ipv4_addresses() -> List[str]:
+    """Return non-loopback IPv4 addresses assigned to this host."""
+    ips: set[str] = set()
+    try:
+        host_name = socket.gethostname()
+        for info in socket.getaddrinfo(host_name, None, family=socket.AF_INET):
+            ips.add(info[4][0])
+    except OSError:
+        pass
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.connect(("8.8.8.8", 80))
+            ips.add(sock.getsockname()[0])
+    except OSError:
+        pass
+    return [ip for ip in ips if not ip.startswith("127.")]
+
 def _subdir(root: Path, name: str) -> Path:
     sub = root / name
     _check_directory_access(sub, description=f"media subdirectory '{name}'")
@@ -152,5 +172,18 @@ def get_settings() -> Settings:
         logs_path = Path.cwd() / logs_path
     logs_path.mkdir(parents=True, exist_ok=True)
     s.logs_dir = str(logs_path)
+    if s.app_env.lower() == "dev" and s.allow_lan_frontend_origins:
+        lan_ips = _detect_local_ipv4_addresses()
+        extra_origins = [
+            f"http://{ip}:{s.dev_frontend_port}" for ip in lan_ips if ip
+        ]
+        for origin in extra_origins:
+            if origin not in s.allowed_origins:
+                s.allowed_origins.append(origin)
+        if extra_origins:
+            _config_logger.info(
+                "Added LAN origins: %s",
+                ", ".join(extra_origins),
+            )
     _config_logger.info("Allowed origins: %s", ", ".join(s.allowed_origins) or "<none>")
     return s

@@ -125,7 +125,8 @@ Environment lives in `.env` (template: `.env.example`). Each entry below include
 
 - **`APP_ENV`**: tells the backend which profile to load (`dev`, `staging`, `prod`). Leave as `dev` for local work; ops teams can override per deployment.
 - **`SECRET_KEY`**: signing key for sessions and JWTs. The template ships with `changeme` so development works instantly. For any shared or public environment, replace it via `openssl rand -hex 32` (or `python -c 'import secrets; print(secrets.token_hex(32))'`) and keep it private.
-- **`ALLOWED_ORIGINS__0/1/...`**: FastAPI reads these exploded keys and builds the CORS whitelist. Defaults grant requests from `http://localhost:5173` (the Vite dev server). Add more lines (increment the suffix) for any additional domains you serve the frontend from.
+- **`ALLOWED_ORIGINS__0/1/...`**: FastAPI reads these exploded keys and builds the CORS whitelist. Defaults grant requests from `http://localhost:5173` (the Vite dev server). Add more lines (increment the suffix) for any additional domains you serve the frontend from. When `ALLOW_LAN_FRONTEND_ORIGINS=true`, the backend automatically adds every local IPv4 address (e.g. `http://192.168.1.42:5173`) so phones or tablets on your Wi‑Fi can reach the API without editing `.env`.
+- **`ALLOW_LAN_FRONTEND_ORIGINS` / `DEV_FRONTEND_PORT`**: Toggle the automatic LAN origin feature described above and pick the port the Vite dev server exposes (defaults: `true` / `5173`).
 - **`APP_DB_PATH`**: absolute path to the SQLite database file (must end with `.db`). Point it at your dedicated data directory, e.g. `/app-data/db/app.db` or `$HOME/arciva-data/db/app.db`. The backend creates parent folders as needed and fails fast if it cannot read/write the file.
 - **`REDIS_URL`**: URL for the task queue. The dev stack starts Redis on `localhost:6379`, matching the sample value. Override if you use a different Redis server.
 - **`APP_MEDIA_ROOT`**: absolute path to the media root (e.g. `/app-data/media`). All uploads/originals/derivatives/exports live under this directory. Moving the entire data directory now boils down to copying this folder to a new disk/server and updating the environment variable.
@@ -133,7 +134,7 @@ Environment lives in `.env` (template: `.env.example`). Each entry below include
 - **`MAX_UPLOAD_MB`**: maximum upload size FastAPI accepts. Set it to a safe upper bound for your workloads (defaults to `1000` MB).
 - **`WORKER_CONCURRENCY`**: number of concurrent jobs the ARQ worker runs. Increase if you have spare CPU and need faster ingest.
 
-Frontend-specific variables (notably `VITE_API_BASE_URL`) live in `frontend/.env.local`; copy or create that file with the API URL you expose (default: `http://localhost:8000`).
+Frontend-specific variables (notably `VITE_API_BASE_URL`) live in `frontend/.env.local`. The SPA now infers the backend URL from the machine that served it (protocol + hostname + port `8000`), so you only need to set `VITE_API_BASE_URL` when the API lives elsewhere (e.g. remote staging).
 
 ### Sample `.env` for local development
 ```env
@@ -141,6 +142,8 @@ APP_ENV=dev
 SECRET_KEY=changeme
 ALLOWED_ORIGINS__0=http://localhost:5173
 ALLOWED_ORIGINS__1=http://127.0.0.1:5173
+ALLOW_LAN_FRONTEND_ORIGINS=true
+DEV_FRONTEND_PORT=5173
 
 APP_DB_PATH=$HOME/arciva-data/db/app.db
 APP_MEDIA_ROOT=$HOME/arciva-data/media
@@ -166,7 +169,7 @@ WORKER_CONCURRENCY=2
    ```  
    Paste the output into `SECRET_KEY=...` and keep it private.
 4. **Configure `ALLOWED_ORIGINS__*` (CORS)**  
-   These lines list every URL allowed to call the API from a browser. Keep the two localhost entries so the Vite dev server works. To expose the API to another site (e.g. `https://demo.example.com`), add a new line with the next index:  
+   These lines list every URL allowed to call the API from a browser. Keep the two localhost entries so the Vite dev server works. When you leave `ALLOW_LAN_FRONTEND_ORIGINS=true`, the backend adds every LAN IP:port combo automatically, so devices on the same Wi‑Fi can talk to the API immediately. To expose the API to another site (e.g. `https://demo.example.com`), add a new line with the next index:  
    ```
    ALLOWED_ORIGINS__2=https://demo.example.com
    ```

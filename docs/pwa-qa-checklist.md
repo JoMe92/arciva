@@ -2,9 +2,10 @@
 
 ## Smoke Tests
 1. `pnpm install` (workspace root) to ensure dependencies are up to date.
-2. `cd frontend && pnpm dev -- --host 0.0.0.0` for local development; Safari/Chrome on device can hit via LAN tunnel.
-3. `pnpm build && pnpm preview --host 0.0.0.0` to mimic production before final QA.
-4. Clear previous service worker registrations for `localhost` via Chrome DevTools > Application before re-testing.
+2. Follow `docs/frontend/dev-https.md` to run the dev server via HTTPS (mkcert, trusted cert paths, host binding). Only the HTTPS origin is installable.
+3. `cd frontend && pnpm dev -- --host arciva.local` for local development; Safari/Chrome on device can hit via LAN tunnel.
+4. `pnpm build && pnpm preview -- --host arciva.local` to mimic production before final QA (same HTTPS settings apply).
+5. Clear previous service worker registrations for `localhost` via Chrome DevTools > Application before re-testing.
 
 ## Installability Checklist
 - **Manifest**: At preview URL, open `/manifest.webmanifest` and Chrome DevTools > Application > Manifest. Confirm `name/short_name`, `display: standalone`, `start_url`, `scope`, colors, and maskable icons resolve without 404s.

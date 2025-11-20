@@ -1,39 +1,44 @@
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
 
-export default defineConfig({
-  plugins: [
+const manifest = JSON.parse(
+  readFileSync(new URL('./public/manifest.webmanifest', import.meta.url), 'utf-8')
+)
+
+const resolveKeyPath = (value?: string) => {
+  if (!value) return undefined
+  return path.isAbsolute(value) ? value : path.resolve(process.cwd(), value)
+}
+
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '')
+  const enableHttps = env.DEV_SERVER_HTTPS === 'true' || env.DEV_SERVER_HTTPS === '1'
+  const httpsKeyPath = resolveKeyPath(env.DEV_SERVER_HTTPS_KEY)
+  const httpsCertPath = resolveKeyPath(env.DEV_SERVER_HTTPS_CERT)
+  const https =
+    enableHttps && httpsKeyPath && httpsCertPath
+      ? {
+          key: readFileSync(httpsKeyPath),
+          cert: readFileSync(httpsCertPath),
+        }
+      : enableHttps
+        ? true
+        : undefined
+
+  const enableDevSw =
+    mode === 'development' &&
+    (env.ENABLE_PWA_DEV === 'true' || env.VITE_ENABLE_PWA_DEV === 'true')
+
+  const plugins = [
     react(),
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: 'auto',
       includeAssets: ['icons/icon-192.png', 'icons/icon-512.png'],
-      manifest: {
-        name: 'Arciva',
-        short_name: 'Arciva',
-        description: 'Arciva keeps your film digitization projects organized across devices.',
-        start_url: '/',
-        scope: '/',
-        display: 'standalone',
-        orientation: 'portrait',
-        theme_color: '#A56A4A',
-        background_color: '#FBF7EF',
-        icons: [
-          {
-            src: 'icons/icon-192.png',
-            sizes: '192x192',
-            type: 'image/png',
-            purpose: 'any maskable',
-          },
-          {
-            src: 'icons/icon-512.png',
-            sizes: '512x512',
-            type: 'image/png',
-            purpose: 'any maskable',
-          },
-        ],
-      },
+      manifest,
       workbox: {
         navigateFallback: 'index.html',
         globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,woff2}'],
@@ -67,15 +72,26 @@ export default defineConfig({
         ],
       },
       devOptions: {
-        enabled: true,
+        enabled: enableDevSw,
         suppressWarnings: true,
         navigateFallback: 'index.html',
       },
     }),
-  ],
-  server: {
-    host: '0.0.0.0',
-    port: 5173,
-    strictPort: true,
-  },
+  ]
+
+  return {
+    plugins,
+    server: {
+      host: '0.0.0.0',
+      port: 5173,
+      strictPort: true,
+      https,
+    },
+    preview: {
+      host: '0.0.0.0',
+      port: 4173,
+      strictPort: true,
+      https,
+    },
+  }
 })

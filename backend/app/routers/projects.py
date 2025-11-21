@@ -50,21 +50,31 @@ async def _load_preview_map(
 
     storage = PosixStorage.from_env()
     preview_map: dict[UUID, list[tuple[int, UUID, str | None, int | None, int | None]]] = {pid: [] for pid in project_ids}
+    seen_assets: dict[UUID, set[UUID]] = {pid: set() for pid in project_ids}
     for project_asset, asset in rows:
         order = project_asset.preview_order if project_asset.preview_order is not None else 10_000
-        preview_map.setdefault(project_asset.project_id, []).append(
+        project_id = project_asset.project_id
+        preview_map.setdefault(project_id, []).append(
             (order, asset.id, _thumb_url(asset, storage), asset.width, asset.height)
         )
+        seen_assets.setdefault(project_id, set()).add(asset.id)
 
-    missing_preview_projects = [pid for pid, entries in preview_map.items() if not entries]
-    if missing_preview_projects:
+    max_order_by_project: dict[UUID, int] = {
+        pid: max((entry[0] for entry in entries), default=-1) for pid, entries in preview_map.items()
+    }
+    slots_remaining: dict[UUID, int] = {
+        pid: MAX_PREVIEW_IMAGES - len(preview_map.get(pid, [])) for pid in project_ids
+    }
+    fallback_targets = [pid for pid in project_ids if slots_remaining.get(pid, 0) > 0]
+
+    if fallback_targets:
         fallback_rows = (
             await db.execute(
                 select(models.ProjectAsset, models.Asset, models.MetadataState)
                 .join(models.Asset, models.Asset.id == models.ProjectAsset.asset_id)
                 .join(models.MetadataState, models.MetadataState.link_id == models.ProjectAsset.id)
                 .where(
-                    models.ProjectAsset.project_id.in_(missing_preview_projects),
+                    models.ProjectAsset.project_id.in_(fallback_targets),
                     models.MetadataState.picked.is_(True),
                 )
                 .order_by(
@@ -75,16 +85,22 @@ async def _load_preview_map(
                 )
             )
         ).all()
-        fallback_counts: dict[UUID, int] = {}
         for link, asset, _state in fallback_rows:
             project_id = link.project_id
-            count = fallback_counts.get(project_id, 0)
-            if count >= MAX_PREVIEW_IMAGES:
+            if project_id not in slots_remaining:
                 continue
-            fallback_counts[project_id] = count + 1
+            if slots_remaining[project_id] <= 0:
+                continue
+            project_seen = seen_assets.setdefault(project_id, set())
+            if asset.id in project_seen:
+                continue
+            next_order = max_order_by_project.get(project_id, -1) + 1
+            max_order_by_project[project_id] = next_order
             preview_map.setdefault(project_id, []).append(
-                (count, asset.id, _thumb_url(asset, storage), asset.width, asset.height)
+                (next_order, asset.id, _thumb_url(asset, storage), asset.width, asset.height)
             )
+            project_seen.add(asset.id)
+            slots_remaining[project_id] -= 1
 
     normalized_map: dict[UUID, list[schemas.ProjectPreviewImage]] = {}
     for project_id, entries in preview_map.items():

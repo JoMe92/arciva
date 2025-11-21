@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .. import models, schemas
 from ..db import get_db
+from ..security import get_current_user
 from ..storage import PosixStorage
 
 logger = logging.getLogger("arciva.image_hub")
@@ -50,11 +51,15 @@ def _preview_url(asset: models.Asset, storage: PosixStorage) -> str | None:
 async def list_hub_assets(
     limit: int = Query(240, ge=1, le=2000),
     db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
 ) -> schemas.ImageHubAssetsResponse:
     asset_ids = (
         await db.execute(
             select(models.Asset.id)
-            .where(models.Asset.status == models.AssetStatus.READY)
+            .where(
+                models.Asset.status == models.AssetStatus.READY,
+                models.Asset.user_id == current_user.id,
+            )
             .order_by(models.Asset.created_at.desc())
             .limit(limit)
         )
@@ -69,19 +74,25 @@ async def list_hub_assets(
             .join(models.ProjectAsset, models.ProjectAsset.asset_id == models.Asset.id)
             .join(models.Project, models.Project.id == models.ProjectAsset.project_id)
             .outerjoin(models.MetadataState, models.MetadataState.link_id == models.ProjectAsset.id)
-            .where(models.Asset.id.in_(asset_ids))
+            .where(
+                models.Asset.id.in_(asset_ids),
+                models.ProjectAsset.user_id == current_user.id,
+                models.Project.user_id == current_user.id,
+            )
         )
     ).all()
 
-    pair_rows = (
-        await db.execute(
-            select(models.ProjectAssetPair)
-        )
-    ).scalars().all()
+    project_ids = {project.id for _, _, project, _ in rows}
     pair_map: dict[UUID, UUID] = {}
-    for pair in pair_rows:
-        pair_map[pair.jpeg_asset_id] = pair.raw_asset_id
-        pair_map[pair.raw_asset_id] = pair.jpeg_asset_id
+    if project_ids:
+        pair_rows = (
+            await db.execute(
+                select(models.ProjectAssetPair).where(models.ProjectAssetPair.project_id.in_(project_ids))
+            )
+        ).scalars().all()
+        for pair in pair_rows:
+            pair_map[pair.jpeg_asset_id] = pair.raw_asset_id
+            pair_map[pair.raw_asset_id] = pair.jpeg_asset_id
 
     storage = PosixStorage.from_env()
     assets_map: dict[UUID, dict] = {}

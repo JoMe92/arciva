@@ -1,8 +1,23 @@
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 from typing import Optional, List, Dict, Any, Literal
 from datetime import datetime
 from enum import Enum
 from uuid import UUID
+
+
+class UserOut(BaseModel):
+    id: UUID
+    email: EmailStr
+
+
+class AuthSignupRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(..., min_length=8)
+
+
+class AuthLoginRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(..., min_length=8)
 
 class AssetStatus(str, Enum):
     UPLOADING = "UPLOADING"

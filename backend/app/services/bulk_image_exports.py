@@ -28,19 +28,23 @@ CHUNK_SIZE = 64
 COMMIT_INTERVAL = 25
 
 
-def _bulk_export_conditions():
+def _bulk_export_conditions(user_id: UUID):
     return (
         models.Asset.status == models.AssetStatus.READY,
         models.Asset.storage_uri.is_not(None),
-        exists().where(models.ProjectAsset.asset_id == models.Asset.id),
+        models.Asset.user_id == user_id,
+        exists().where(
+            models.ProjectAsset.asset_id == models.Asset.id,
+            models.ProjectAsset.user_id == user_id,
+        ),
     )
 
 
-async def collect_bulk_export_asset_ids(db: AsyncSession) -> list[UUID]:
+async def collect_bulk_export_asset_ids(db: AsyncSession, user_id: UUID) -> list[UUID]:
     rows = (
         await db.execute(
             select(models.Asset.id)
-                .where(*_bulk_export_conditions())
+                .where(*_bulk_export_conditions(user_id))
                 .order_by(
                     models.Asset.taken_at.is_(None),
                     models.Asset.taken_at.asc(),
@@ -51,13 +55,13 @@ async def collect_bulk_export_asset_ids(db: AsyncSession) -> list[UUID]:
     return rows
 
 
-async def estimate_bulk_image_export(db: AsyncSession) -> tuple[int, int]:
+async def estimate_bulk_image_export(db: AsyncSession, user_id: UUID) -> tuple[int, int]:
     total_files, total_bytes = (
         await db.execute(
             select(
                 func.count(models.Asset.id),
                 func.coalesce(func.sum(models.Asset.size_bytes), 0),
-            ).where(*_bulk_export_conditions())
+            ).where(*_bulk_export_conditions(user_id))
         )
     ).one()
     return int(total_files or 0), int(total_bytes or 0)
@@ -119,13 +123,18 @@ def _build_member_path(asset: models.Asset, used: set[str]) -> Path:
     return candidate
 
 
-async def _iter_assets(db: AsyncSession, asset_ids: Iterable[UUID]) -> AsyncIterator[models.Asset]:
+async def _iter_assets(db: AsyncSession, asset_ids: Iterable[UUID], user_id: UUID) -> AsyncIterator[models.Asset]:
     batch = []
     for asset_id in asset_ids:
         batch.append(asset_id)
         if len(batch) >= CHUNK_SIZE:
             rows = (
-                await db.execute(select(models.Asset).where(models.Asset.id.in_(batch)))
+                await db.execute(
+                    select(models.Asset).where(
+                        models.Asset.id.in_(batch),
+                        models.Asset.user_id == user_id,
+                    )
+                )
             ).scalars().all()
             mapping = {asset.id: asset for asset in rows}
             for item in batch:
@@ -136,7 +145,12 @@ async def _iter_assets(db: AsyncSession, asset_ids: Iterable[UUID]) -> AsyncIter
             batch = []
     if batch:
         rows = (
-            await db.execute(select(models.Asset).where(models.Asset.id.in_(batch)))
+            await db.execute(
+                select(models.Asset).where(
+                    models.Asset.id.in_(batch),
+                    models.Asset.user_id == user_id,
+                )
+            )
         ).scalars().all()
         mapping = {asset.id: asset for asset in rows}
         for item in batch:
@@ -186,7 +200,7 @@ async def process_bulk_image_export(job_id: UUID) -> None:
 
         try:
             with zipfile.ZipFile(archive_path, "w", compression=zipfile.ZIP_DEFLATED, allowZip64=True) as zf:
-                async for asset in _iter_assets(db, asset_ids):
+                async for asset in _iter_assets(db, asset_ids, job.user_id):
                     if not asset.storage_uri:
                         raise RuntimeError(f"Asset {asset.id} missing storage path")
                     try:

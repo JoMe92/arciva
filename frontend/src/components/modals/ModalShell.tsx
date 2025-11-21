@@ -82,7 +82,7 @@ const ModalShell: React.FC<ModalShellProps> = ({
           closeDisabled={closeDisabled}
           closeLabel={`Close ${title}`}
         />
-        <div className="flex-1 overflow-y-auto px-6 py-5">{children}</div>
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5">{children}</div>
         <div className="flex flex-col gap-3 border-t border-[var(--border,#E1D3B9)] bg-[var(--surface-subtle,#FBF7EF)] px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-wrap gap-2 text-sm">{footerLeft}</div>
           <div className="flex flex-wrap items-center justify-end gap-2 text-sm">{renderFooterRight()}</div>

@@ -28,12 +28,23 @@ async def adopt_duplicate_asset(
 ) -> None:
     """Merge a duplicate asset into an existing Asset entry while preserving per-project state."""
 
+    if existing_asset.user_id != duplicate_asset.user_id:
+        logger.warning(
+            "dedup: skipping merge for asset=%s existing=%s due to mismatched users",
+            duplicate_asset.id,
+            existing_asset.id,
+        )
+        return
+
     ts = timestamp or datetime.now(timezone.utc)
     link_rows = (
         await db.execute(
             select(models.ProjectAsset, models.MetadataState)
             .outerjoin(models.MetadataState, models.MetadataState.link_id == models.ProjectAsset.id)
-            .where(models.ProjectAsset.asset_id == duplicate_asset.id)
+            .where(
+                models.ProjectAsset.asset_id == duplicate_asset.id,
+                models.ProjectAsset.user_id == duplicate_asset.user_id,
+            )
         )
     ).all()
 
@@ -43,6 +54,7 @@ async def adopt_duplicate_asset(
             db,
             project_id=link.project_id,
             asset=existing_asset,
+            user_id=existing_asset.user_id,
             metadata_template=metadata,
         )
         if created:
@@ -56,7 +68,8 @@ async def adopt_duplicate_asset(
     count = (
         await db.execute(
             select(func.count()).select_from(models.ProjectAsset).where(
-                models.ProjectAsset.asset_id == existing_asset.id
+                models.ProjectAsset.asset_id == existing_asset.id,
+                models.ProjectAsset.user_id == existing_asset.user_id,
             )
         )
     ).scalar_one()

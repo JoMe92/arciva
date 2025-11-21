@@ -99,6 +99,58 @@ async def test_update_stack_pairs_toggle(client):
     fetched = r.json()
     assert fetched["stack_pairs_enabled"] is True
 
+
+@pytest.mark.asyncio
+async def test_projects_list_includes_picked_previews(client, TestSessionLocal):
+    from backend.app import models
+    from backend.app.storage import PosixStorage
+
+    payload = {"title": "Picked Previews", "client": "ACME", "note": "pick"}
+    r = await client.post("/v1/projects", json=payload)
+    assert r.status_code == 201
+    proj_id = r.json()["id"]
+
+    storage = PosixStorage.from_env()
+    sha = uuid.uuid4().hex
+    original_path = storage.original_path_for(sha, ".jpg")
+    original_path.write_bytes(b"original")
+    thumb_path = storage.derivative_path(sha, "thumb_256", "jpg")
+    thumb_path.write_bytes(b"thumb")
+
+    async with TestSessionLocal() as session:
+        asset = models.Asset(
+            original_filename="picked.jpg",
+            mime="image/jpeg",
+            size_bytes=111,
+            status=models.AssetStatus.READY,
+            storage_uri=storage.storage_key_for(original_path),
+            sha256=sha,
+            reference_count=1,
+            width=4000,
+            height=2667,
+        )
+        session.add(asset)
+        await session.flush()
+        link = models.ProjectAsset(project_id=uuid.UUID(proj_id), asset_id=asset.id, is_preview=False, preview_order=None)
+        session.add(link)
+        await session.flush()
+        session.add(models.MetadataState(link_id=link.id, picked=True))
+        await session.commit()
+        asset_id = str(asset.id)
+
+    r = await client.get("/v1/projects")
+    assert r.status_code == 200
+    listing = r.json()
+    entry = next(item for item in listing if item["id"] == proj_id)
+    assert entry["preview_images"]
+    assert entry["preview_images"][0]["asset_id"] == asset_id
+
+    r = await client.get(f"/v1/projects/{proj_id}")
+    assert r.status_code == 200
+    detail = r.json()
+    assert detail["preview_images"]
+    assert detail["preview_images"][0]["asset_id"] == asset_id
+
 @pytest.mark.asyncio
 async def test_delete_project_requires_confirmation(client):
     payload = {"title": "Delete Me", "client": "ACME", "note": "test note"}

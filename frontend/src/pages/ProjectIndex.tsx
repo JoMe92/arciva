@@ -524,7 +524,7 @@ export default function ProjectIndex() {
     return apiProjects.map((proj) => projectFromApi(proj))
   }, [apiProjects])
 
-  const includeDemoProjects = import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEMO_PROJECTS !== 'false'
+  const includeDemoProjects = import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEMO_PROJECTS === 'true'
 
   const baseProjects = useMemo(() => {
     const combined = includeDemoProjects ? [...dynamicProjects, ...PROJECTS] : [...dynamicProjects]

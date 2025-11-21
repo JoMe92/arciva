@@ -5,6 +5,7 @@ from pathlib import Path
 from .. import schemas
 from ..db import get_db
 from ..deps import get_settings
+from ..security import get_current_user
 from ..services.app_settings import get_app_setting, set_app_setting
 from ..services.database_settings import load_database_settings, update_database_path
 from ..services.data_reset import wipe_application_data
@@ -19,7 +20,7 @@ from ..services.photo_store_settings import (
     validate_candidate_path,
 )
 
-router = APIRouter(prefix="/v1/settings", tags=["settings"])
+router = APIRouter(prefix="/v1/settings", tags=["settings"], dependencies=[Depends(get_current_user)])
 
 _IMAGE_HUB_SETTINGS_KEY = "image_hub"
 

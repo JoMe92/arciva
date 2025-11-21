@@ -6,24 +6,51 @@ import ProjectWorkspace from '../features/workspace'
 import { BulkExportProvider } from '../shared/bulkExport/BulkImageExportContext'
 import BulkExportIndicator from '../components/BulkExportIndicator'
 import PwaInstallPrompt from '../components/PwaInstallPrompt'
+import { AuthProvider, useAuth } from '../features/auth/AuthContext'
+import AuthGate from '../features/auth/AuthGate'
+import Splash from '../components/Splash'
+import UserMenu from '../features/auth/UserMenu'
+
+const AppRoutes: React.FC = () => (
+  <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+    <Routes>
+      <Route path="/" element={<ProjectIndex />} />
+      <Route path="/projects/:id" element={<ProjectWorkspace />} />
+      {/* fallback */}
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  </BrowserRouter>
+)
+
+const ProtectedApp: React.FC = () => {
+  const { user, initializing } = useAuth()
+
+  if (initializing) {
+    return <Splash />
+  }
+
+  if (!user) {
+    return <AuthGate />
+  }
+
+  return (
+    <BulkExportProvider>
+      <UserMenu />
+      <AppRoutes />
+      <BulkExportIndicator />
+      <PwaInstallPrompt />
+    </BulkExportProvider>
+  )
+}
 
 export default function App() {
   const [client] = useState(() => new QueryClient())
 
   return (
     <QueryClientProvider client={client}>
-      <BulkExportProvider>
-        <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-          <Routes>
-            <Route path="/" element={<ProjectIndex />} />
-            <Route path="/projects/:id" element={<ProjectWorkspace />} />
-            {/* fallback */}
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </BrowserRouter>
-        <BulkExportIndicator />
-        <PwaInstallPrompt />
-      </BulkExportProvider>
+      <AuthProvider>
+        <ProtectedApp />
+      </AuthProvider>
     </QueryClientProvider>
   )
 }

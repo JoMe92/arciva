@@ -4,7 +4,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse
 from .deps import get_settings
-from .routers import projects, uploads, assets, settings, hub, export_jobs, bulk_image_exports
+from .routers import projects, uploads, assets, settings, hub, export_jobs, bulk_image_exports, auth
 from .logging_utils import setup_logging
 from .schema_utils import ensure_base_schema
 
@@ -28,6 +28,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    app.include_router(auth.router)
     app.include_router(projects.router)
     app.include_router(uploads.router)
     app.include_router(assets.router)
@@ -38,7 +39,10 @@ def create_app() -> FastAPI:
 
     @app.on_event("startup")
     async def _bootstrap_schema():
+        db_label = s.database_url or s.app_db_path
+        startup_logger.info("Ensuring base schema on %s", db_label)
         await ensure_base_schema()
+        startup_logger.info("Base schema ready on %s", db_label)
 
     @app.middleware("http")
     async def log_requests(request: Request, call_next):

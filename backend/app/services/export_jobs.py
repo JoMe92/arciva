@@ -148,6 +148,8 @@ async def _load_assets_for_job(db: AsyncSession, job: models.ExportJob, settings
             .where(
                 models.ProjectAsset.project_id == job.project_id,
                 models.Asset.id.in_(wanted_ids),
+                models.ProjectAsset.user_id == job.user_id,
+                models.Asset.user_id == job.user_id,
             )
         )
     ).scalars().all()
@@ -175,7 +177,7 @@ async def process_export_job(job_id: UUID) -> None:
 
         try:
             project = await db.get(models.Project, job.project_id)
-            if not project:
+            if not project or project.user_id != job.user_id:
                 raise RuntimeError("Project not found for export job")
             settings = schemas.ExportJobSettings(**job.settings)
             asset_map, resolved_ids = await _load_assets_for_job(db, job, settings)

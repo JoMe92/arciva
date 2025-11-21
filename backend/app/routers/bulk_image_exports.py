@@ -6,10 +6,12 @@ from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from fastapi.responses import FileResponse
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .. import models, schemas
 from ..db import get_db
+from ..security import get_current_user
 from ..services import bulk_image_exports
 from ..storage import PosixStorage
 
@@ -56,8 +58,9 @@ def _serialize_job(job: models.BulkImageExport) -> schemas.BulkImageExportOut:
 @router.get("/estimate", response_model=schemas.BulkImageExportEstimate)
 async def estimate_bulk_image_export(
     db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
 ):
-    total_files, total_bytes = await bulk_image_exports.estimate_bulk_image_export(db)
+    total_files, total_bytes = await bulk_image_exports.estimate_bulk_image_export(db, current_user.id)
     if total_files == 0:
         raise HTTPException(status_code=400, detail="No project images available to export.")
     return schemas.BulkImageExportEstimate(
@@ -72,11 +75,13 @@ async def estimate_bulk_image_export(
 async def start_bulk_image_export(
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
 ):
-    asset_ids = await bulk_image_exports.collect_bulk_export_asset_ids(db)
+    asset_ids = await bulk_image_exports.collect_bulk_export_asset_ids(db, current_user.id)
     if not asset_ids:
         raise HTTPException(status_code=400, detail="No project images available to export.")
     job = models.BulkImageExport(
+        user_id=current_user.id,
         asset_ids=[str(asset_id) for asset_id in asset_ids],
         status=models.ExportJobStatus.QUEUED,
         progress=0,
@@ -97,8 +102,16 @@ async def start_bulk_image_export(
 async def get_bulk_image_export(
     job_id: UUID,
     db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
 ):
-    job = await db.get(models.BulkImageExport, job_id)
+    job = (
+        await db.execute(
+            select(models.BulkImageExport).where(
+                models.BulkImageExport.id == job_id,
+                models.BulkImageExport.user_id == current_user.id,
+            )
+        )
+    ).scalar_one_or_none()
     if not job:
         raise HTTPException(status_code=404, detail="Bulk image export not found")
     return _serialize_job(job)
@@ -108,8 +121,16 @@ async def get_bulk_image_export(
 async def download_bulk_image_export(
     job_id: UUID,
     db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
 ):
-    job = await db.get(models.BulkImageExport, job_id)
+    job = (
+        await db.execute(
+            select(models.BulkImageExport).where(
+                models.BulkImageExport.id == job_id,
+                models.BulkImageExport.user_id == current_user.id,
+            )
+        )
+    ).scalar_one_or_none()
     if not job:
         raise HTTPException(status_code=404, detail="Bulk image export not found")
     if job.status != models.ExportJobStatus.COMPLETED:

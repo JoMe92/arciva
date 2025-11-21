@@ -5,11 +5,12 @@ import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select, func
+from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .. import models, schemas
 from ..db import get_db
+from ..security import get_current_user
 from ..storage import PosixStorage
 from ..schema_utils import ensure_preview_columns
 
@@ -28,6 +29,8 @@ def _thumb_url(asset: models.Asset, storage: PosixStorage) -> str | None:
 async def _load_preview_map(
     db: AsyncSession,
     project_ids: list[UUID],
+    *,
+    user_id: UUID,
 ) -> dict[UUID, list[schemas.ProjectPreviewImage]]:
     if not project_ids:
         return {}
@@ -38,6 +41,7 @@ async def _load_preview_map(
             .join(models.Asset, models.Asset.id == models.ProjectAsset.asset_id)
             .where(
                 models.ProjectAsset.project_id.in_(project_ids),
+                models.ProjectAsset.user_id == user_id,
                 models.ProjectAsset.is_preview.is_(True),
             )
             .order_by(
@@ -75,6 +79,7 @@ async def _load_preview_map(
                 .join(models.MetadataState, models.MetadataState.link_id == models.ProjectAsset.id)
                 .where(
                     models.ProjectAsset.project_id.in_(fallback_targets),
+                    models.ProjectAsset.user_id == user_id,
                     models.MetadataState.picked.is_(True),
                 )
                 .order_by(
@@ -127,10 +132,12 @@ router = APIRouter(prefix="/v1/projects", tags=["projects"])
 async def create_project(
     body: schemas.ProjectCreate,
     db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
 ):
     logger.info("create_project: title=%r client=%r", body.title, body.client)
     # insert
     p = models.Project(
+        user_id=current_user.id,
         title=body.title,
         client=body.client,
         note=body.note,
@@ -163,6 +170,7 @@ async def create_project(
 @router.get("", response_model=list[schemas.ProjectOut])
 async def list_projects(
     db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
 ):
     logger.info("list_projects: fetching projects")
     await ensure_preview_columns(db)
@@ -174,15 +182,19 @@ async def list_projects(
             )
             .outerjoin(
                 models.ProjectAsset,
-                models.ProjectAsset.project_id == models.Project.id,
+                and_(
+                    models.ProjectAsset.project_id == models.Project.id,
+                    models.ProjectAsset.user_id == current_user.id,
+                ),
             )
+            .where(models.Project.user_id == current_user.id)
             .group_by(models.Project.id)
             .order_by(models.Project.created_at.desc())
         )
     ).all()
 
     project_ids = [proj.id for proj, _ in rows]
-    preview_map = await _load_preview_map(db, project_ids)
+    preview_map = await _load_preview_map(db, project_ids, user_id=current_user.id)
 
     response = [
         schemas.ProjectOut(
@@ -206,12 +218,16 @@ async def list_projects(
 async def get_project(
     project_id: UUID,
     db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
 ):
     logger.info("get_project: id=%s", project_id)
     await ensure_preview_columns(db)
     proj = (
         await db.execute(
-            select(models.Project).where(models.Project.id == project_id)
+            select(models.Project).where(
+                models.Project.id == project_id,
+                models.Project.user_id == current_user.id,
+            )
         )
     ).scalar_one_or_none()
     if not proj:
@@ -222,11 +238,14 @@ async def get_project(
         await db.execute(
             select(func.count())
             .select_from(models.ProjectAsset)
-            .where(models.ProjectAsset.project_id == proj.id)
+            .where(
+                models.ProjectAsset.project_id == proj.id,
+                models.ProjectAsset.user_id == current_user.id,
+            )
         )
     ).scalar_one()
 
-    preview_map = await _load_preview_map(db, [proj.id])
+    preview_map = await _load_preview_map(db, [proj.id], user_id=current_user.id)
 
     result = schemas.ProjectOut(
         id=proj.id,
@@ -248,12 +267,16 @@ async def update_project(
     project_id: UUID,
     body: schemas.ProjectUpdate,
     db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
 ):
     logger.info("update_project: id=%s", project_id)
     await ensure_preview_columns(db)
     proj = (
         await db.execute(
-            select(models.Project).where(models.Project.id == project_id)
+            select(models.Project).where(
+                models.Project.id == project_id,
+                models.Project.user_id == current_user.id,
+            )
         )
     ).scalar_one_or_none()
     if not proj:
@@ -285,11 +308,14 @@ async def update_project(
         await db.execute(
             select(func.count())
             .select_from(models.ProjectAsset)
-            .where(models.ProjectAsset.project_id == proj.id)
+            .where(
+                models.ProjectAsset.project_id == proj.id,
+                models.ProjectAsset.user_id == current_user.id,
+            )
         )
     ).scalar_one()
 
-    preview_map = await _load_preview_map(db, [proj.id])
+    preview_map = await _load_preview_map(db, [proj.id], user_id=current_user.id)
 
     result = schemas.ProjectOut(
         id=proj.id,
@@ -311,11 +337,15 @@ async def delete_project(
     project_id: UUID,
     body: schemas.ProjectDelete,
     db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
 ):
     logger.info("delete_project: id=%s delete_assets=%s", project_id, body.delete_assets)
     proj = (
         await db.execute(
-            select(models.Project).where(models.Project.id == project_id)
+            select(models.Project).where(
+                models.Project.id == project_id,
+                models.Project.user_id == current_user.id,
+            )
         )
     ).scalar_one_or_none()
     if not proj:
@@ -335,7 +365,8 @@ async def delete_project(
     asset_ids = (
         await db.execute(
             select(models.ProjectAsset.asset_id).where(
-                models.ProjectAsset.project_id == project_id
+                models.ProjectAsset.project_id == project_id,
+                models.ProjectAsset.user_id == current_user.id,
             )
         )
     ).scalars().all()
@@ -344,7 +375,10 @@ async def delete_project(
     if asset_ids:
         assets = (
             await db.execute(
-                select(models.Asset).where(models.Asset.id.in_(asset_ids))
+                select(models.Asset).where(
+                    models.Asset.id.in_(asset_ids),
+                    models.Asset.user_id == current_user.id,
+                )
             )
         ).scalars().all()
 
@@ -359,6 +393,7 @@ async def delete_project(
                 .where(
                     models.ProjectAsset.asset_id.in_(asset_ids),
                     models.ProjectAsset.project_id != project_id,
+                    models.ProjectAsset.user_id == current_user.id,
                 )
                 .group_by(models.ProjectAsset.asset_id)
             )
@@ -384,6 +419,7 @@ async def delete_project(
                             .where(
                                 models.Asset.sha256 == asset.sha256,
                                 models.Asset.id != asset.id,
+                                models.Asset.user_id == current_user.id,
                             )
                         )
                     ).scalar_one()

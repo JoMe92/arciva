@@ -16,12 +16,14 @@ from arq.connections import RedisSettings
 
 from .. import models, schemas
 from ..db import get_db
+from ..security import get_current_user
 from ..deps import get_settings
 from ..storage import PosixStorage
 from ..schema_utils import ensure_preview_columns
 from ..services.metadata_states import ensure_state_for_link
 from ..services.dedup import adopt_duplicate_asset
 from ..utils.assets import detect_asset_format
+from ..utils.projects import ensure_project_access
 
 logger = logging.getLogger("arciva.uploads")
 
@@ -39,14 +41,17 @@ class UploadSession(TypedDict, total=False):
 UPLOAD_TOKENS: dict[str, UploadSession] = {}
 
 @router.post("/projects/{project_id}/uploads/init", response_model=schemas.UploadInitOut, status_code=201)
-async def upload_init(project_id: UUID, body: schemas.UploadInitIn, db: AsyncSession = Depends(get_db)):
-    # Ensure project exists
-    proj = (await db.execute(select(models.Project).where(models.Project.id==project_id))).scalar_one_or_none()
-    if not proj:
-        raise HTTPException(404, "Project not found")
+async def upload_init(
+    project_id: UUID,
+    body: schemas.UploadInitIn,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    await ensure_project_access(db, project_id=project_id, user_id=current_user.id)
 
     asset_format = detect_asset_format(body.filename, body.mime)
     asset = models.Asset(
+        user_id=current_user.id,
         original_filename=body.filename,
         mime=body.mime,
         size_bytes=body.size_bytes,
@@ -58,7 +63,7 @@ async def upload_init(project_id: UUID, body: schemas.UploadInitIn, db: AsyncSes
 
     # Link to project now
     await ensure_preview_columns(db)
-    link = models.ProjectAsset(project_id=proj.id, asset_id=asset.id)
+    link = models.ProjectAsset(project_id=project_id, asset_id=asset.id, user_id=current_user.id)
     db.add(link)
     await db.flush()
     await ensure_state_for_link(db, link)
@@ -89,12 +94,24 @@ async def upload_file(
     request: Request,
     x_upload_token: str = Header(...),
     db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
 ):
     sid = str(asset_id)
     session = UPLOAD_TOKENS.get(sid)
     token = session.get("token") if session else None
     if not token or token != x_upload_token:
         raise HTTPException(401, "invalid upload token")
+
+    asset = (
+        await db.execute(
+            select(models.Asset).where(
+                models.Asset.id == asset_id,
+                models.Asset.user_id == current_user.id,
+            )
+        )
+    ).scalar_one_or_none()
+    if not asset:
+        raise HTTPException(404, "asset not found")
 
     storage = PosixStorage.from_env()
     temp_path: Path = storage.temp_path_for(sid)
@@ -123,6 +140,7 @@ async def upload_file(
             select(models.Asset).where(
                 models.Asset.sha256 == sha,
                 models.Asset.id != asset_id,
+                models.Asset.user_id == current_user.id,
             )
         )
     ).scalar_one_or_none()
@@ -134,14 +152,7 @@ async def upload_file(
         logger.info("upload_file: dedupe hit asset=%s existing=%s", asset_id, duplicate.id)
         return {"ok": True, "bytes": total, "sha256": sha, "duplicate": True}
 
-    asset_row = (
-        await db.execute(select(models.Asset).where(models.Asset.id == asset_id))
-    ).scalar_one_or_none()
-    if not asset_row:
-        temp_path.unlink(missing_ok=True)
-        raise HTTPException(404, "asset not found")
-
-    asset_row.sha256 = sha
+    asset.sha256 = sha
     try:
         await db.commit()
     except IntegrityError:
@@ -151,6 +162,7 @@ async def upload_file(
                 select(models.Asset).where(
                     models.Asset.sha256 == sha,
                     models.Asset.id != asset_id,
+                    models.Asset.user_id == current_user.id,
                 )
             )
         ).scalar_one_or_none()
@@ -177,7 +189,11 @@ async def upload_file(
     return {"ok": True, "bytes": total, "sha256": sha, "duplicate": False}
 
 @router.post("/uploads/complete")
-async def upload_complete(body: schemas.UploadCompleteIn, db: AsyncSession = Depends(get_db)):
+async def upload_complete(
+    body: schemas.UploadCompleteIn,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     sid = str(body.asset_id)
     session = UPLOAD_TOKENS.pop(sid, None)
     if not session:
@@ -186,13 +202,20 @@ async def upload_complete(body: schemas.UploadCompleteIn, db: AsyncSession = Dep
     asset = (await db.execute(select(models.Asset).where(models.Asset.id==body.asset_id))).scalar_one_or_none()
     if not asset:
         raise HTTPException(404, "asset not found")
+    if asset.user_id != current_user.id:
+        raise HTTPException(404, "asset not found")
 
     storage = PosixStorage.from_env()
     temp_path = storage.temp_path_for(sid)
     duplicate_id = session.get("duplicate_asset_id")
     if duplicate_id:
         existing = (
-            await db.execute(select(models.Asset).where(models.Asset.id == UUID(duplicate_id)))
+            await db.execute(
+                select(models.Asset).where(
+                    models.Asset.id == UUID(duplicate_id),
+                    models.Asset.user_id == current_user.id,
+                )
+            )
         ).scalar_one_or_none()
         if not existing:
             raise HTTPException(404, "duplicate asset missing")

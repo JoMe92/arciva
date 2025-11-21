@@ -11,6 +11,7 @@ from uuid import UUID
 from fastapi.responses import FileResponse
 from ..db import get_db
 from .. import models, schemas
+from ..security import get_current_user
 from ..storage import PosixStorage
 from ..imaging import read_exif
 from ..deps import get_settings
@@ -19,6 +20,7 @@ from ..services.pairing import sync_project_pairs
 from ..services.annotations import write_annotations_for_assets
 from ..services.metadata_states import ensure_state_for_link
 from ..services.links import link_asset_to_project
+from ..utils.projects import ensure_project_access
 
 
 def _warnings_from_text(data: str | None) -> list[str]:
@@ -152,13 +154,18 @@ async def _load_asset_items(
     db: AsyncSession,
     project_id: UUID,
     asset_ids: Sequence[UUID] | None = None,
+    *,
+    user_id: UUID,
 ) -> list[schemas.AssetListItem]:
     query = (
         select(models.Asset, models.ProjectAsset, models.ProjectAssetPair, models.MetadataState)
         .join(models.ProjectAsset, models.ProjectAsset.asset_id == models.Asset.id)
         .outerjoin(models.ProjectAssetPair, models.ProjectAssetPair.id == models.ProjectAsset.pair_id)
         .outerjoin(models.MetadataState, models.MetadataState.link_id == models.ProjectAsset.id)
-        .where(models.ProjectAsset.project_id == project_id)
+        .where(
+            models.ProjectAsset.project_id == project_id,
+            models.ProjectAsset.user_id == user_id,
+        )
         .order_by(desc(models.ProjectAsset.added_at))
     )
     if asset_ids:
@@ -177,6 +184,7 @@ async def _load_metadata_template(
     *,
     asset_id: UUID,
     project_id: UUID,
+    user_id: UUID,
 ) -> models.MetadataState | None:
     return (
         await db.execute(
@@ -184,6 +192,7 @@ async def _load_metadata_template(
             .join(models.ProjectAsset, models.ProjectAsset.id == models.MetadataState.link_id)
             .where(
                 models.ProjectAsset.project_id == project_id,
+                models.ProjectAsset.user_id == user_id,
                 models.ProjectAsset.asset_id == asset_id,
             )
             .order_by(models.MetadataState.updated_at.desc())
@@ -427,7 +436,13 @@ router = APIRouter(prefix="/v1", tags=["assets"])
 logger = logging.getLogger("arciva.assets")
 
 @router.get("/projects/{project_id}/assets", response_model=list[schemas.AssetListItem])
-async def list_assets(project_id: UUID, limit: int = 1000, db: AsyncSession = Depends(get_db)):
+async def list_assets(
+    project_id: UUID,
+    limit: int = 1000,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    await ensure_project_access(db, project_id=project_id, user_id=current_user.id)
     await ensure_asset_metadata_column(db)
     await ensure_preview_columns(db)
     await sync_project_pairs(db, project_id)
@@ -436,7 +451,10 @@ async def list_assets(project_id: UUID, limit: int = 1000, db: AsyncSession = De
         .join(models.ProjectAsset, models.ProjectAsset.asset_id == models.Asset.id)
         .outerjoin(models.ProjectAssetPair, models.ProjectAssetPair.id == models.ProjectAsset.pair_id)
         .outerjoin(models.MetadataState, models.MetadataState.link_id == models.ProjectAsset.id)
-        .where(models.ProjectAsset.project_id == project_id)
+        .where(
+            models.ProjectAsset.project_id == project_id,
+            models.ProjectAsset.user_id == current_user.id,
+        )
         .order_by(desc(models.ProjectAsset.added_at))
         .limit(limit)
     )
@@ -445,10 +463,20 @@ async def list_assets(project_id: UUID, limit: int = 1000, db: AsyncSession = De
     return [_serialize_asset_item(asset, project_asset, pair, storage, metadata) for asset, project_asset, pair, metadata in rows]
 
 @router.get("/assets/{asset_id}", response_model=schemas.AssetDetail)
-async def get_asset(asset_id: UUID, project_id: UUID | None = None, db: AsyncSession = Depends(get_db)):
+async def get_asset(
+    asset_id: UUID,
+    project_id: UUID | None = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     await ensure_asset_metadata_column(db)
     asset = (
-        await db.execute(select(models.Asset).where(models.Asset.id == asset_id))
+        await db.execute(
+            select(models.Asset).where(
+                models.Asset.id == asset_id,
+                models.Asset.user_id == current_user.id,
+            )
+        )
     ).scalar_one_or_none()
     if not asset:
         raise HTTPException(404, "asset not found")
@@ -461,6 +489,7 @@ async def get_asset(asset_id: UUID, project_id: UUID | None = None, db: AsyncSes
                 .where(
                     models.ProjectAsset.project_id == project_id,
                     models.ProjectAsset.asset_id == asset.id,
+                    models.ProjectAsset.user_id == current_user.id,
                 )
             )
         ).scalar_one_or_none()
@@ -479,16 +508,26 @@ async def get_asset(asset_id: UUID, project_id: UUID | None = None, db: AsyncSes
 
 
 @router.get("/assets/{asset_id}/projects", response_model=list[schemas.AssetProjectUsage])
-async def asset_project_usage(asset_id: UUID, db: AsyncSession = Depends(get_db)):
+async def asset_project_usage(
+    asset_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     asset = await db.get(models.Asset, asset_id)
     if not asset:
+        raise HTTPException(status_code=404, detail="asset not found")
+    if asset.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="asset not found")
 
     rows = (
         await db.execute(
             select(models.Project, models.ProjectAsset.updated_at)
             .join(models.ProjectAsset, models.ProjectAsset.project_id == models.Project.id)
-            .where(models.ProjectAsset.asset_id == asset_id)
+            .where(
+                models.ProjectAsset.asset_id == asset_id,
+                models.ProjectAsset.user_id == current_user.id,
+                models.Project.user_id == current_user.id,
+            )
             .order_by(models.ProjectAsset.updated_at.desc())
         )
     ).all()
@@ -508,10 +547,19 @@ async def asset_project_usage(asset_id: UUID, db: AsyncSession = Depends(get_db)
 
 
 @router.post("/assets/{asset_id}/reprocess", response_model=schemas.AssetDetail)
-async def reprocess_asset(asset_id: UUID, db: AsyncSession = Depends(get_db)):
+async def reprocess_asset(
+    asset_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     await ensure_asset_metadata_column(db)
     asset = (
-        await db.execute(select(models.Asset).where(models.Asset.id == asset_id))
+        await db.execute(
+            select(models.Asset).where(
+                models.Asset.id == asset_id,
+                models.Asset.user_id == current_user.id,
+            )
+        )
     ).scalar_one_or_none()
     if not asset:
         raise HTTPException(404, "asset not found")
@@ -552,20 +600,38 @@ async def reprocess_asset(asset_id: UUID, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/assets/{asset_id}/thumbs/256")
-async def get_thumb(asset_id: UUID, db: AsyncSession = Depends(get_db)):
-    return await get_derivative(asset_id, "thumb_256", db)
+async def get_thumb(
+    asset_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    return await get_derivative(asset_id, "thumb_256", db, current_user)
 
 
 @router.get("/assets/{asset_id}/preview")
-async def get_preview(asset_id: UUID, db: AsyncSession = Depends(get_db)):
-    return await get_derivative(asset_id, "preview_raw", db)
+async def get_preview(
+    asset_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    return await get_derivative(asset_id, "preview_raw", db, current_user)
 
 
 @router.get("/assets/{asset_id}/derivatives/{variant}")
-async def get_derivative(asset_id: UUID, variant: str, db: AsyncSession = Depends(get_db)):
+async def get_derivative(
+    asset_id: UUID,
+    variant: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     await ensure_asset_metadata_column(db)
     asset = (
-        await db.execute(select(models.Asset).where(models.Asset.id == asset_id))
+        await db.execute(
+            select(models.Asset).where(
+                models.Asset.id == asset_id,
+                models.Asset.user_id == current_user.id,
+            )
+        )
     ).scalar_one_or_none()
     if not asset or not asset.sha256:
         raise HTTPException(404, "asset not ready")
@@ -581,15 +647,11 @@ async def link_existing_assets(
     project_id: UUID,
     body: schemas.ProjectAssetsLinkIn,
     db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
 ):
+    await ensure_project_access(db, project_id=project_id, user_id=current_user.id)
     await ensure_asset_metadata_column(db)
     await ensure_preview_columns(db)
-    # validate project
-    proj = (
-        await db.execute(select(models.Project).where(models.Project.id == project_id))
-    ).scalar_one_or_none()
-    if not proj:
-        raise HTTPException(404, "project not found")
 
     # dedupe ids
     want_ids: list[UUID] = list(dict.fromkeys(body.asset_ids))
@@ -604,7 +666,12 @@ async def link_existing_assets(
 
     # fetch existing assets
     assets = (
-        await db.execute(select(models.Asset).where(models.Asset.id.in_(want_ids)))
+        await db.execute(
+            select(models.Asset).where(
+                models.Asset.id.in_(want_ids),
+                models.Asset.user_id == current_user.id,
+            )
+        )
     ).scalars().all()
     found_ids = {a.id for a in assets}
     missing = [aid for aid in want_ids if aid not in found_ids]
@@ -625,7 +692,13 @@ async def link_existing_assets(
         inherit_source = inherit_map.get(a.id)
         template = None
         if inherit_source:
-            template = await _load_metadata_template(db, asset_id=a.id, project_id=inherit_source)
+            await ensure_project_access(db, project_id=inherit_source, user_id=current_user.id)
+            template = await _load_metadata_template(
+                db,
+                asset_id=a.id,
+                project_id=inherit_source,
+                user_id=current_user.id,
+            )
             if not template:
                 logger.warning(
                     "link_existing_assets: inheritance template missing asset=%s source_project=%s",
@@ -636,6 +709,7 @@ async def link_existing_assets(
             db,
             project_id=project_id,
             asset=a,
+            user_id=current_user.id,
             metadata_template=template,
             source_project_id=inherit_source,
         )
@@ -664,7 +738,8 @@ async def link_existing_assets(
             count = (
                 await db.execute(
                     select(func.count()).select_from(models.ProjectAsset).where(
-                        models.ProjectAsset.asset_id == a.id
+                        models.ProjectAsset.asset_id == a.id,
+                        models.ProjectAsset.user_id == current_user.id,
                     )
                 )
             ).scalar_one()
@@ -672,7 +747,7 @@ async def link_existing_assets(
         await db.commit()
 
     await sync_project_pairs(db, project_id)
-    ordered_items = await _load_asset_items(db, project_id, want_ids)
+    ordered_items = await _load_asset_items(db, project_id, want_ids, user_id=current_user.id)
     logger.info(
         "link_existing_assets: project=%s response_items=%s",
         project_id,
@@ -686,10 +761,12 @@ async def apply_asset_interactions(
     project_id: UUID,
     body: schemas.AssetInteractionUpdate,
     db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
 ):
     if not body.asset_ids:
         raise HTTPException(400, "asset_ids required")
 
+    await ensure_project_access(db, project_id=project_id, user_id=current_user.id)
     await ensure_asset_metadata_column(db)
     await ensure_preview_columns(db)
     await sync_project_pairs(db, project_id)
@@ -703,6 +780,7 @@ async def apply_asset_interactions(
         .where(
             models.ProjectAsset.project_id == project_id,
             models.ProjectAsset.asset_id.in_(base_ids),
+            models.ProjectAsset.user_id == current_user.id,
         )
     )
     rows = (await db.execute(query)).all()
@@ -730,6 +808,7 @@ async def apply_asset_interactions(
                 .where(
                     models.ProjectAsset.project_id == project_id,
                     models.ProjectAsset.asset_id.in_(missing_pairs),
+                    models.ProjectAsset.user_id == current_user.id,
                 )
             )
         ).all()
@@ -787,7 +866,7 @@ async def apply_asset_interactions(
             ordered_ids.append(aid)
             seen.add(aid)
 
-    items = await _load_asset_items(db, project_id, ordered_ids)
+    items = await _load_asset_items(db, project_id, ordered_ids, user_id=current_user.id)
     return schemas.AssetInteractionUpdateOut(items=items)
 
 
@@ -797,7 +876,9 @@ async def update_preview_flag(
     asset_id: UUID,
     body: schemas.ProjectAssetPreviewUpdate,
     db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
 ):
+    await ensure_project_access(db, project_id=project_id, user_id=current_user.id)
     await ensure_asset_metadata_column(db)
     await ensure_preview_columns(db)
     link = (
@@ -806,6 +887,7 @@ async def update_preview_flag(
             .where(
                 models.ProjectAsset.project_id == project_id,
                 models.ProjectAsset.asset_id == asset_id,
+                models.ProjectAsset.user_id == current_user.id,
             )
         )
     ).scalar_one_or_none()
@@ -813,7 +895,12 @@ async def update_preview_flag(
         raise HTTPException(404, "asset not linked to project")
 
     asset = (
-        await db.execute(select(models.Asset).where(models.Asset.id == asset_id))
+        await db.execute(
+            select(models.Asset).where(
+                models.Asset.id == asset_id,
+                models.Asset.user_id == current_user.id,
+            )
+        )
     ).scalar_one_or_none()
     if not asset:
         raise HTTPException(404, "asset not found")
@@ -824,6 +911,7 @@ async def update_preview_flag(
             .where(
                 models.ProjectAsset.project_id == project_id,
                 models.ProjectAsset.is_preview.is_(True),
+                models.ProjectAsset.user_id == current_user.id,
             )
             .order_by(
                 models.ProjectAsset.preview_order.asc().nulls_last(),
@@ -898,5 +986,12 @@ async def update_preview_flag(
             )
         ).scalar_one_or_none()
 
+    metadata = (
+        await db.execute(
+            select(models.MetadataState).where(models.MetadataState.link_id == link.id)
+        )
+    ).scalar_one_or_none()
+    if metadata is None:
+        metadata = await ensure_state_for_link(db, link)
     storage = PosixStorage.from_env()
-    return _serialize_asset_item(asset, link, pair, storage)
+    return _serialize_asset_item(asset, link, pair, storage, metadata)

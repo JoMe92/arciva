@@ -42,8 +42,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(`Failed to resolve API path for ${path}`)
   }
   const res = await fetch(url, {
-    headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
+    credentials: 'include',
     ...init,
+    headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
   })
 
   if (!res.ok) {

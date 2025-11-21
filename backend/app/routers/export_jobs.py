@@ -11,8 +11,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .. import models, schemas
 from ..db import get_db
+from ..security import get_current_user
 from ..services.export_jobs import process_export_job, cleanup_export_jobs
 from ..storage import PosixStorage
+from ..utils.projects import ensure_project_access
 
 logger = logging.getLogger("arciva.export_jobs")
 
@@ -59,10 +61,9 @@ async def start_export_job(
     body: schemas.ExportJobCreate,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
 ):
-    project = await db.get(models.Project, body.project_id)
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    await ensure_project_access(db, project_id=body.project_id, user_id=current_user.id)
     photo_ids = list(dict.fromkeys(body.photo_ids))
     rows = (
         await db.execute(
@@ -70,6 +71,7 @@ async def start_export_job(
             .where(
                 models.ProjectAsset.project_id == body.project_id,
                 models.ProjectAsset.asset_id.in_(photo_ids),
+                models.ProjectAsset.user_id == current_user.id,
             )
         )
     ).scalars().all()
@@ -78,6 +80,7 @@ async def start_export_job(
     if missing:
         raise HTTPException(status_code=400, detail=f"Photo(s) not part of project: {missing}")
     job = models.ExportJob(
+        user_id=current_user.id,
         project_id=body.project_id,
         photo_ids=[str(pid) for pid in body.photo_ids],
         settings=body.settings.model_dump(),
@@ -98,9 +101,16 @@ async def start_export_job(
 async def list_export_jobs(
     project_id: Optional[UUID] = None,
     db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
 ):
-    stmt = select(models.ExportJob).order_by(models.ExportJob.created_at.desc()).limit(200)
+    stmt = (
+        select(models.ExportJob)
+        .where(models.ExportJob.user_id == current_user.id)
+        .order_by(models.ExportJob.created_at.desc())
+        .limit(200)
+    )
     if project_id:
+        await ensure_project_access(db, project_id=project_id, user_id=current_user.id)
         stmt = stmt.where(models.ExportJob.project_id == project_id)
     rows = (await db.execute(stmt)).scalars().all()
     return [_serialize_job(job) for job in rows]
@@ -110,8 +120,16 @@ async def list_export_jobs(
 async def get_export_job(
     job_id: UUID,
     db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
 ):
-    job = await db.get(models.ExportJob, job_id)
+    job = (
+        await db.execute(
+            select(models.ExportJob).where(
+                models.ExportJob.id == job_id,
+                models.ExportJob.user_id == current_user.id,
+            )
+        )
+    ).scalar_one_or_none()
     if not job:
         raise HTTPException(status_code=404, detail="Export job not found")
     return _serialize_job(job)
@@ -121,8 +139,16 @@ async def get_export_job(
 async def download_export_job(
     job_id: UUID,
     db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
 ):
-    job = await db.get(models.ExportJob, job_id)
+    job = (
+        await db.execute(
+            select(models.ExportJob).where(
+                models.ExportJob.id == job_id,
+                models.ExportJob.user_id == current_user.id,
+            )
+        )
+    ).scalar_one_or_none()
     if not job:
         raise HTTPException(status_code=404, detail="Export job not found")
     if job.status != models.ExportJobStatus.COMPLETED:

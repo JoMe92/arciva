@@ -1,202 +1,31 @@
-# Frontend-Setup – Schritt für Schritt (für Einsteiger)
+# Frontend setup (Vite + React + Tailwind v4)
 
-> Quick English summary: the guide below (in German) walks through installing Volta, Node LTS, and pnpm; explains the Vite/React/TypeScript/Tailwind stack; and shows how to run `pnpm install` + `pnpm dev` plus common component patterns. Use it as the canonical onboarding doc for frontend contributors.
+Quick onboarding for frontend contributors. Uses the same Pixi environment as the backend.
 
-Dieses README fasst **alle bisherigen Schritte** zusammen, damit du dein Frontend unter Ubuntu (Firefox + VS Code) problemlos starten und weiterentwickeln kannst. Es ist bewusst einfach gehalten und enthält alle wichtigen Befehle.
+## Prerequisites
+- Pixi installed (`curl -fsSL https://pixi.sh/install.sh | bash`)
+- API available on `http://localhost:8000` (from `pixi run dev-stack` or your own backend)
 
----
-
-## 1) Ziel & Stack
-
-Wir bauen ein modernes Frontend mit:
-
-- **Vite** (Dev-Server + Build, ultraschnelles HMR)
-- **React** + **TypeScript** (Komponenten, Typen)
-- **Tailwind CSS v4** (Styling per Utility-Klassen)
-- **TanStack Query** (Daten-Fetching, Cache, Lade-/Fehlerzustände)
-- (Optional) **framer-motion** (Animationen)
-- (Optional) **ESLint + Prettier** (sauberer Code)
-
-> Ergebnis: Du kannst sofort Komponenten bauen, live im Browser sehen und später problemlos ein Backend (z. B. FastAPI) anbinden.
-
----
-
-## 2) Voraussetzungen (einmalig)
-
-Ubuntu Terminal:
+## 1) Install + configure
 ```bash
-# Volta (verwaltet Node & pnpm) – optional, aber sehr praktisch
-curl https://get.volta.sh | bash
-source ~/.bashrc
-volta install node@lts
-volta install pnpm
+pixi install
+cp frontend/.env.example frontend/.env.local   # optional; SPA falls back to current host:8000
 ```
+`frontend/.env.local` overrides the API target (`VITE_API_BASE_URL`) if you hit a remote backend.
 
-VS Code: Extensions installieren
-- **ESLint**, **Prettier**, **Tailwind CSS IntelliSense**, **GitLens**, **Error Lens** (optional)
-
-Browser: **React Developer Tools** Add‑on (optional, aber hilfreich)
-
----
-
-## 3) Projekt-Struktur (vereinfacht)
-
-Wir nutzen den Ordner **`src/`** als Wurzel.
-
-```
-project-root/
-├─ index.html
-├─ vite.config.ts
-├─ tsconfig.json
-├─ postcss.config.js
-├─ pnpm-lock.yaml
-├─ .gitignore
-└─ src/
-   ├─ main.tsx          # Einstiegspunkt
-   ├─ index.css         # Tailwind v4 Entry
-   ├─ app/
-   │  └─ App.tsx        # App-Shell, Provider
-   └─ pages/
-      └─ ProjectIndex.tsx  # Beispiel-Seite
-```
-
-> Hinweis: Deine größeren Module/Komponenten kannst du später unter `src/components`, `src/features`, `src/pages` usw. hinzufügen.
-
----
-
-## 4) Was wurde installiert?
-
-**Runtime (dependencies)**
-- `react`, `react-dom` – UI-Bibliothek
-- `@tanstack/react-query` – Daten-Fetching/Cache/Status
-- `framer-motion` – (optional) Animationen
-
-**Dev (devDependencies)**
-- `vite` – Dev-Server/Build
-- `typescript`, `@types/react`, `@types/react-dom` – Typen/TS
-- `tailwindcss@4`, `@tailwindcss/postcss` – Styling + PostCSS-Plugin
-- `postcss`, `autoprefixer` – CSS-Processing (v4 nutzt nur @tailwindcss/postcss)
-- `eslint`, `@typescript-eslint/*`, `eslint-config-prettier`, `prettier` – Lint/Format
-
----
-
-## 5) Wichtige Konfig-Dateien
-
-**`index.html`** – lädt `/src/main.tsx`.
-
-**`vite.config.ts`** – minimal, mit `@vitejs/plugin-react`.
-
-**`tsconfig.json`** – strikte TS-Einstellungen.
-
-**`postcss.config.js`** (Tailwind v4):
-```js
-export default {
-  plugins: {
-    '@tailwindcss/postcss': {},
-  },
-}
-```
-
-**`src/index.css`** (Tailwind v4):
-```css
-@import "tailwindcss";
-```
-
-> Tailwind v4 **braucht keine** `tailwind.config.js`, außer du willst Themes/Tokens/Plugins ergänzen.
-
----
-
-## 6) Nützliche npm/pnpm-Skripte
-
-In `package.json`:
-
-```json
-{
-  "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
-    "preview": "vite preview",
-    "lint": "eslint .",
-    "format": "prettier -w ."
-  }
-}
-```
-
----
-
-## 7) Development starten (Browser-Ansicht)
-
-Im Projekt-Root:
+## 2) Run
 ```bash
-pnpm install     # Abhängigkeiten installieren
-pnpm run dev     # Dev-Server starten (HMR)
+pixi run dev-frontend   # serves on http://localhost:5173
 ```
+- Builds: `pixi run build-frontend`
+- Lint: `pixi run lint-frontend`
 
-Dann **http://localhost:5173** in Firefox öffnen.  
-Änderungen an Dateien siehst du sofort (Hot Module Replacement).
+## 3) Stack + patterns
+- Vite dev server with React + TypeScript
+- Tailwind v4 (no config file required)
+- TanStack Query for data fetching; see `src/features` for usage patterns
 
----
-
-## 8) Häufige Aufgaben
-
-### Neue Komponente anlegen
-```
-src/components/Button.tsx
-```
-```tsx
-import React from 'react'
-
-type Props = React.ButtonHTMLAttributes<HTMLButtonElement> & { loading?: boolean }
-export default function Button({ loading, children, ...rest }: Props) {
-  return (
-    <button
-      {...rest}
-      className="inline-flex items-center gap-2 rounded-xl px-4 py-2 border bg-white hover:shadow focus:outline-none focus-visible:ring"
-      aria-busy={loading || undefined}
-    >
-      {loading ? '…' : children}
-    </button>
-  )
-}
-```
-
-### Seite hinzufügen
-```
-src/pages/Dashboard.tsx
-```
-```tsx
-export default function Dashboard() {
-  return <div className="p-6">Dashboard</div>
-}
-```
-
-### Daten laden mit TanStack Query
-```tsx
-import { useQuery } from '@tanstack/react-query'
-
-function Todos() {
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ['todos'],
-    queryFn: async () => {
-      const r = await fetch('/api/todos')
-      if (!r.ok) throw new Error('Network error')
-      return r.json() as Promise<{ id:number; title:string }[]>
-    },
-  })
-
-  if (isLoading) return <p className="p-4">Lade…</p>
-  if (isError) return <p className="p-4 text-red-600">Fehler</p>
-  if (!data?.length) return <p className="p-4 opacity-70">Keine Einträge.</p>
-
-  return (
-    <ul className="p-4 grid gap-2">
-      {data.map(t => <li key={t.id} className="rounded border bg-white p-3">{t.title}</li>)}
-    </ul>
-  )
-}
-```
-
----
+If you need HTTPS locally, set `DEV_SERVER_HTTPS=true` and point `DEV_SERVER_HTTPS_KEY/CERT` at your certs in `frontend/.env.local`.
 
 ## 9) Git & `.gitignore`
 

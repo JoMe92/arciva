@@ -1,6 +1,6 @@
-# Photo App — Architecture (arc42-lite)
+# Arciva — Architecture (arc42-lite)
 
-> Scope: MVP backend to support **Projects**, **uploads**, **ingest**, and **cross-project import**. Stack: FastAPI (async), PostgreSQL, Redis + ARQ/RQ, Object Storage (MinIO/S3) or POSIX via adapter, React frontend. No Docker for now.
+> Scope: Alpha release that ships a FastAPI API + ingest worker, React SPA, PostgreSQL, Redis/ARQ, and POSIX media storage (volumes). Default packaging is Docker/Compose; the API also serves the built SPA.
 
 ---
 
@@ -19,9 +19,9 @@
 ---
 
 ## 2. Constraints
-- Linux-first, no Docker initially. Containers later.
-- Backend: FastAPI (async), Python 3.11+. DB: PostgreSQL. Queue: Redis. Storage: MinIO (S3 API) or POSIX via adapter.
-- Single developer initially; simple auth acceptable at MVP.
+- Linux-first and containerised: Docker/Compose for deploys; Pixi + Docker for local dev.
+- Backend: FastAPI (async), Python 3.11+. DB: PostgreSQL (SQLite supported for dev/single-node). Queue: Redis (ARQ worker). Storage: POSIX path/volume by default; S3/MinIO adapter on the roadmap.
+- Small team; auth is basic email/password with session cookies.
 
 ---
 
@@ -66,8 +66,8 @@
 
 ---
 
-## 7. Deployment View (local, no Docker)
-- API & Worker run as separate local processes (same repo). PostgreSQL/Redis/MinIO run as local services. POSIX mode uses directories instead of MinIO.
+## 7. Deployment View (Docker/Compose)
+- Compose brings up `app` (API + bundled SPA), `worker`, `postgres`, and `redis`. Media/logs/db live on named volumes. For dev, Pixi scripts can start the same topology or run services directly on the host (SQLite + POSIX storage by default).
 
 ---
 

@@ -1,0 +1,52 @@
+name: Docker Build Check
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build frontend image (no push)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Generate Dockerfile
+        run: |
+          cat <<'DOCKER' > Dockerfile
+          FROM node:20-alpine AS builder
+          WORKDIR /app
+          ARG FRONTEND_DIR=frontend
+          COPY ${FRONTEND_DIR}/package*.json ./
+          RUN npm ci
+          COPY ${FRONTEND_DIR} .
+          RUN npm run build
+
+          FROM nginx:1.25-alpine
+          COPY --from=builder /app/dist /usr/share/nginx/html
+          EXPOSE 80
+          CMD ["nginx", "-g", "daemon off;"]
+          DOCKER
+
+      - name: Build image (no push)
+        uses: docker/build-push-action@v5
+        with:
+          context: frontend
+          file: Dockerfile
+          push: false
+          load: true
+          tags: arciva-frontend:ci-check
+          build-args: |
+            FRONTEND_DIR=frontend

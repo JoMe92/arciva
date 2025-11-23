@@ -187,6 +187,7 @@ export function TopBar({
   onOpenExport,
   onOpenSettings,
   layout = 'desktop',
+  accountControl,
 }: {
   projectName: string
   onBack: () => void
@@ -208,6 +209,7 @@ export function TopBar({
   onOpenExport: () => void
   onOpenSettings: () => void
   layout?: 'desktop' | 'mobile'
+  accountControl?: React.ReactNode
 }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(projectName)
@@ -397,11 +399,11 @@ export function TopBar({
               aria-expanded={filtersOpen}
               aria-controls={FILTERS_DIALOG_ID}
               title={filterLabel}
-            >
-              <FilterIcon className="h-5 w-5" aria-hidden="true" />
-              {filterCount ? <span className="absolute -top-1 -right-1 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[var(--text,#1F1E1B)] px-1 text-[10px] font-semibold text-[var(--surface,#FFFFFF)]">{filterCount}</span> : null}
-              <span className="sr-only">{filterLabel}</span>
-            </button>
+          >
+            <FilterIcon className="h-5 w-5" aria-hidden="true" />
+            {filterCount ? <span className="absolute -top-1 -right-1 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[var(--text,#1F1E1B)] px-1 text-[10px] font-semibold text-[var(--surface,#FFFFFF)]">{filterCount}</span> : null}
+            <span className="sr-only">{filterLabel}</span>
+          </button>
             <button
               type="button"
               onClick={() => onToggleStackPairs(!stackPairsEnabled)}
@@ -416,6 +418,7 @@ export function TopBar({
               <span className="sr-only">{stackPairsEnabled ? 'Disable JPEG+RAW stacking' : 'Enable JPEG+RAW stacking'}</span>
             </button>
             <ProjectSettingsButton onClick={onOpenSettings} label="Open application settings" title="Application settings" />
+            {accountControl ? <div className="flex items-center">{accountControl}</div> : null}
           </div>
         </div>
         {filtersOpen ? (
@@ -619,6 +622,7 @@ export function TopBar({
             <span aria-hidden="true">⌨</span>
             <span>Shortcuts</span>
           </button>
+          {accountControl ? <div className="flex items-center">{accountControl}</div> : null}
         </div>
       </div>
       {filtersOpen ? (

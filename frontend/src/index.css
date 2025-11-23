@@ -187,6 +187,27 @@ body {
   border-radius: 9999px;
 }
 
+.auth-visual {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 18% 22%, rgba(165, 106, 74, 0.18), transparent 32%),
+    radial-gradient(circle at 76% 18%, rgba(74, 70, 63, 0.16), transparent 30%),
+    radial-gradient(circle at 82% 70%, rgba(107, 124, 122, 0.14), transparent 38%),
+    radial-gradient(120% 90% at 50% 100%, rgba(248, 240, 227, 0.68), rgba(217, 198, 170, 0.4));
+  pointer-events: none;
+}
+
+.auth-visual-veil {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(251, 247, 239, 0.72) 0%, rgba(251, 247, 239, 0.58) 50%, rgba(234, 223, 203, 0.4) 100%),
+    radial-gradient(circle at 30% 40%, rgba(255, 255, 255, 0.75), transparent 45%);
+  backdrop-filter: blur(6px);
+  pointer-events: none;
+}
+
 .install-hint {
   position: fixed;
   right: 1.25rem;

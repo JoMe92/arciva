@@ -1,7 +1,7 @@
 import React from 'react'
 
 /**
- * Colour tokens used by the Arciva \"Stone Trail\" pebble mark. Each token mirrors
+ * Colour tokens used by the Archiver \"Stone Trail\" pebble mark. Each token mirrors
  * a CSS custom property so the icon automatically adapts to the active theme.
  */
 const TOKENS = {
@@ -19,13 +19,13 @@ export interface StoneTrailIconProps {
 }
 
 /**
- * Renders the Arciva master mark: three ascending pebbles inspired by Stone Trail.
+ * Renders the Archiver master mark: three ascending pebbles inspired by Stone Trail.
  * The SVG is resolution independent and honours the current theme tokens.
  */
 export const StoneTrailIcon: React.FC<StoneTrailIconProps> = ({
   size = 32,
   className = '',
-  title = 'Arciva',
+  title = 'Archiver',
 }) => {
   return (
     <svg

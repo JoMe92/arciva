@@ -30,14 +30,14 @@ type StoneTrailLogoProps = {
 }
 
 /**
- * Displays the Arciva master logo (three pebbles inside a ring) paired
- * with the Arciva wordmark and a supporting slogan. This view is static
+ * Displays the Archiver master logo (three pebbles inside a ring) paired
+ * with the Archiver wordmark and a supporting slogan. This view is static
  * per the product specification—no hover or pointer affordances.
  */
 export function StoneTrailLogo({
   className = '',
-  title = 'Arciva',
-  slogan = 'Organize once. Find forever.',
+  title = 'Archiver',
+  slogan = 'Archiver organize once, find forever.',
   showLabel = true,
   mode,
   onToggleTheme,

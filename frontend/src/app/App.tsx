@@ -9,7 +9,6 @@ import PwaInstallPrompt from '../components/PwaInstallPrompt'
 import { AuthProvider, useAuth } from '../features/auth/AuthContext'
 import AuthGate from '../features/auth/AuthGate'
 import Splash from '../components/Splash'
-import UserMenu from '../features/auth/UserMenu'
 
 const AppRoutes: React.FC = () => (
   <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
@@ -35,7 +34,6 @@ const ProtectedApp: React.FC = () => {
 
   return (
     <BulkExportProvider>
-      <UserMenu />
       <AppRoutes />
       <BulkExportIndicator />
       <PwaInstallPrompt />

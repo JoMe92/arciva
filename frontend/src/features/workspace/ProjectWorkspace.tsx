@@ -72,6 +72,7 @@ import { useGeneralSettings } from '../../shared/settings/general'
 import { useExperimentalStorageSettings } from '../../shared/settings/experimentalImageStorage'
 import type { GeneralSettings } from '../../shared/settings/general'
 import { withBase } from '../../shared/api/base'
+import UserMenu from '../auth/UserMenu'
 
 const LEFT_MIN_WIDTH = 300
 const LEFT_MAX_WIDTH = 560
@@ -1770,6 +1771,7 @@ export default function ProjectWorkspace() {
         onOpenExport={() => setExportDialogOpen(true)}
         onOpenSettings={openGeneralSettings}
         layout={isMobileLayout ? 'mobile' : 'desktop'}
+        accountControl={<UserMenu variant={isMobileLayout ? 'compact' : 'full'} />}
       />
       {experimentalStorageWarning ? (
         <div className="mx-4 mt-3 rounded-3xl border border-red-200 bg-red-50 px-4 py-3 text-[13px] text-red-800">

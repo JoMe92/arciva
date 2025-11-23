@@ -17,6 +17,7 @@ import StateHint from '../components/StateHint'
 import CreateModal from '../components/modals/CreateModal'
 import ProjectSettingsDialog from '../components/modals/ProjectSettingsDialog'
 import GeneralSettingsDialog from '../components/modals/GeneralSettingsDialog'
+import UserMenu from '../features/auth/UserMenu'
 import { createProject, deleteProject, listProjects, type ProjectApiResponse } from '../shared/api/projects'
 import { updateAssetPreview } from '../shared/api/assets'
 import DeleteModal from '../components/modals/DeleteModal'
@@ -80,6 +81,7 @@ const AppBar: React.FC<{
             <kbd className="ml-2 hidden lg:inline text-[10px] text-[var(--text-muted,#6B645B)]">⌘/Ctrl+N</kbd>
           </button>
           <ProjectSettingsButton onClick={onOpenSettings} label="Open application settings" title="Application settings" />
+          <UserMenu />
         </div>
       </div>
     </div>
@@ -396,19 +398,22 @@ const MobileTopBar: React.FC<{
     <div className="fixed inset-x-0 top-0 z-50 border-b border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]/95 backdrop-blur">
       <div className="px-4 py-3 flex items-center justify-between gap-3">
         <StoneTrailLogo className="text-base" showLabel={false} mode={mode} onToggleTheme={toggle} />
-        <button
-          type="button"
-          onClick={onToggleFilters}
-          className={`inline-flex h-11 min-w-[120px] items-center justify-center rounded-full border px-4 text-[13px] font-medium transition ${
-            filterButtonActive
-              ? 'border-[var(--text,#1F1E1B)] text-[var(--text,#1F1E1B)]'
-              : 'border-[var(--border,#E1D3B9)] text-[var(--text-muted,#6B645B)] hover:border-[var(--text-muted,#6B645B)]'
-          }`}
-          aria-expanded={filtersOpen}
-          aria-controls={filterPanelId}
-        >
-          {filterCount ? `Filters (${filterCount})` : 'Filters'}
-        </button>
+        <div className="flex items-center gap-2">
+          <UserMenu variant="compact" />
+          <button
+            type="button"
+            onClick={onToggleFilters}
+            className={`inline-flex h-11 min-w-[120px] items-center justify-center rounded-full border px-4 text-[13px] font-medium transition ${
+              filterButtonActive
+                ? 'border-[var(--text,#1F1E1B)] text-[var(--text,#1F1E1B)]'
+                : 'border-[var(--border,#E1D3B9)] text-[var(--text-muted,#6B645B)] hover:border-[var(--text-muted,#6B645B)]'
+            }`}
+            aria-expanded={filtersOpen}
+            aria-controls={filterPanelId}
+          >
+            {filterCount ? `Filters (${filterCount})` : 'Filters'}
+          </button>
+        </div>
       </div>
     </div>
   )

@@ -118,6 +118,20 @@ Planned next: ratings/flags, quick filters, shareable previews, multi-user auth.
 
 Details with Linux commands: [docs/operations/local-infra.md](docs/operations/local-infra.md)
 
+## Docker Compose (one-image stack)
+1. Copy the template and set secrets:
+   ```bash
+   cp deploy/.env.arciva.example deploy/.env.arciva
+   # edit deploy/.env.arciva (SECRET_KEY, DATABASE_URL, media paths, etc.)
+   ```
+2. Build or pull the single Arciva image (set `ARCIVA_IMAGE` to a pulled tag if you prefer GHCR):
+   ```bash
+   docker compose -f deploy/docker-compose.arciva.yml --env-file deploy/.env.arciva up --build
+   ```
+   - API + static frontend live on http://localhost:8000 (configurable via `APP_PORT`).
+   - The worker runs from the same image (`command: worker`).
+3. Data lives in named volumes: `arciva_postgres` (DB), `arciva_media` (uploads/derivatives/exports), plus `arciva_logs` and `arciva_sqlite` for optional local DB/log retention.
+
 ---
 
 ## Configuration

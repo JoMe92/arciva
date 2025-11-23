@@ -1,0 +1,94 @@
+version: "3.9"
+
+services:
+  app:
+    image: ${ARCIVA_IMAGE:-ghcr.io/arciva/arciva:latest}
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    env_file:
+      - .env.arciva
+    environment:
+      APP_ENV: ${APP_ENV:-prod}
+      SECRET_KEY: ${SECRET_KEY}
+      DATABASE_URL: ${DATABASE_URL}
+      APP_DB_PATH: ${APP_DB_PATH:-/data/db/app.db}
+      APP_MEDIA_ROOT: ${APP_MEDIA_ROOT:-/data/media}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      ALLOWED_ORIGINS__0: ${ALLOWED_ORIGINS__0:-http://localhost:8000}
+      THUMB_SIZES: ${THUMB_SIZES:-[256]}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-1000}
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}
+      LOGS_DIR: ${LOGS_DIR:-/data/logs}
+      PORT: ${APP_PORT:-8000}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    volumes:
+      - arciva_media:/data/media
+      - arciva_logs:/data/logs
+      - arciva_sqlite:/data/db
+    restart: unless-stopped
+
+  worker:
+    image: ${ARCIVA_IMAGE:-ghcr.io/arciva/arciva:latest}
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    command: ["worker"]
+    env_file:
+      - .env.arciva
+    environment:
+      APP_ENV: ${APP_ENV:-prod}
+      SECRET_KEY: ${SECRET_KEY}
+      DATABASE_URL: ${DATABASE_URL}
+      APP_DB_PATH: ${APP_DB_PATH:-/data/db/app.db}
+      APP_MEDIA_ROOT: ${APP_MEDIA_ROOT:-/data/media}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      THUMB_SIZES: ${THUMB_SIZES:-[256]}
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}
+      LOGS_DIR: ${LOGS_DIR:-/data/logs}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - arciva_media:/data/media
+      - arciva_logs:/data/logs
+      - arciva_sqlite:/data/db
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    env_file:
+      - .env.arciva
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-arciva}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-arciva}
+      POSTGRES_DB: ${POSTGRES_DB:-arciva}
+    volumes:
+      - arciva_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-arciva}"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+
+volumes:
+  arciva_media:
+  arciva_logs:
+  arciva_sqlite:
+  arciva_postgres:

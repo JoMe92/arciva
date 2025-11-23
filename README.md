@@ -29,7 +29,7 @@ import secrets; print(secrets.token_hex(32))
 PY
 # paste into deploy/.env.arciva -> SECRET_KEY=...
 # set ARCIVA_IMAGE=arciva:local (or your GHCR tag)
-256
+
 # 2) Start the stack (repo root)
 docker compose -f deploy/docker-compose.arciva.yml --env-file deploy/.env.arciva up --build
 # add -d to detach
@@ -40,6 +40,11 @@ docker compose -f deploy/docker-compose.arciva.yml --env-file deploy/.env.arciva
 docker compose -f deploy/docker-compose.arciva.yml --env-file deploy/.env.arciva down
 ```
 More ops details: `docs/self-hosting.md`.
+
+### Troubleshooting (Docker)
+- Redis port already in use: remove the `ports` block under `redis` in `deploy/docker-compose.arciva.yml`, stop your host Redis, or remap e.g. `6380:6379`.
+- 401 after login on plain HTTP: cookies are `Secure` when `APP_ENV=prod`. For HTTP testing set `APP_ENV=dev` in `deploy/.env.arciva`, or serve via HTTPS when using `prod`.
+- Can’t reach from phone/LAN: open `http://<host-lan-ip>:8000` (not localhost) and ensure your firewall allows port 8000. CORS is already handled for the bundled SPA.
 
 ## Local development (Pixi + pnpm)
 ```bash

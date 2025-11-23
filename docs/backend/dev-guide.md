@@ -1,201 +1,55 @@
-# Backend Dev Guide (FastAPI + ARQ + POSIX)
+# Backend Dev Guide (FastAPI + worker)
 
-This guide explains how to **develop**, **run**, and **test** the Arciva backend locally, including the worker (Terminal B) and the frontend integration.
+Up-to-date instructions for hacking on the backend with the Pixi toolchain and the dev helper script (`dev.sh`).
 
-Arciva — Organize once. Find forever. Project-first photo management with smart cards, fast search, and rule-based archiving.
+## Prerequisites
+- Pixi installed (`curl -fsSL https://pixi.sh/install.sh | bash`)
+- Docker (optional) — `pixi run dev-stack` will spin up Postgres/Redis containers when needed
+- Media + DB paths in `.env` must be absolute
 
----
-
-## 1) Goals
-- Implement the MVP flow: Create project → upload file → async ingest → thumbnail visible.
-- Provide a repeatable dev loop with clear commands for API (Terminal A), Worker (Terminal B), and Frontend.
-
----
-
-## 2) Prerequisites
-- Linux, Python 3.11 (Conda/venv), Node LTS + pnpm
-- PostgreSQL running with database/user
-- Redis running (for ARQ)
-- POSIX storage folders exist
-- Repo root contains a **`.env`** (see [local infrastructure guide](../operations/local-infra.md))
-
----
-
-## 3) Environment variables (recap)
-Key variables in `.env` (repo root):
-```
-APP_DB_PATH=$HOME/arciva-data/db/app.db
-APP_MEDIA_ROOT=$HOME/arciva-data/media
-REDIS_URL=redis://127.0.0.1:6379/0
-ALLOWED_ORIGINS=["http://localhost:5173","http://127.0.0.1:5173"]
-THUMB_SIZES=[256]
-```
-
----
-
-## 4) One-time: Create tables
-From the repo root:
+## 1) Setup
 ```bash
-conda activate arciva
-python - <<'PY'
-import asyncio
-from backend.app.db import engine, Base
-async def go():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-asyncio.run(go())
-PY
+pixi install                              # Python, Node, pnpm, deps
+cp backend/.env.example .env             # backend settings
+cp frontend/.env.example frontend/.env.local
+pixi run setup                            # create DB schema + media folders in .dev/app-data
 ```
+Key env vars (see backend/.env.example):
+- `APP_DB_PATH`, `APP_MEDIA_ROOT`: absolute paths; defaults live under `.dev/app-data`
+- `REDIS_URL`: defaults to local Redis (dev stack injects `redis://127.0.0.1:<port>/0`)
+- `ALLOWED_ORIGINS__*`: CORS for Vite (`5173`) plus optional LAN auto-detection
 
-> For schema changes later, add Alembic migrations instead of re-running `create_all`.
+## 2) Run
+- Full stack (API + worker + Vite + Redis/Postgres if missing):
+  ```bash
+  pixi run dev-stack   # Ctrl+C to stop, pixi run down to clean up
+  ```
+- Backend only:
+  ```bash
+  pixi run dev-backend
+  ```
+- Worker only:
+  ```bash
+  PYTHONPATH=. pixi run python -m arq backend.worker.worker.WorkerSettings
+  ```
+- Tests: `pixi run test-backend`
 
----
+API: http://localhost:8000 (OpenAPI at `/docs`)  
+Media/logs: `.dev/app-data` and `.dev/logs`
 
-## 5) Run services
-### Terminal A — API
-```bash
-cd ~/dev/FilmCabinetFrontend
-conda activate arciva
-uvicorn backend.app.main:app --reload --port 8000
-```
-- Health: `http://127.0.0.1:8000/health` → `{ "ok": true }`
+## 3) Dev loop
+1. Edit code under `backend/app` or worker under `backend/worker`.
+2. `uvicorn --reload` auto-restarts; restart the worker after worker code changes.
+3. Re-run the ingest flow: create project → `uploads/init` → PUT bytes with `X-Upload-Token` → `uploads/complete` → fetch thumb `/v1/assets/{id}/thumbs/256`.
 
-### Terminal B — Worker (ARQ)
-```bash
-cd ~/dev/FilmCabinetFrontend
-conda activate arciva
-arq backend.worker.worker.WorkerSettings
-```
-- Needs Redis reachable on `REDIS_URL`.
+## 4) Common tweaks
+- Bigger uploads: `MAX_UPLOAD_MB=...`
+- More thumbnails: `THUMB_SIZES=[256,1024]`
+- Postgres instead of SQLite: set `DATABASE_URL` and keep `APP_MEDIA_ROOT` on a writable volume.
+- LAN testing: keep `ALLOW_LAN_FRONTEND_ORIGINS=true` and use phones/tablets on the same network.
 
-### Terminal C — Frontend (Vite)
-```bash
-cd ~/dev/FilmCabinetFrontend/frontend
-pnpm install
-pnpm dev
-```
-- Open `http://localhost:5173`.
-- Ensure the frontend uses `VITE_API_BASE_URL=http://127.0.0.1:8000`.
-
----
-
-## 6) Test the MVP flow (Terminal C or use Insomnia/Postman)
-Assumes you have an image, e.g. `/home/<you>/Pictures/demo.jpg`.
-
-```bash
-API="http://127.0.0.1:8000"
-FILE="/home/jome/dev/FilmCabinetFrontend/img/img_lev.jpg"
-SIZE=$(stat -c%s "$FILE")
-MIME=$(file --mime-type -b "$FILE")
-
-# 1) Project create
-curl -s -X POST "$API/v1/projects" \
-  -H 'Content-Type: application/json' \
-  -d '{ "title": "First Shoot 2", "client": "Acme", "note": "MVP demo" }'
-
-# copy the returned "id" → PROJECT
-5e597321-4420-4505-8ce0-11a49a69ea99
-
-# 2) Upload init
-curl -s -X POST "$API/v1/projects/$PROJECT/uploads/init" \
-  -H 'Content-Type: application/json' \
-  -d "{ \"filename\": \"$(basename \"$FILE\")\", \"size_bytes\": $SIZE, \"mime\": \"$MIME\" }"
-
-# copy "asset_id" → ASSET and "upload_token" → TOKEN
-ASSET=b0504927-da05-4f50-babf-6d2f744bd257
-TOKEN=9R3w6Zg1kj6YlnwRJPJyk6vBZtiE3gbu
-
-# 3) Upload file
-curl -s -X PUT "$API/v1/uploads/$ASSET" \
-  -H "X-Upload-Token: $TOKEN" \
-  --data-binary @"$FILE"
-
-# 4) Complete
-curl -s -X POST "$API/v1/uploads/complete" \
-  -H 'Content-Type: application/json' \
-  -d "{ \"asset_id\": \"$ASSET\" }"
-
-# 5) List assets
-curl -s "$API/v1/projects/$PROJECT/assets"
-
-# 6) Open thumb in browser
-# http://127.0.0.1:8000/v1/assets/$ASSET/thumbs/256
-```
-
-> Tip: Use Insomnia/Postman and save a collection. Keep a sample image in the repo (e.g. `samples/demo.jpg`) for repeatable tests.
-
-### Image Hub dedup checkpoints
-
-- The upload pipeline now computes a streaming SHA-256 before the worker ever runs. If that hash already exists the API links the prior Asset to the current project and skips the heavy ingest job entirely.
-- If the byte hash is unique the worker falls back to a normalized perceptual hash (format-aware) to catch cases where containers differ but pixels match. These collisions short-circuit in the worker by re-linking projects and deleting the redundant blob.
-- Per-project metadata (rating/label/pick/reject) now lives in `asset_metadata_states`, so re-importing an image will always get a fresh state that can optionally inherit from another project at import time.
-
----
-
-## 7) Developer workflow (tight loop)
-1. Edit backend code in `backend/app/...` or worker in `backend/worker/...`.
-2. API auto-reloads (`--reload`), worker needs manual restart if you change worker code.
-3. Re-run the curl/Insomnia scripts. Watch terminal logs for errors.
-4. For schema changes: create an Alembic migration (see “Migrations” below) and apply, then rerun tests.
-
----
-
-## 8) Common tasks
-- **Change allowed origins**: edit `ALLOWED_ORIGINS` in `.env` (JSON array or CSV).
-- **Increase upload limits**: `MAX_UPLOAD_MB` in `.env`.
-- **Add a new thumb size**: set `THUMB_SIZES=[128,256,512]` (worker must generate additional variants; code change needed in `imaging.py` and worker).
-- **Switch storage**: later replace POSIX with MinIO adapter; endpoints remain the same.
-
----
-
-## 9) Migrations
-￼
-￼
-￼
-￼
-￼
- (later)
-Add Alembic for schema evolution:
-- Init Alembic in `backend/migrations/`
-- Generate migration: `alembic revision --autogenerate -m "add foo"`
-- Apply: `alembic upgrade head`
-
-Keep production data safe: no destructive autogenerates without review.
-
----
-
-## 10) Debugging & troubleshooting
-- **Internal Server Error on POST /v1/projects**: ensure `await db.refresh(p)` after `flush()` in `create_project`.
-- **Worker cannot connect to Redis**: start Redis (`systemctl enable --now redis-server`), verify `redis-cli ping`.
-- **Thumb 404**: worker logs; check that `APP_MEDIA_ROOT` (and its `uploads/originals/derivatives` subfolders) exists & is writable; Pillow installed.
-- **CORS in browser**: `ALLOWED_ORIGINS` includes your frontend URL.
-- **Bad UUID in upload**: ensure you pass the real `asset_id` from the init step.
-
----
-
-## 11) Frontend integration notes
-- Use `VITE_API_BASE_URL` from `.env` to point the SPA to the backend.
-- For the upload: call `uploads/init` → then PUT file bytes with `X-Upload-Token` → then `uploads/complete` → poll assets.
-- Show placeholders while `status` is `PROCESSING`; swap to thumb when `READY`.
-
----
-
-## 12) Quality checks (MVP)
-- Unit: small tests for `imaging.sha256_file`, `make_thumb`.
-- Integration: upload flow E2E using a sample file; verify DB rows + files written.
-- Logs: include `asset_id` in worker logs.
-
----
-
-## 13) Commit & branching
-- Branch naming: `feat/backend-mvp-projects-upload`
-- Conventional Commits (e.g., `feat(backend): add uploads init/complete endpoints`).
-- Keep ADRs updated when making architectural changes.
-
----
-
-## 14) Next steps
-- Add deduplication at API level (reuse asset by sha256 if exists).
-- Implement multiple derivative sizes and lazy generation.
-- Switch to MinIO presigned uploads for parity with cloud.
+## 5) Troubleshooting
+- Config aborts on startup → check absolute paths for `APP_DB_PATH`/`APP_MEDIA_ROOT` and permissions.
+- Worker not processing → verify Redis (`redis-cli -u $REDIS_URL ping`) and check `.dev/logs/worker.err.log`.
+- CORS in browser → add your frontend origin as `ALLOWED_ORIGINS__N=...`.
 - Introduce Alembic and first real migration.

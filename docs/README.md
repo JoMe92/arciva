@@ -13,7 +13,8 @@ Use this index to jump to the guide you need.
 - [Frontend setup (Vite + React + Tailwind)](frontend/setup.md)
 
 ## Operations & Infrastructure
-- [Local infrastructure install (Linux, no Docker)](operations/local-infra.md)
+- [Self-hosting (Docker/Compose)](self-hosting.md)
+- [Local infrastructure (Linux, no Compose)](operations/local-infra.md)
 
 ## Contributing & Process
 - [Coding conventions & workflow](contributing/conventions.md)

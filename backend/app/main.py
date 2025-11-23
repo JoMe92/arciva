@@ -1,7 +1,10 @@
 import logging
+import os
 import time
+from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from starlette.responses import JSONResponse
 from .deps import get_settings
 from .routers import projects, uploads, assets, settings, hub, export_jobs, bulk_image_exports, auth
@@ -11,11 +14,25 @@ from .schema_utils import ensure_base_schema
 api_logger = logging.getLogger("arciva.api")
 startup_logger = logging.getLogger("arciva.startup")
 
+
+class SPAStaticFiles(StaticFiles):
+    async def get_response(self, path: str, scope):  # type: ignore[override]
+        response = await super().get_response(path, scope)
+        if response.status_code != 404 or scope.get("method") not in {"GET", "HEAD"}:
+            return response
+
+        headers = {k.decode().lower(): v.decode() for k, v in scope.get("headers", [])}
+        accept_header = headers.get("accept", "")
+        wants_html = "text/html" in accept_header or not accept_header
+        if not wants_html:
+            return response
+        return await super().get_response("index.html", scope)
+
 def create_app() -> FastAPI:
     s = get_settings()
     setup_logging(s.logs_dir)
     startup_logger.info("Starting Arciva backend (env=%s)", s.app_env)
-    startup_logger.info("Using database: %s", s.app_db_path)
+    startup_logger.info("Using database: %s", s.database_url or s.app_db_path)
     startup_logger.info("Using media root: %s", s.fs_root)
     startup_logger.info("CORS allow_origins: %s", ", ".join(s.allowed_origins) or "<none>")
     app = FastAPI(title="Arciva API", version="0.1.0")
@@ -73,6 +90,13 @@ def create_app() -> FastAPI:
     @app.get("/health")
     async def health():
         return {"ok": True}
+
+    frontend_dist = Path(os.environ.get("FRONTEND_DIST_DIR", "/app/frontend_dist"))
+    if frontend_dist.exists():
+        startup_logger.info("Serving frontend from %s", frontend_dist)
+        app.mount("/", SPAStaticFiles(directory=frontend_dist, html=True), name="frontend")
+    else:
+        startup_logger.info("FRONTEND_DIST_DIR not found (%s); skipping static frontend mount", frontend_dist)
 
     return app
 

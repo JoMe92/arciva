@@ -18,8 +18,9 @@ class Settings(BaseSettings):
     # Default to both localhost and loopback since browsers treat them as different origins.
     allowed_origins: List[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
 
-    app_db_path: str
-    app_media_root: str
+    # Database configuration (PostgreSQL via DATABASE_URL or SQLite fallback)
+    app_db_path: str = "/data/db/app.db"
+    app_media_root: str = "/data/media"
     database_url: str = ""
     redis_url: str = "redis://127.0.0.1:6379/0"
 
@@ -97,7 +98,7 @@ def _check_directory_access(path: Path, *, description: str) -> None:
 
 def _validate_db_path(raw: str) -> Path:
     if not raw:
-        _fail_config("APP_DB_PATH is required.")
+        _fail_config("APP_DB_PATH is required when DATABASE_URL is not set.")
     path = _normalize_path(raw, name="APP_DB_PATH")
     if path.suffix.lower() != ".db":
         _fail_config(f"APP_DB_PATH must point to a .db file (got {path.name}).")
@@ -141,24 +142,32 @@ def _subdir(root: Path, name: str) -> Path:
 @lru_cache
 def get_settings() -> Settings:
     s = Settings()
-    db_path = _validate_db_path(s.app_db_path)
     media_root = _validate_media_root(s.app_media_root)
-    _config_logger.info("Validated APP_DB_PATH -> %s", db_path)
     _config_logger.info("Validated APP_MEDIA_ROOT -> %s", media_root)
-    db_dir = db_path.parent.resolve()
-    media_resolved = media_root.resolve()
-    try:
-        db_dir.relative_to(media_resolved)
-    except ValueError:
-        pass
+
+    db_path: Path | None = None
+    db_url = (s.database_url or "").strip()
+    if db_url:
+        s.database_url = db_url
+        _config_logger.info("Using DATABASE_URL=%s", db_url)
     else:
-        _fail_config("APP_DB_PATH must not be located inside APP_MEDIA_ROOT; choose a separate directory.")
+        db_path = _validate_db_path(s.app_db_path)
+        _config_logger.info("Validated APP_DB_PATH -> %s", db_path)
+        db_dir = db_path.parent.resolve()
+        media_resolved = media_root.resolve()
+        try:
+            db_dir.relative_to(media_resolved)
+        except ValueError:
+            pass
+        else:
+            _fail_config("APP_DB_PATH must not be located inside APP_MEDIA_ROOT; choose a separate directory.")
+        s.app_db_path = str(db_path)
+        s.database_url = f"sqlite+aiosqlite:///{db_path}"
+
     uploads = _subdir(media_root, "uploads")
     originals = _subdir(media_root, "originals")
     derivatives = _subdir(media_root, "derivatives")
     exports = _subdir(media_root, "exports")
-    s.app_db_path = str(db_path)
-    s.database_url = f"sqlite+aiosqlite:///{db_path}"
     s.fs_root = str(media_root)
     s.fs_uploads_dir = str(uploads)
     s.fs_originals_dir = str(originals)

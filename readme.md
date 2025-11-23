@@ -118,19 +118,67 @@ Planned next: ratings/flags, quick filters, shareable previews, multi-user auth.
 
 Details with Linux commands: [docs/operations/local-infra.md](docs/operations/local-infra.md)
 
-## Docker Compose (one-image stack)
-1. Copy the template and set secrets:
+## Docker / Compose (one-image stack)
+
+### A) Build or pull the image
+- Build locally (current checkout):
+  ```bash
+  docker build -t arciva:local .
+  ```
+- Pull from GHCR (after a release):
+  ```bash
+  docker pull ghcr.io/<your-namespace>/arciva:0.1.0
+  docker tag ghcr.io/<your-namespace>/arciva:0.1.0 arciva:local
+  ```
+
+### B) Compose setup (recommended)
+1. Create and edit the env file:
    ```bash
    cp deploy/.env.arciva.example deploy/.env.arciva
-   # edit deploy/.env.arciva (SECRET_KEY, DATABASE_URL, media paths, etc.)
+   # Set SECRET_KEY (random), ARCIVA_IMAGE, APP_PORT, DATABASE_URL as needed
    ```
-2. Build or pull the single Arciva image (set `ARCIVA_IMAGE` to a pulled tag if you prefer GHCR):
+   Key variables:
+   - `ARCIVA_IMAGE`: which image to run (e.g. `arciva:local` or `ghcr.io/<ns>/arciva:latest`).
+   - `SECRET_KEY`: your own random value; otherwise anyone could forge tokens.
+   - `DATABASE_URL`: Postgres DSN for the app container (default matches the bundled Postgres service).
+   - `APP_DB_PATH` / `APP_MEDIA_ROOT`: in-container paths that are mounted to volumes.
+   - `APP_PORT`: host port for API + static frontend (default 8000).
+
+2. Start the stack:
    ```bash
    docker compose -f deploy/docker-compose.arciva.yml --env-file deploy/.env.arciva up --build
    ```
-   - API + static frontend live on http://localhost:8000 (configurable via `APP_PORT`).
-   - The worker runs from the same image (`command: worker`).
-3. Data lives in named volumes: `arciva_postgres` (DB), `arciva_media` (uploads/derivatives/exports), plus `arciva_logs` and `arciva_sqlite` for optional local DB/log retention.
+   - Services: `app` (API + SPA), `worker` (same image, command `worker`), `postgres`, `redis`.
+   - Data in volumes: `arciva_media`, `arciva_logs`, `arciva_postgres` (and `arciva_sqlite` if you use SQLite).
+   - Frontend/API: http://localhost:${APP_PORT:-8000}
+
+3. Background/stop:
+   ```bash
+   docker compose -f deploy/docker-compose.arciva.yml --env-file deploy/.env.arciva up -d
+   docker compose -f deploy/docker-compose.arciva.yml --env-file deploy/.env.arciva down
+   ```
+
+### C) Direct `docker run` (for testing with host paths)
+If you want to keep existing host paths (e.g. `APP_DB_PATH=/media/...`, `APP_MEDIA_ROOT=/media/...`) and use host Redis/Postgres, use host networking and bind mounts:
+```bash
+docker run --rm -it \
+  --env-file .env \
+  --network host \
+  -p 8000:8000 \
+  -v /media/jome/data/test/db:/media/jome/data/test/db \
+  -v /media/jome/data/test/media:/media/jome/data/test/media \
+  arciva:local api
+```
+Worker (separate):
+```bash
+docker run --rm -it \
+  --env-file .env \
+  --network host \
+  -v /media/jome/data/test/db:/media/jome/data/test/db \
+  -v /media/jome/data/test/media:/media/jome/data/test/media \
+  arciva:local worker
+```
+Note: `--network host` ensures `REDIS_URL=redis://127.0.0.1:6379/0` (and a local Postgres) is reachable.
 
 ---
 

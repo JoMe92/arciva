@@ -45,6 +45,7 @@ node_modules/
 # Builds & caches
 dist/
 .vite/
+dev-dist/
 .parcel-cache/
 .turbo/
 .next/
@@ -70,3 +71,22 @@ Thumbs.db
 
 # Misc Backups
 *.bak
+backend/__pycache__/*
+__pycache__/*
+
+backend/app/__pycache__/*
+backend/app/routers/__pycache__/*
+backend/worker/__pycache__/*
+img/*
+backend/tests/__pycache__/conftest*
+backend/tests/__pycache__/*
+backend/app/adapters/__pycache__/*
+
+backend/app/services/__pycache__/*
+backend/app/utils/__pycache__/image_formats.cpython-311.pyc
+backend/app/utils/__pycache__/*
+backend/app/utils/__pycache__/image_formats.cpython-313.pyc
+backend/logs/backend.log.1
+backend/logs/backend.log.2
+backend/logs/backend.log.1
+backend/logs/backend.log.2

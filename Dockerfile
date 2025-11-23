@@ -21,6 +21,7 @@ RUN apt-get update \
         libtiff5-dev \
         libglib2.0-0 \
         libgl1 \
+        exiftool \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

@@ -41,6 +41,17 @@ docker compose -f deploy/docker-compose.arciva.yml --env-file deploy/.env.arciva
 ```
 More ops details: `docs/self-hosting.md`.
 
+### Data directories (SQLite + media)
+- Defaults (as shipped): `/data/db/app.db`, `/data/media`, `/data/logs` inside the containers. When you leave the `volumes` in `deploy/docker-compose.arciva.yml` untouched, Docker stores them in named volumes (`arciva_sqlite`, `arciva_media`, `arciva_logs`).
+- Bind-mount to your host instead: set `APP_DB_PATH=/data/db/app.db`, `APP_MEDIA_ROOT=/data/media`, `LOGS_DIR=/data/logs` in `deploy/.env.arciva` (they already default to these paths), and replace the `volumes` entries for `app`/`worker` in `deploy/docker-compose.arciva.yml`, e.g.:
+  ```
+  volumes:
+    - /media/youruser/arciva/db:/data/db
+    - /media/youruser/arciva/media:/data/media
+    - /media/youruser/arciva/logs:/data/logs
+  ```
+  Make sure those host directories exist before `docker compose up`. With `DATABASE_URL` empty, the app/worker will share the same SQLite file at `/data/db/app.db`.
+
 ### Troubleshooting (Docker)
 - Redis port already in use: remove the `ports` block under `redis` in `deploy/docker-compose.arciva.yml`, stop your host Redis, or remap e.g. `6380:6379`.
 - 401 after login on plain HTTP: cookies are `Secure` when `APP_ENV=prod`. For HTTP testing set `APP_ENV=dev` in `deploy/.env.arciva`, or serve via HTTPS when using `prod`.

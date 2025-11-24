@@ -29,9 +29,9 @@ services:
     ports:
       - "${APP_PORT:-8000}:8000"
     volumes:
-      - arciva_media:/data/media
-      - arciva_logs:/data/logs
-      - arciva_sqlite:/data/db
+      - /media/jome/data/arciva/media:/data/media
+      - /media/jome/data/arciva/logs:/data/logs
+      - /media/jome/data/arciva/db:/data/db
     restart: unless-stopped
 
   worker:
@@ -58,9 +58,9 @@ services:
       redis:
         condition: service_started
     volumes:
-      - arciva_media:/data/media
-      - arciva_logs:/data/logs
-      - arciva_sqlite:/data/db
+      - /media/jome/data/arciva/media:/data/media
+      - /media/jome/data/arciva/logs:/data/logs
+      - /media/jome/data/arciva/db:/data/db
     restart: unless-stopped
 
   postgres:
@@ -86,7 +86,4 @@ services:
     restart: unless-stopped
 
 volumes:
-  arciva_media:
-  arciva_logs:
-  arciva_sqlite:
   arciva_postgres:

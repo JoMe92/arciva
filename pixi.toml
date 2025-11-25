@@ -11,6 +11,7 @@ pip = "*"
 nodejs = "20.*"
 pnpm = "9.*"
 exiftool = "*"
+act = ">=0.2.82,<0.3"
 
 [pypi-dependencies]
 fastapi = ">=0.103"

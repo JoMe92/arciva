@@ -9,6 +9,7 @@ environments:
       linux-64:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/_libgcc_mutex-0.1-conda_forge.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/linux-64/_openmp_mutex-4.5-2_gnu.tar.bz2
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/act-0.2.82-ha8f183a_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/bzip2-1.0.8-hda65f42_8.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/ca-certificates-2025.10.5-hbd8a1cb_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/exiftool-12.76-pl5321ha770c72_0.conda
@@ -86,6 +87,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/dc/9b/47798a6c91d8bdb567fe2698fe81e0c6b7cb7ef4d13da4114b41d239f65d/typing_inspection-0.4.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/ee/d9/d88e73ca598f4f6ff671fb5fde8a32925c2e08a637303a1d12883c7305fa/uvicorn-0.38.0-py3-none-any.whl
       osx-64:
+      - conda: https://conda.anaconda.org/conda-forge/osx-64/act-0.2.82-h990441c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/bzip2-1.0.8-h500dc9f_8.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/ca-certificates-2025.10.5-hbd8a1cb_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/exiftool-12.76-pl5321h694c41f_0.conda
@@ -175,6 +177,24 @@ packages:
   purls: []
   size: 23621
   timestamp: 1650670423406
+- conda: https://conda.anaconda.org/conda-forge/linux-64/act-0.2.82-ha8f183a_0.conda
+  sha256: c9cdd363a4aa2854b6e662ac172296e5e59f59e5dbf0c2bba7bcf8677b42f87a
+  md5: 1a5a7ad40991d0c85d48c1abe526b808
+  license: MIT
+  license_family: MIT
+  purls: []
+  size: 13379809
+  timestamp: 1759314781579
+- conda: https://conda.anaconda.org/conda-forge/osx-64/act-0.2.82-h990441c_0.conda
+  sha256: 5db1f562a64ef2d142e1bcbc07fc1377c045006419f174e29454efec3d34b062
+  md5: 87716cc448a2e3c184f573b521387ad8
+  constrains:
+  - __osx>=10.12
+  license: MIT
+  license_family: MIT
+  purls: []
+  size: 13849121
+  timestamp: 1759315553139
 - pypi: https://files.pythonhosted.org/packages/f5/10/6c25ed6de94c49f88a91fa5018cb4c0f3625f31d5be9f771ebe5cc7cd506/aiosqlite-0.21.0-py3-none-any.whl
   name: aiosqlite
   version: 0.21.0

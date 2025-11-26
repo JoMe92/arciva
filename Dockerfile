@@ -1,12 +1,13 @@
 # syntax=docker/dockerfile:1.7
 
 FROM node:20-bookworm-slim AS frontend-builder
-WORKDIR /frontend
+WORKDIR /workspace
 RUN corepack enable
-COPY frontend/package.json frontend/pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile
-COPY frontend .
-RUN pnpm build
+COPY pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY frontend/package.json frontend/
+RUN pnpm install --frozen-lockfile --filter ./frontend
+COPY frontend ./frontend
+RUN pnpm --filter ./frontend build
 
 FROM python:3.11-slim AS runtime
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -31,7 +32,7 @@ COPY backend/requirements.txt ./backend/requirements.txt
 RUN pip install --no-cache-dir -r backend/requirements.txt
 
 COPY backend ./backend
-COPY --from=frontend-builder /frontend/dist /app/frontend_dist
+COPY --from=frontend-builder /workspace/frontend/dist /app/frontend_dist
 COPY docker/entrypoint.sh /usr/local/bin/arciva-entrypoint.sh
 RUN chmod +x /usr/local/bin/arciva-entrypoint.sh \
     && mkdir -p /data/db /data/media /data/logs

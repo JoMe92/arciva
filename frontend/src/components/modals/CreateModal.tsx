@@ -1,13 +1,13 @@
-import React, { useEffect, useState } from 'react';
-import ModalShell from './ModalShell';
-import ProjectFields from './ProjectFields';
+import React, { useEffect, useState } from 'react'
+import ModalShell from './ModalShell'
+import ProjectFields from './ProjectFields'
 
 export interface CreateModalProps {
-  open: boolean;
-  onClose: () => void;
-  onCreate: (title: string, desc: string, client: string, tags: string[]) => void;
-  existingTags: string[];
-  busy?: boolean;
+  open: boolean
+  onClose: () => void
+  onCreate: (title: string, desc: string, client: string, tags: string[]) => void
+  existingTags: string[]
+  busy?: boolean
 }
 
 /**
@@ -15,52 +15,58 @@ export interface CreateModalProps {
  * client and tag information and passes the values to the onCreate
  * handler. The modal remains mounted only when open is true.
  */
-const CreateModal: React.FC<CreateModalProps> = ({ open, onClose, onCreate, existingTags, busy = false }) => {
-  const [title, setTitle] = useState('');
-  const [desc, setDesc] = useState('');
-  const [client, setClient] = useState('');
-  const [selTags, setSelTags] = useState<string[]>([]);
-  const [newTag, setNewTag] = useState('');
-  const [titleError, setTitleError] = useState<string | null>(null);
+const CreateModal: React.FC<CreateModalProps> = ({
+  open,
+  onClose,
+  onCreate,
+  existingTags,
+  busy = false,
+}) => {
+  const [title, setTitle] = useState('')
+  const [desc, setDesc] = useState('')
+  const [client, setClient] = useState('')
+  const [selTags, setSelTags] = useState<string[]>([])
+  const [newTag, setNewTag] = useState('')
+  const [titleError, setTitleError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!open) {
-      setTitle('');
-      setDesc('');
-      setClient('');
-      setSelTags([]);
-      setNewTag('');
-      setTitleError(null);
+      setTitle('')
+      setDesc('')
+      setClient('')
+      setSelTags([])
+      setNewTag('')
+      setTitleError(null)
     }
-  }, [open]);
+  }, [open])
 
-  if (!open) return null;
+  if (!open) return null
 
   const validateTitle = () => {
     if (!title.trim()) {
-      setTitleError('Project name is required.');
-      return false;
+      setTitleError('Project name is required.')
+      return false
     }
-    setTitleError(null);
-    return true;
-  };
+    setTitleError(null)
+    return true
+  }
 
   const handleTitleChange = (value: string) => {
     if (titleError) {
-      setTitleError(null);
+      setTitleError(null)
     }
-    setTitle(value);
-  };
+    setTitle(value)
+  }
 
   const submit = () => {
-    if (busy || !validateTitle()) return;
-    onCreate(title.trim(), desc.trim(), client.trim() || 'Unassigned', selTags);
-  };
+    if (busy || !validateTitle()) return
+    onCreate(title.trim(), desc.trim(), client.trim() || 'Unassigned', selTags)
+  }
 
   const handleSubmit = (event?: React.FormEvent) => {
-    event?.preventDefault();
-    submit();
-  };
+    event?.preventDefault()
+    submit()
+  }
 
   return (
     <ModalShell
@@ -88,11 +94,16 @@ const CreateModal: React.FC<CreateModalProps> = ({ open, onClose, onCreate, exis
         />
         <section>
           <header className="mb-3">
-            <p className="text-[12px] font-medium uppercase tracking-wide text-[var(--text-muted,#6B645B)]">Preview images</p>
-            <p className="text-[12px] text-[var(--text-muted,#6B645B)]">Pick images in the project workspace to feature them on the project card.</p>
+            <p className="text-[12px] font-medium uppercase tracking-wide text-[var(--text-muted,#6B645B)]">
+              Preview images
+            </p>
+            <p className="text-[12px] text-[var(--text-muted,#6B645B)]">
+              Pick images in the project workspace to feature them on the project card.
+            </p>
           </header>
           <div className="rounded-2xl border border-dashed border-[var(--border,#E1D3B9)] px-4 py-6 text-center text-[12px] text-[var(--text-muted,#6B645B)]">
-            Preview images will appear here once a project is created and images are selected inside its workspace.
+            Preview images will appear here once a project is created and images are selected inside
+            its workspace.
           </div>
         </section>
         <button type="submit" className="sr-only">
@@ -100,7 +111,7 @@ const CreateModal: React.FC<CreateModalProps> = ({ open, onClose, onCreate, exis
         </button>
       </form>
     </ModalShell>
-  );
-};
+  )
+}
 
-export default CreateModal;
+export default CreateModal

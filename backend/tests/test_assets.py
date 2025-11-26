@@ -8,7 +8,9 @@ from backend.app import models
 from backend.app.storage import PosixStorage
 
 
-async def _seed_asset(session, project_id: uuid.UUID, filename: str, mime: str) -> uuid.UUID:
+async def _seed_asset(
+    session, project_id: uuid.UUID, filename: str, mime: str
+) -> uuid.UUID:
     storage = PosixStorage.from_env()
     sha = uuid.uuid4().hex
     ext = Path(filename).suffix or ".bin"
@@ -16,6 +18,7 @@ async def _seed_asset(session, project_id: uuid.UUID, filename: str, mime: str) 
     original_path.write_bytes(b"data")
 
     asset = models.Asset(
+        user_id=uuid.UUID("12345678-1234-5678-1234-567812345678"),
         original_filename=filename,
         mime=mime,
         size_bytes=123,
@@ -26,7 +29,11 @@ async def _seed_asset(session, project_id: uuid.UUID, filename: str, mime: str) 
     )
     session.add(asset)
     await session.flush()
-    link = models.ProjectAsset(project_id=project_id, asset_id=asset.id)
+    link = models.ProjectAsset(
+        user_id=uuid.UUID("12345678-1234-5678-1234-567812345678"),
+        project_id=project_id,
+        asset_id=asset.id
+    )
     session.add(link)
     await session.flush()
     session.add(models.MetadataState(link_id=link.id))
@@ -79,7 +86,9 @@ async def test_interactions_mirror_pair(client, TestSessionLocal):
         "picked": True,
         "rejected": False,
     }
-    r = await client.post(f"/v1/projects/{proj_id}/assets/interactions:apply", json=body)
+    r = await client.post(
+        f"/v1/projects/{proj_id}/assets/interactions:apply", json=body
+    )
     assert r.status_code == 200
     payload = r.json()
     assert "items" in payload
@@ -93,12 +102,19 @@ async def test_interactions_mirror_pair(client, TestSessionLocal):
 
     async with TestSessionLocal() as session:
         rows = (
-            await session.execute(
-                select(models.MetadataState)
-                .join(models.ProjectAsset, models.ProjectAsset.id == models.MetadataState.link_id)
-                .where(models.ProjectAsset.asset_id.in_([jpeg_id, raw_id]))
+            (
+                await session.execute(
+                    select(models.MetadataState)
+                    .join(
+                        models.ProjectAsset,
+                        models.ProjectAsset.id == models.MetadataState.link_id,
+                    )
+                    .where(models.ProjectAsset.asset_id.in_([jpeg_id, raw_id]))
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         assert len(rows) == 2
         for row in rows:
             assert row.rating == 4

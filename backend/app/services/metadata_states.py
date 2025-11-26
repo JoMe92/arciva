@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from typing import Iterable, Sequence
+from typing import Iterable
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,7 +26,9 @@ def _clamp_rating(value: int | None) -> int:
     return max(0, min(int(value), 5))
 
 
-async def get_state_for_link(db: AsyncSession, link_id: uuid.UUID) -> models.MetadataState | None:
+async def get_state_for_link(
+    db: AsyncSession, link_id: uuid.UUID
+) -> models.MetadataState | None:
     return (
         await db.execute(
             select(models.MetadataState).where(models.MetadataState.link_id == link_id)
@@ -74,10 +76,16 @@ async def ensure_states_for_links(
     if not link_ids:
         return {}
     rows = (
-        await db.execute(
-            select(models.MetadataState).where(models.MetadataState.link_id.in_(link_ids))
+        (
+            await db.execute(
+                select(models.MetadataState).where(
+                    models.MetadataState.link_id.in_(link_ids)
+                )
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     by_id = {row.link_id: row for row in rows}
     missing = [link for link in links if link.id not in by_id]
     for link in missing:

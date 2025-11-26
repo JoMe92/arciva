@@ -151,7 +151,9 @@ function serializeFilters(filters?: ImageHubAssetFilters) {
   return JSON.stringify(payload)
 }
 
-export async function fetchImageHubProjects(params: FetchImageHubProjectParams = {}): Promise<ImageHubProjectListResponse> {
+export async function fetchImageHubProjects(
+  params: FetchImageHubProjectParams = {}
+): Promise<ImageHubProjectListResponse> {
   if (!legacyMode) {
     const search = buildQueryString({
       query: params.query,
@@ -173,7 +175,9 @@ export async function fetchImageHubProjects(params: FetchImageHubProjectParams =
   return legacyProjectsResponse(params)
 }
 
-export async function fetchImageHubAssets(params: FetchImageHubAssetsParams): Promise<ImageHubAssetsPage> {
+export async function fetchImageHubAssets(
+  params: FetchImageHubAssetsParams
+): Promise<ImageHubAssetsPage> {
   const filters = serializeFilters(params.filters)
   if (!legacyMode) {
     const search = buildQueryString({
@@ -203,13 +207,18 @@ export async function fetchImageHubAssets(params: FetchImageHubAssetsParams): Pr
   return legacyAssetsResponse(params)
 }
 
-export async function fetchImageHubAssetStatus(assetId: string, currentProjectId?: string | null): Promise<ImageHubAssetStatus> {
+export async function fetchImageHubAssetStatus(
+  assetId: string,
+  currentProjectId?: string | null
+): Promise<ImageHubAssetStatus> {
   if (!legacyMode) {
     const search = buildQueryString({
       asset_id: assetId,
       current_project_id: currentProjectId ?? undefined,
     })
-    const url = withBase(`/imagehub/asset-status${search.toString() ? `?${search.toString()}` : ''}`)
+    const url = withBase(
+      `/imagehub/asset-status${search.toString() ? `?${search.toString()}` : ''}`
+    )
     if (!url) throw new Error('Missing API base for ImageHub asset status endpoint')
     const res = await fetch(url, { credentials: 'include' })
     if (res.status === 404) {
@@ -240,7 +249,9 @@ async function fetchLegacyHubBundle(limit = LEGACY_FETCH_LIMIT): Promise<LegacyH
   return legacyCachePromise
 }
 
-async function legacyProjectsResponse(params: FetchImageHubProjectParams = {}): Promise<ImageHubProjectListResponse> {
+async function legacyProjectsResponse(
+  params: FetchImageHubProjectParams = {}
+): Promise<ImageHubProjectListResponse> {
   const bundle = await fetchLegacyHubBundle()
   let projects = bundle.projects.map<ImageHubProject>((project) => ({
     project_id: project.project_id,
@@ -265,7 +276,9 @@ async function legacyProjectsResponse(params: FetchImageHubProjectParams = {}): 
   return { projects: slice, next_cursor }
 }
 
-async function legacyAssetsResponse(params: FetchImageHubAssetsParams): Promise<ImageHubAssetsPage> {
+async function legacyAssetsResponse(
+  params: FetchImageHubAssetsParams
+): Promise<ImageHubAssetsPage> {
   const bundle = await fetchLegacyHubBundle()
   if (params.mode === 'project') {
     return legacyAssetsByProject(bundle, params)
@@ -273,7 +286,10 @@ async function legacyAssetsResponse(params: FetchImageHubAssetsParams): Promise<
   return legacyAssetsByDate(bundle, params)
 }
 
-function legacyAssetsByProject(bundle: LegacyHubAssetsResponse, params: FetchImageHubAssetsParams): ImageHubAssetsPage {
+function legacyAssetsByProject(
+  bundle: LegacyHubAssetsResponse,
+  params: FetchImageHubAssetsParams
+): ImageHubAssetsPage {
   if (!params.projectId) {
     return { assets: [], next_cursor: null }
   }
@@ -320,15 +336,19 @@ function legacyAssetsByProject(bundle: LegacyHubAssetsResponse, params: FetchIma
   }
 }
 
-function legacyAssetsByDate(bundle: LegacyHubAssetsResponse, params: FetchImageHubAssetsParams): ImageHubAssetsPage {
+function legacyAssetsByDate(
+  bundle: LegacyHubAssetsResponse,
+  params: FetchImageHubAssetsParams
+): ImageHubAssetsPage {
   const filters = params.filters
-  const filteredAssets = bundle.assets.filter((asset) => (
-    matchesTypeFilter(normalizeAssetType(asset.format), filters)
-    && matchesSearchFilter(filters, asset.original_filename)
-    && matchesDateRangeFilter(asset, filters)
-    && matchesAnyRatingFilter(asset, filters)
-    && matchesAnyLabelFilter(asset, filters)
-  ))
+  const filteredAssets = bundle.assets.filter(
+    (asset) =>
+      matchesTypeFilter(normalizeAssetType(asset.format), filters) &&
+      matchesSearchFilter(filters, asset.original_filename) &&
+      matchesDateRangeFilter(asset, filters) &&
+      matchesAnyRatingFilter(asset, filters) &&
+      matchesAnyLabelFilter(asset, filters)
+  )
 
   if (!params.year) {
     return { assets: [], buckets: buildDateBuckets(filteredAssets, 'year') }
@@ -337,12 +357,17 @@ function legacyAssetsByDate(bundle: LegacyHubAssetsResponse, params: FetchImageH
     return { assets: [], buckets: buildDateBuckets(filteredAssets, 'month', params.year) }
   }
   if (params.year && params.month && !params.day) {
-    return { assets: [], buckets: buildDateBuckets(filteredAssets, 'day', params.year, params.month) }
+    return {
+      assets: [],
+      buckets: buildDateBuckets(filteredAssets, 'day', params.year, params.month),
+    }
   }
 
   const offset = parseCursor(params.cursor)
   const limit = clampLimit(params.limit ?? (params.view === 'list' ? 200 : 100), 400)
-  const matchingAssets = filteredAssets.filter((asset) => assetMatchesExactDate(asset, params.year!, params.month!, params.day!))
+  const matchingAssets = filteredAssets.filter((asset) =>
+    assetMatchesExactDate(asset, params.year!, params.month!, params.day!)
+  )
 
   const enriched = matchingAssets.map<ImageHubAsset>((asset) => {
     const aggregate = aggregateMetadata(asset)
@@ -363,13 +388,18 @@ function legacyAssetsByDate(bundle: LegacyHubAssetsResponse, params: FetchImageH
     }
   })
 
-  enriched.sort((a, b) => new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime())
+  enriched.sort(
+    (a, b) => new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime()
+  )
   const slice = enriched.slice(offset, offset + limit)
   const next_cursor = offset + limit < enriched.length ? String(offset + limit) : null
   return { assets: slice, next_cursor }
 }
 
-async function legacyAssetStatus(assetId: string, currentProjectId?: string | null): Promise<ImageHubAssetStatus> {
+async function legacyAssetStatus(
+  assetId: string,
+  currentProjectId?: string | null
+): Promise<ImageHubAssetStatus> {
   const bundle = await fetchLegacyHubBundle()
   const asset = bundle.assets.find((item) => item.asset_id === assetId)
   if (!asset) {
@@ -377,7 +407,9 @@ async function legacyAssetStatus(assetId: string, currentProjectId?: string | nu
   }
   const projectIds = asset.projects.map((proj) => proj.project_id)
   const already_linked = currentProjectId ? projectIds.includes(currentProjectId) : false
-  const other_projects = currentProjectId ? projectIds.filter((id) => id !== currentProjectId) : projectIds
+  const other_projects = currentProjectId
+    ? projectIds.filter((id) => id !== currentProjectId)
+    : projectIds
   return { already_linked, other_projects }
 }
 
@@ -405,7 +437,10 @@ function matchesTypeFilter(type: ImageHubAssetType, filters?: ImageHubAssetFilte
   return filters.types.includes(type)
 }
 
-function matchesSearchFilter(filters: ImageHubAssetFilters | undefined, filename?: string | null): boolean {
+function matchesSearchFilter(
+  filters: ImageHubAssetFilters | undefined,
+  filename?: string | null
+): boolean {
   const term = filters?.search?.trim()
   if (!term) return true
   return (filename ?? '').toLowerCase().includes(term.toLowerCase())
@@ -433,13 +468,19 @@ function matchesDateRangeFilter(asset: LegacyHubAsset, filters?: ImageHubAssetFi
   return true
 }
 
-function matchesProjectRatingFilter(metadata: LegacyMetadataState | null | undefined, filters?: ImageHubAssetFilters): boolean {
+function matchesProjectRatingFilter(
+  metadata: LegacyMetadataState | null | undefined,
+  filters?: ImageHubAssetFilters
+): boolean {
   if (!filters?.ratings?.length) return true
   const threshold = filters.ratings[0]
   return (metadata?.rating ?? 0) >= threshold
 }
 
-function matchesProjectLabelFilter(metadata: LegacyMetadataState | null | undefined, filters?: ImageHubAssetFilters): boolean {
+function matchesProjectLabelFilter(
+  metadata: LegacyMetadataState | null | undefined,
+  filters?: ImageHubAssetFilters
+): boolean {
   if (!filters?.labels?.length) return true
   const required = filters.labels[0]
   const value = metadata?.color_label ?? 'None'
@@ -458,8 +499,16 @@ function matchesAnyLabelFilter(asset: LegacyHubAsset, filters?: ImageHubAssetFil
   return asset.projects.some((proj) => (proj.metadata_state?.color_label ?? 'None') === label)
 }
 
-function buildDateBuckets(assets: LegacyHubAsset[], level: 'year' | 'month' | 'day', year?: number, month?: number): ImageHubDateBucket[] {
-  const map = new Map<string, { key: string; year: number; month?: number; day?: number; label: string; asset_count: number }>()
+function buildDateBuckets(
+  assets: LegacyHubAsset[],
+  level: 'year' | 'month' | 'day',
+  year?: number,
+  month?: number
+): ImageHubDateBucket[] {
+  const map = new Map<
+    string,
+    { key: string; year: number; month?: number; day?: number; label: string; asset_count: number }
+  >()
   assets.forEach((asset) => {
     const parts = extractDateParts(asset)
     if (!parts) return
@@ -472,7 +521,12 @@ function buildDateBuckets(assets: LegacyHubAsset[], level: 'year' | 'month' | 'd
       return
     }
     if (level === 'year') {
-      map.set(bucketKey, { key: bucketKey, year: parts.year, label: String(parts.year), asset_count: 1 })
+      map.set(bucketKey, {
+        key: bucketKey,
+        year: parts.year,
+        label: String(parts.year),
+        asset_count: 1,
+      })
     } else if (level === 'month') {
       map.set(bucketKey, {
         key: bucketKey,
@@ -493,17 +547,21 @@ function buildDateBuckets(assets: LegacyHubAsset[], level: 'year' | 'month' | 'd
     }
   })
 
-  return Array.from(map.values()).sort((a, b) => b.key.localeCompare(a.key)).map((item) => ({
-    key: item.key,
-    year: item.year,
-    month: item.month,
-    day: item.day,
-    label: item.label,
-    asset_count: item.asset_count,
-  }))
+  return Array.from(map.values())
+    .sort((a, b) => b.key.localeCompare(a.key))
+    .map((item) => ({
+      key: item.key,
+      year: item.year,
+      month: item.month,
+      day: item.day,
+      label: item.label,
+      asset_count: item.asset_count,
+    }))
 }
 
-function extractDateParts(asset: LegacyHubAsset): { year: number; month: number; day: number } | null {
+function extractDateParts(
+  asset: LegacyHubAsset
+): { year: number; month: number; day: number } | null {
   const iso = asset.taken_at ?? asset.created_at
   if (!iso) return null
   const date = new Date(iso)
@@ -515,7 +573,10 @@ function extractDateParts(asset: LegacyHubAsset): { year: number; month: number;
   }
 }
 
-function buildBucketKey(parts: { year: number; month: number; day: number }, level: 'year' | 'month' | 'day') {
+function buildBucketKey(
+  parts: { year: number; month: number; day: number },
+  level: 'year' | 'month' | 'day'
+) {
   if (level === 'year') return `${parts.year}`
   if (level === 'month') return `${parts.year}-${String(parts.month).padStart(2, '0')}`
   return `${parts.year}-${String(parts.month).padStart(2, '0')}-${String(parts.day).padStart(2, '0')}`
@@ -526,16 +587,28 @@ function monthLabel(year: number, month: number) {
 }
 
 function dayLabel(year: number, month: number, day: number) {
-  return new Date(year, month - 1, day).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+  return new Date(year, month - 1, day).toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  })
 }
 
-function assetMatchesExactDate(asset: LegacyHubAsset, year: number, month: number, day: number): boolean {
+function assetMatchesExactDate(
+  asset: LegacyHubAsset,
+  year: number,
+  month: number,
+  day: number
+): boolean {
   const parts = extractDateParts(asset)
   if (!parts) return false
   return parts.year === year && parts.month === month && parts.day === day
 }
 
-function aggregateMetadata(asset: LegacyHubAsset): { rating?: number | null; label?: ColorLabelValue | null } {
+function aggregateMetadata(asset: LegacyHubAsset): {
+  rating?: number | null
+  label?: ColorLabelValue | null
+} {
   let rating: number | null = null
   let label: ColorLabelValue | null = null
   asset.projects.forEach((proj) => {

@@ -1,5 +1,10 @@
 import { useCallback, useState } from 'react'
-import type { ContactSheetFormat, ExportFileFormat, RawHandlingStrategy, ExportSizeMode } from '../../shared/api/exports'
+import type {
+  ContactSheetFormat,
+  ExportFileFormat,
+  RawHandlingStrategy,
+  ExportSizeMode,
+} from '../../shared/api/exports'
 
 const STORAGE_KEY = 'workspace-export-presets'
 
@@ -29,7 +34,11 @@ function readPresetsFromStorage(): ExportPreset[] {
     const parsed = JSON.parse(raw)
     if (!Array.isArray(parsed)) return []
     return parsed.filter((item): item is ExportPreset => {
-      return typeof item?.id === 'string' && typeof item?.name === 'string' && typeof item?.settings === 'object'
+      return (
+        typeof item?.id === 'string' &&
+        typeof item?.name === 'string' &&
+        typeof item?.settings === 'object'
+      )
     })
   } catch {
     return []
@@ -55,28 +64,25 @@ function makePresetId() {
 export function useExportPresets() {
   const [presets, setPresets] = useState<ExportPreset[]>(() => readPresetsFromStorage())
 
-  const addPreset = useCallback(
-    (name: string, snapshot: ExportSettingsSnapshot) => {
-      const trimmed = name.trim()
-      if (!trimmed) {
-        throw new Error('Preset name required')
-      }
-      const preset: ExportPreset = {
-        id: makePresetId(),
-        name: trimmed,
-        settings: snapshot,
-      }
-      setPresets((prev) => {
-        const canonical = prev.some((item) => item.name === preset.name)
-          ? prev.map((item) => (item.name === preset.name ? { ...preset, id: item.id } : item))
-          : [...prev, preset]
-        persistPresets(canonical)
-        return canonical
-      })
-      return preset
-    },
-    [],
-  )
+  const addPreset = useCallback((name: string, snapshot: ExportSettingsSnapshot) => {
+    const trimmed = name.trim()
+    if (!trimmed) {
+      throw new Error('Preset name required')
+    }
+    const preset: ExportPreset = {
+      id: makePresetId(),
+      name: trimmed,
+      settings: snapshot,
+    }
+    setPresets((prev) => {
+      const canonical = prev.some((item) => item.name === preset.name)
+        ? prev.map((item) => (item.name === preset.name ? { ...preset, id: item.id } : item))
+        : [...prev, preset]
+      persistPresets(canonical)
+      return canonical
+    })
+    return preset
+  }, [])
 
   return { presets, addPreset }
 }

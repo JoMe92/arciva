@@ -15,11 +15,7 @@ export const S = (n: number) => String(n)
  * Compute a Tailwind aspect ratio class from a project aspect value.
  */
 export function aspectClass(a: Project['aspect']): string {
-  return a === 'portrait'
-    ? 'aspect-[3/4]'
-    : a === 'landscape'
-    ? 'aspect-[16/9]'
-    : 'aspect-square'
+  return a === 'portrait' ? 'aspect-[3/4]' : a === 'landscape' ? 'aspect-[16/9]' : 'aspect-square'
 }
 
 export function aspectRatioValue(width?: number | null, height?: number | null): string | null {
@@ -123,7 +119,9 @@ export function projectFromApi(proj: ProjectApiResponse): Project {
   })()
 
   const description = proj.note ?? undefined
-  const normalizedTags = Array.isArray(proj.tags) ? proj.tags.filter((tag): tag is string => typeof tag === 'string') : []
+  const normalizedTags = Array.isArray(proj.tags)
+    ? proj.tags.filter((tag): tag is string => typeof tag === 'string')
+    : []
 
   return {
     id: proj.id,

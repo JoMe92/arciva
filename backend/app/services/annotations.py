@@ -96,7 +96,9 @@ def _render_sidecar_xml(state: models.MetadataState) -> str:
     ).strip()
 
 
-def _write_with_exiftool(path: Path, state: models.MetadataState, *, sidecar: Path | None) -> bool:
+def _write_with_exiftool(
+    path: Path, state: models.MetadataState, *, sidecar: Path | None
+) -> bool:
     cmd = _get_exiftool_cmd() + ["-overwrite_original"]
     if sidecar is not None:
         cmd += ["-o", str(sidecar)]
@@ -130,14 +132,18 @@ def _write_with_exiftool(path: Path, state: models.MetadataState, *, sidecar: Pa
         return False
 
 
-def _write_sidecar(path: Path, state: models.MetadataState, *, explicit_path: Path | None = None) -> None:
+def _write_sidecar(
+    path: Path, state: models.MetadataState, *, explicit_path: Path | None = None
+) -> None:
     target = explicit_path or _sidecar_path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
     xml = _render_sidecar_xml(state)
     target.write_text(xml, encoding="utf-8")
 
 
-def _write_annotations_sync(path: Path, asset: models.Asset, state: models.MetadataState) -> None:
+def _write_annotations_sync(
+    path: Path, asset: models.Asset, state: models.MetadataState
+) -> None:
     prefer_sidecar = _should_use_sidecar(path)
     sidecar_target = _sidecar_path(path) if prefer_sidecar else None
 
@@ -155,7 +161,9 @@ def _write_annotations_sync(path: Path, asset: models.Asset, state: models.Metad
     _write_sidecar(path, state, explicit_path=sidecar_target)
 
 
-async def write_annotations_for_assets(items: Sequence[tuple[models.Asset, models.MetadataState]]) -> None:
+async def write_annotations_for_assets(
+    items: Sequence[tuple[models.Asset, models.MetadataState]],
+) -> None:
     if not items:
         return
     storage = PosixStorage.from_env()

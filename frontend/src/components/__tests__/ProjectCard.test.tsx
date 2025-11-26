@@ -21,7 +21,7 @@ function renderCard(overrides: Partial<Project> = {}) {
       onUnarchive={vi.fn()}
       archiveMode={false}
       onEdit={vi.fn()}
-    />,
+    />
   )
   return { project, ...utils }
 }

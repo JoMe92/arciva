@@ -7,7 +7,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import JSONResponse
 from .deps import get_settings
-from .routers import projects, uploads, assets, settings, hub, export_jobs, bulk_image_exports, auth
+from .routers import (
+    projects,
+    uploads,
+    assets,
+    settings,
+    hub,
+    export_jobs,
+    bulk_image_exports,
+    auth,
+)
 from .logging_utils import setup_logging
 from .schema_utils import ensure_base_schema
 
@@ -28,13 +37,16 @@ class SPAStaticFiles(StaticFiles):
             return response
         return await super().get_response("index.html", scope)
 
+
 def create_app() -> FastAPI:
     s = get_settings()
     setup_logging(s.logs_dir)
     startup_logger.info("Starting Arciva backend (env=%s)", s.app_env)
     startup_logger.info("Using database: %s", s.database_url or s.app_db_path)
     startup_logger.info("Using media root: %s", s.fs_root)
-    startup_logger.info("CORS allow_origins: %s", ", ".join(s.allowed_origins) or "<none>")
+    startup_logger.info(
+        "CORS allow_origins: %s", ", ".join(s.allowed_origins) or "<none>"
+    )
     app = FastAPI(title="Arciva API", version="0.1.0")
 
     app.add_middleware(
@@ -76,7 +88,9 @@ def create_app() -> FastAPI:
                 s.app_db_path,
                 s.fs_root,
             )
-            return JSONResponse({"detail": "Internal server error. See logs."}, status_code=500)
+            return JSONResponse(
+                {"detail": "Internal server error. See logs."}, status_code=500
+            )
         duration_ms = (time.perf_counter() - start) * 1000
         api_logger.info(
             "%s %s -> %s (%.2f ms)",
@@ -94,10 +108,16 @@ def create_app() -> FastAPI:
     frontend_dist = Path(os.environ.get("FRONTEND_DIST_DIR", "/app/frontend_dist"))
     if frontend_dist.exists():
         startup_logger.info("Serving frontend from %s", frontend_dist)
-        app.mount("/", SPAStaticFiles(directory=frontend_dist, html=True), name="frontend")
+        app.mount(
+            "/", SPAStaticFiles(directory=frontend_dist, html=True), name="frontend"
+        )
     else:
-        startup_logger.info("FRONTEND_DIST_DIR not found (%s); skipping static frontend mount", frontend_dist)
+        startup_logger.info(
+            "FRONTEND_DIST_DIR not found (%s); skipping static frontend mount",
+            frontend_dist,
+        )
 
     return app
+
 
 app = create_app()

@@ -61,7 +61,7 @@ describe('TopBar layout', () => {
     const { rerender } = render(
       <ThemeProvider>
         <TopBar {...baseProps} view="grid" />
-      </ThemeProvider>,
+      </ThemeProvider>
     )
     const sizeControl = screen.getByTestId('top-bar-size-control')
     expect(sizeControl).toHaveStyle({ width: '200px' })
@@ -69,7 +69,7 @@ describe('TopBar layout', () => {
     rerender(
       <ThemeProvider>
         <TopBar {...baseProps} view="detail" />
-      </ThemeProvider>,
+      </ThemeProvider>
     )
     expect(sizeControl).toHaveStyle({ width: '200px' })
     expect(sizeControl).toHaveTextContent('Unavailable in detail view')

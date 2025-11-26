@@ -137,11 +137,13 @@ export async function listProjectAssets(projectId: string): Promise<AssetListIte
 
 export async function linkAssetsToProject(
   projectId: string,
-  payload: { assetIds: string[]; inheritance?: Record<string, string | null | undefined> },
+  payload: { assetIds: string[]; inheritance?: Record<string, string | null | undefined> }
 ): Promise<LinkResponse> {
   const body: Record<string, unknown> = { asset_ids: payload.assetIds }
   if (payload.inheritance) {
-    const entries = Object.entries(payload.inheritance).filter(([, value]) => typeof value === 'string' && value)
+    const entries = Object.entries(payload.inheritance).filter(
+      ([, value]) => typeof value === 'string' && value
+    )
     if (entries.length) {
       body.inheritance = Object.fromEntries(entries)
     }
@@ -158,7 +160,10 @@ export async function linkAssetsToProject(
   return (await res.json()) as LinkResponse
 }
 
-export async function getAsset(assetId: string, options: { projectId?: string } = {}): Promise<AssetDetail> {
+export async function getAsset(
+  assetId: string,
+  options: { projectId?: string } = {}
+): Promise<AssetDetail> {
   const query = options.projectId ? `?project_id=${encodeURIComponent(options.projectId)}` : ''
   const res = await fetch(withBase(`/v1/assets/${assetId}${query}`)!, {
     credentials: 'include',
@@ -173,7 +178,7 @@ export async function updateAssetPreview(
   projectId: string,
   assetId: string,
   isPreview: boolean,
-  options: { makePrimary?: boolean } = {},
+  options: { makePrimary?: boolean } = {}
 ): Promise<AssetListItem> {
   const res = await fetch(withBase(`/v1/projects/${projectId}/assets/${assetId}/preview`)!, {
     method: 'PUT',
@@ -189,7 +194,13 @@ export async function updateAssetPreview(
 
 export async function updateAssetInteractions(
   projectId: string,
-  payload: { assetIds: string[]; rating?: number; colorLabel?: ColorLabelValue; picked?: boolean; rejected?: boolean },
+  payload: {
+    assetIds: string[]
+    rating?: number
+    colorLabel?: ColorLabelValue
+    picked?: boolean
+    rejected?: boolean
+  }
 ): Promise<AssetInteractionUpdateResponse> {
   if (!payload.assetIds.length) {
     throw new Error('At least one asset id is required')
@@ -235,7 +246,9 @@ export type LoadMetadataFromProjectResponse = {
   metadata_state: MetadataState
 }
 
-export async function loadMetadataFromProject(payload: LoadMetadataFromProjectPayload): Promise<LoadMetadataFromProjectResponse> {
+export async function loadMetadataFromProject(
+  payload: LoadMetadataFromProjectPayload
+): Promise<LoadMetadataFromProjectResponse> {
   const res = await fetch(withBase(`/v1/imagehub/asset/${payload.assetId}/load-metadata`)!, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

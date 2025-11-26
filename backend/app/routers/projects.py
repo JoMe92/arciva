@@ -53,10 +53,16 @@ async def _load_preview_map(
     ).all()
 
     storage = PosixStorage.from_env()
-    preview_map: dict[UUID, list[tuple[int, UUID, str | None, int | None, int | None]]] = {pid: [] for pid in project_ids}
+    preview_map: dict[
+        UUID, list[tuple[int, UUID, str | None, int | None, int | None]]
+    ] = {pid: [] for pid in project_ids}
     seen_assets: dict[UUID, set[UUID]] = {pid: set() for pid in project_ids}
     for project_asset, asset in rows:
-        order = project_asset.preview_order if project_asset.preview_order is not None else 10_000
+        order = (
+            project_asset.preview_order
+            if project_asset.preview_order is not None
+            else 10_000
+        )
         project_id = project_asset.project_id
         preview_map.setdefault(project_id, []).append(
             (order, asset.id, _thumb_url(asset, storage), asset.width, asset.height)
@@ -64,7 +70,8 @@ async def _load_preview_map(
         seen_assets.setdefault(project_id, set()).add(asset.id)
 
     max_order_by_project: dict[UUID, int] = {
-        pid: max((entry[0] for entry in entries), default=-1) for pid, entries in preview_map.items()
+        pid: max((entry[0] for entry in entries), default=-1)
+        for pid, entries in preview_map.items()
     }
     slots_remaining: dict[UUID, int] = {
         pid: MAX_PREVIEW_IMAGES - len(preview_map.get(pid, [])) for pid in project_ids
@@ -76,7 +83,10 @@ async def _load_preview_map(
             await db.execute(
                 select(models.ProjectAsset, models.Asset, models.MetadataState)
                 .join(models.Asset, models.Asset.id == models.ProjectAsset.asset_id)
-                .join(models.MetadataState, models.MetadataState.link_id == models.ProjectAsset.id)
+                .join(
+                    models.MetadataState,
+                    models.MetadataState.link_id == models.ProjectAsset.id,
+                )
                 .where(
                     models.ProjectAsset.project_id.in_(fallback_targets),
                     models.ProjectAsset.user_id == user_id,
@@ -102,7 +112,13 @@ async def _load_preview_map(
             next_order = max_order_by_project.get(project_id, -1) + 1
             max_order_by_project[project_id] = next_order
             preview_map.setdefault(project_id, []).append(
-                (next_order, asset.id, _thumb_url(asset, storage), asset.width, asset.height)
+                (
+                    next_order,
+                    asset.id,
+                    _thumb_url(asset, storage),
+                    asset.width,
+                    asset.height,
+                )
             )
             project_seen.add(asset.id)
             slots_remaining[project_id] -= 1
@@ -122,6 +138,7 @@ async def _load_preview_map(
         ]
 
     return normalized_map
+
 
 logger = logging.getLogger("arciva.projects")
 
@@ -339,7 +356,9 @@ async def delete_project(
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    logger.info("delete_project: id=%s delete_assets=%s", project_id, body.delete_assets)
+    logger.info(
+        "delete_project: id=%s delete_assets=%s", project_id, body.delete_assets
+    )
     proj = (
         await db.execute(
             select(models.Project).where(
@@ -360,27 +379,37 @@ async def delete_project(
             confirmed,
             proj.title,
         )
-        raise HTTPException(status_code=400, detail="Project title confirmation mismatch")
+        raise HTTPException(
+            status_code=400, detail="Project title confirmation mismatch"
+        )
 
     asset_ids = (
-        await db.execute(
-            select(models.ProjectAsset.asset_id).where(
-                models.ProjectAsset.project_id == project_id,
-                models.ProjectAsset.user_id == current_user.id,
+        (
+            await db.execute(
+                select(models.ProjectAsset.asset_id).where(
+                    models.ProjectAsset.project_id == project_id,
+                    models.ProjectAsset.user_id == current_user.id,
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     assets: list[models.Asset] = []
     if asset_ids:
         assets = (
-            await db.execute(
-                select(models.Asset).where(
-                    models.Asset.id.in_(asset_ids),
-                    models.Asset.user_id == current_user.id,
+            (
+                await db.execute(
+                    select(models.Asset).where(
+                        models.Asset.id.in_(asset_ids),
+                        models.Asset.user_id == current_user.id,
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
     remaining_counts: dict[UUID, int] = {}
     if asset_ids:

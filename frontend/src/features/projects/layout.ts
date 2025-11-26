@@ -20,7 +20,13 @@ export type FirstRowArtistPlan = {
 }
 
 export type LayoutItem =
-  | { kind: 'create'; aspect?: Aspect; span: 1; matchAspectRatio?: string; artist?: ArtistFootprint }
+  | {
+      kind: 'create'
+      aspect?: Aspect
+      span: 1
+      matchAspectRatio?: string
+      artist?: ArtistFootprint
+    }
   | { kind: 'project'; project: Project; span: 1 | 2; artist?: ArtistFootprint }
 
 export type LayoutRow = {
@@ -43,7 +49,10 @@ function primaryPreview(project: Project): ProjectPreviewImage | null {
 
 function primaryAspectRatioString(project: Project): string {
   const preview = primaryPreview(project)
-  return aspectRatioValue(preview?.width, preview?.height) ?? fallbackAspectRatioForAspect(project.aspect)
+  return (
+    aspectRatioValue(preview?.width, preview?.height) ??
+    fallbackAspectRatioForAspect(project.aspect)
+  )
 }
 
 /**
@@ -52,7 +61,11 @@ function primaryAspectRatioString(project: Project): string {
  * - afterwards: landscapes span 2, portrait/square span 1
  * - subtle offsets add rhythm
  */
-export function buildLayout(projects: Project[], withCreate = true, firstRowPlan?: FirstRowArtistPlan): LayoutRow[] {
+export function buildLayout(
+  projects: Project[],
+  withCreate = true,
+  firstRowPlan?: FirstRowArtistPlan
+): LayoutRow[] {
   const rows: LayoutRow[] = []
   const rest = [...projects]
 
@@ -62,7 +75,9 @@ export function buildLayout(projects: Project[], withCreate = true, firstRowPlan
     if (primary) {
       const secondary = rest.shift()
       const primaryRatio = primaryAspectRatioString(primary)
-      const artistTemplate = firstRowPlan ? firstRowPlan.templateColumns.map((v) => `${v}fr`).join(' ') : undefined
+      const artistTemplate = firstRowPlan
+        ? firstRowPlan.templateColumns.map((v) => `${v}fr`).join(' ')
+        : undefined
       rows.push({
         cols: 3,
         gapX: 'gap-x-10',
@@ -82,13 +97,13 @@ export function buildLayout(projects: Project[], withCreate = true, firstRowPlan
           },
           ...(secondary
             ? [
-              {
-                kind: 'project',
-                project: secondary,
-                span: 1,
-                artist: firstRowPlan?.footprints[secondary.id],
-              } as LayoutItem,
-            ]
+                {
+                  kind: 'project',
+                  project: secondary,
+                  span: 1,
+                  artist: firstRowPlan?.footprints[secondary.id],
+                } as LayoutItem,
+              ]
             : []),
         ],
         offsetTop: 'mt-0',
@@ -118,10 +133,10 @@ export function buildLayout(projects: Project[], withCreate = true, firstRowPlan
       const p = rest[0]
       const span: 1 | 2 = p.aspect === 'landscape' && usedCols <= cols - 2 ? 2 : 1
       // Rule: max 1 landscape per row
-      const hasLandscape = items.some(i => i.kind === 'project' && i.span === 2)
+      const hasLandscape = items.some((i) => i.kind === 'project' && i.span === 2)
       if (span === 2 && hasLandscape) {
         // if a landscape already exists, prefer a portrait/square
-        const idx = rest.findIndex(x => x.aspect !== 'landscape')
+        const idx = rest.findIndex((x) => x.aspect !== 'landscape')
         if (idx > 0) {
           const swapped = rest.splice(idx, 1)[0]
           const sSpan: 1 = 1

@@ -15,10 +15,12 @@ from ..imaging import read_exif
 
 logger = logging.getLogger("arciva.assets")
 
+
 def warnings_from_text(data: str | None) -> list[str]:
     if not data:
         return []
     return [entry for entry in data.split("\n") if entry]
+
 
 def thumb_url(asset: models.Asset, storage: PosixStorage) -> str | None:
     if not asset.sha256:
@@ -28,6 +30,7 @@ def thumb_url(asset: models.Asset, storage: PosixStorage) -> str | None:
         return f"/v1/assets/{asset.id}/thumbs/256"
     return None
 
+
 def preview_url(asset: models.Asset, storage: PosixStorage) -> str | None:
     if not asset.sha256:
         return None
@@ -36,15 +39,20 @@ def preview_url(asset: models.Asset, storage: PosixStorage) -> str | None:
         return f"/v1/assets/{asset.id}/preview"
     return None
 
+
 async def collect_derivatives(
     asset: models.Asset,
     db: AsyncSession,
 ) -> list[schemas.AssetDerivativeOut]:
     rows = (
-        await db.execute(
-            select(models.Derivative).where(models.Derivative.asset_id == asset.id)
+        (
+            await db.execute(
+                select(models.Derivative).where(models.Derivative.asset_id == asset.id)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     derivatives: list[schemas.AssetDerivativeOut] = []
     for row in rows:
         derivatives.append(
@@ -57,11 +65,13 @@ async def collect_derivatives(
         )
     return derivatives
 
+
 def basename_from_filename(name: str | None) -> str | None:
     if not name:
         return None
     stem = Path(name).stem
     return stem.strip() or None
+
 
 def color_label_to_schema(value: models.ColorLabel | str | None) -> schemas.ColorLabel:
     if isinstance(value, models.ColorLabel):
@@ -72,6 +82,7 @@ def color_label_to_schema(value: models.ColorLabel | str | None) -> schemas.Colo
         except ValueError:
             return schemas.ColorLabel.NONE
     return schemas.ColorLabel.NONE
+
 
 def serialize_asset_item(
     asset: models.Asset,
@@ -85,7 +96,9 @@ def serialize_asset_item(
     pair_role: schemas.ImgType | None = None
     paired_asset_id: UUID | None = None
     paired_asset_type: schemas.ImgType | None = None
-    basename = pair.basename if pair else basename_from_filename(asset.original_filename)
+    basename = (
+        pair.basename if pair else basename_from_filename(asset.original_filename)
+    )
     stack_primary_id = pair.raw_asset_id if pair else asset.id
     if pair:
         if asset.id == pair.jpeg_asset_id:
@@ -135,6 +148,7 @@ def serialize_asset_item(
         metadata_source_project_id=metadata_source_project_id,
     )
 
+
 async def load_asset_items(
     db: AsyncSession,
     project_id: UUID,
@@ -143,10 +157,20 @@ async def load_asset_items(
     user_id: UUID,
 ) -> list[schemas.AssetListItem]:
     query = (
-        select(models.Asset, models.ProjectAsset, models.ProjectAssetPair, models.MetadataState)
+        select(
+            models.Asset,
+            models.ProjectAsset,
+            models.ProjectAssetPair,
+            models.MetadataState,
+        )
         .join(models.ProjectAsset, models.ProjectAsset.asset_id == models.Asset.id)
-        .outerjoin(models.ProjectAssetPair, models.ProjectAssetPair.id == models.ProjectAsset.pair_id)
-        .outerjoin(models.MetadataState, models.MetadataState.link_id == models.ProjectAsset.id)
+        .outerjoin(
+            models.ProjectAssetPair,
+            models.ProjectAssetPair.id == models.ProjectAsset.pair_id,
+        )
+        .outerjoin(
+            models.MetadataState, models.MetadataState.link_id == models.ProjectAsset.id
+        )
         .where(
             models.ProjectAsset.project_id == project_id,
             models.ProjectAsset.user_id == user_id,
@@ -157,11 +181,15 @@ async def load_asset_items(
         query = query.where(models.ProjectAsset.asset_id.in_(asset_ids))
     rows = (await db.execute(query)).all()
     storage = PosixStorage.from_env()
-    items = [serialize_asset_item(asset, project_asset, pair, storage, metadata) for asset, project_asset, pair, metadata in rows]
+    items = [
+        serialize_asset_item(asset, project_asset, pair, storage, metadata)
+        for asset, project_asset, pair, metadata in rows
+    ]
     if asset_ids:
         order_map = {asset_id: idx for idx, asset_id in enumerate(asset_ids)}
         items.sort(key=lambda item: order_map.get(item.id, len(order_map)))
     return items
+
 
 async def load_metadata_template(
     db: AsyncSession,
@@ -173,7 +201,10 @@ async def load_metadata_template(
     return (
         await db.execute(
             select(models.MetadataState)
-            .join(models.ProjectAsset, models.ProjectAsset.id == models.MetadataState.link_id)
+            .join(
+                models.ProjectAsset,
+                models.ProjectAsset.id == models.MetadataState.link_id,
+            )
             .where(
                 models.ProjectAsset.project_id == project_id,
                 models.ProjectAsset.user_id == user_id,
@@ -182,6 +213,7 @@ async def load_metadata_template(
             .order_by(models.MetadataState.updated_at.desc())
         )
     ).scalar_one_or_none()
+
 
 async def asset_detail(
     asset: models.Asset,
@@ -244,7 +276,10 @@ async def asset_detail(
         pixel_hash=asset.pixel_hash,
     )
 
-def metadata_cache_path(storage: PosixStorage, asset: models.Asset, *, ensure: bool = False) -> Path | None:
+
+def metadata_cache_path(
+    storage: PosixStorage, asset: models.Asset, *, ensure: bool = False
+) -> Path | None:
     key = asset.sha256 or (str(asset.id) if asset.id else None)
     if not key:
         return None
@@ -253,7 +288,10 @@ def metadata_cache_path(storage: PosixStorage, asset: models.Asset, *, ensure: b
         root.mkdir(parents=True, exist_ok=True)
     return root / "metadata.json"
 
-def load_metadata_cache(storage: PosixStorage, asset: models.Asset) -> dict[str, Any] | None:
+
+def load_metadata_cache(
+    storage: PosixStorage, asset: models.Asset
+) -> dict[str, Any] | None:
     path = metadata_cache_path(storage, asset)
     if not path or not path.exists():
         return None
@@ -266,7 +304,10 @@ def load_metadata_cache(storage: PosixStorage, asset: models.Asset) -> dict[str,
         path.unlink(missing_ok=True)
     return None
 
-def write_metadata_cache(storage: PosixStorage, asset: models.Asset, payload: dict[str, Any]) -> None:
+
+def write_metadata_cache(
+    storage: PosixStorage, asset: models.Asset, payload: dict[str, Any]
+) -> None:
     path = metadata_cache_path(storage, asset, ensure=True)
     if not path:
         return
@@ -275,6 +316,7 @@ def write_metadata_cache(storage: PosixStorage, asset: models.Asset, payload: di
         path.write_text(serialized, encoding="utf-8")
     except Exception:
         logger.warning("metadata_cache_write_failed asset=%s", asset.id, exc_info=True)
+
 
 async def ensure_asset_metadata_populated(
     asset: models.Asset,
@@ -361,9 +403,13 @@ async def ensure_asset_metadata_populated(
         return
 
     try:
-        taken_at, (width, height), metadata, warnings = await asyncio.to_thread(read_exif, source_path)
+        taken_at, (width, height), metadata, warnings = await asyncio.to_thread(
+            read_exif, source_path
+        )
     except Exception:
-        logger.exception("ensure_asset_metadata_populated: read_exif failed asset=%s", asset.id)
+        logger.exception(
+            "ensure_asset_metadata_populated: read_exif failed asset=%s", asset.id
+        )
         return
 
     changed = False
@@ -385,7 +431,9 @@ async def ensure_asset_metadata_populated(
         changed = True
 
     if metadata:
-        existing = [w for w in existing if w not in {"EXIFTOOL_NOT_INSTALLED", "EXIF_ERROR"}]
+        existing = [
+            w for w in existing if w not in {"EXIFTOOL_NOT_INSTALLED", "EXIF_ERROR"}
+        ]
 
     combined = list(existing)
     for warning in warnings:

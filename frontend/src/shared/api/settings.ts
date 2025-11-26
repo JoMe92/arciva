@@ -98,7 +98,10 @@ export async function getExperimentalStorageSettings(): Promise<ExperimentalStor
   return (await res.json()) as ExperimentalStorageSettings
 }
 
-export async function validateExperimentalStoragePath(payload: { path: string; mode?: ExperimentalStorageMode }): Promise<ExperimentalStorageValidationResult> {
+export async function validateExperimentalStoragePath(payload: {
+  path: string
+  mode?: ExperimentalStorageMode
+}): Promise<ExperimentalStorageValidationResult> {
   const res = await fetch(withBase('/v1/settings/photo-store/validate')!, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

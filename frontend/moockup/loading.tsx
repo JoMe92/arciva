@@ -1,5 +1,5 @@
-import React from "react";
-import { motion } from "framer-motion";
+import React from 'react'
+import { motion } from 'framer-motion'
 
 /**
  * Single loading mockup inspired by the placeholder design.
@@ -11,12 +11,12 @@ import { motion } from "framer-motion";
  */
 
 const tokens = {
-  bgFrom: "#FFFAF2",
-  bgTo: "#EDE1CC",
-  accent: "#AF7356", // accent circle (brown)
-  bar: "#514D48", // loading bar (dark grey)
-  glow: "#C69A83",
-};
+  bgFrom: '#FFFAF2',
+  bgTo: '#EDE1CC',
+  accent: '#AF7356', // accent circle (brown)
+  bar: '#514D48', // loading bar (dark grey)
+  glow: '#C69A83',
+}
 
 export default function LoadingPlaceholderSpinner() {
   return (
@@ -25,7 +25,9 @@ export default function LoadingPlaceholderSpinner() {
       style={{ backgroundImage: `linear-gradient(135deg, ${tokens.bgFrom}, ${tokens.bgTo})` }}
     >
       <div className="mx-auto max-w-5xl p-6">
-        <h1 className="mb-4 text-2xl font-semibold">Platzhalter-orientierter Ladeentwurf – Hoch- & Querformat</h1>
+        <h1 className="mb-4 text-2xl font-semibold">
+          Platzhalter-orientierter Ladeentwurf – Hoch- & Querformat
+        </h1>
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
           {/* Portrait layout */}
           <div
@@ -34,12 +36,19 @@ export default function LoadingPlaceholderSpinner() {
           >
             {/* rotating circle in the top-right */}
             <div className="absolute right-8 top-8 h-16 w-16" aria-hidden>
-              <div className="absolute inset-2 rounded-full" style={{ backgroundColor: tokens.accent }} />
+              <div
+                className="absolute inset-2 rounded-full"
+                style={{ backgroundColor: tokens.accent }}
+              />
               <motion.div
                 className="absolute inset-0 rounded-full border-[6px]"
-                style={{ borderColor: tokens.accent, borderTopColor: tokens.glow, borderRightColor: "transparent" }}
+                style={{
+                  borderColor: tokens.accent,
+                  borderTopColor: tokens.glow,
+                  borderRightColor: 'transparent',
+                }}
                 animate={{ rotate: 360 }}
-                transition={{ duration: 1.2, repeat: Infinity, ease: "linear" }}
+                transition={{ duration: 1.2, repeat: Infinity, ease: 'linear' }}
               />
             </div>
             {/* stable bar in the lower-left, matching the placeholder proportions */}
@@ -55,12 +64,19 @@ export default function LoadingPlaceholderSpinner() {
           >
             {/* rotating circle in the top-right */}
             <div className="absolute right-8 top-8 h-16 w-16" aria-hidden>
-              <div className="absolute inset-2 rounded-full" style={{ backgroundColor: tokens.accent }} />
+              <div
+                className="absolute inset-2 rounded-full"
+                style={{ backgroundColor: tokens.accent }}
+              />
               <motion.div
                 className="absolute inset-0 rounded-full border-[6px]"
-                style={{ borderColor: tokens.accent, borderTopColor: tokens.glow, borderRightColor: "transparent" }}
+                style={{
+                  borderColor: tokens.accent,
+                  borderTopColor: tokens.glow,
+                  borderRightColor: 'transparent',
+                }}
                 animate={{ rotate: 360 }}
-                transition={{ duration: 1.2, repeat: Infinity, ease: "linear" }}
+                transition={{ duration: 1.2, repeat: Infinity, ease: 'linear' }}
               />
             </div>
             {/* stable bar in the lower-left, scaled for landscape (longer) */}

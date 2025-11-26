@@ -1,6 +1,11 @@
 import React, { useMemo, useRef, useEffect, useState, useCallback } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { useMutation, useQuery, useQueryClient, type UseMutationResult } from '@tanstack/react-query'
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type UseMutationResult,
+} from '@tanstack/react-query'
 import { TOKENS } from './utils'
 import {
   listProjectAssets,
@@ -16,7 +21,12 @@ import {
   type AssetProjectUsage,
   type LoadMetadataFromProjectResponse,
 } from '../../shared/api/assets'
-import { getProject, updateProject, type ProjectApiResponse, type ProjectUpdatePayload } from '../../shared/api/projects'
+import {
+  getProject,
+  updateProject,
+  type ProjectApiResponse,
+  type ProjectUpdatePayload,
+} from '../../shared/api/projects'
 import { initUpload, putUpload, completeUpload } from '../../shared/api/uploads'
 import { placeholderRatioForAspect, RATIO_DIMENSIONS } from '../../shared/placeholder'
 import type { Photo, ImgType, ColorTag } from './types'
@@ -89,7 +99,13 @@ function clampDetailZoom(value: number): number {
   if (!Number.isFinite(value)) return DETAIL_MIN_ZOOM
   return Math.min(DETAIL_MAX_ZOOM, Math.max(DETAIL_MIN_ZOOM, value))
 }
-const IGNORED_METADATA_WARNINGS = new Set(['EXIFTOOL_ERROR', 'EXIFTOOL_NOT_INSTALLED', 'EXIFTOOL_JSON_ERROR', 'ExifPill-Load failed', 'EXIF_PIL_LOAD_FAILED'])
+const IGNORED_METADATA_WARNINGS = new Set([
+  'EXIFTOOL_ERROR',
+  'EXIFTOOL_NOT_INSTALLED',
+  'EXIFTOOL_JSON_ERROR',
+  'ExifPill-Load failed',
+  'EXIF_PIL_LOAD_FAILED',
+])
 const DATE_KEY_DELIM = '__'
 const UNKNOWN_VALUE = 'unknown'
 const MONTH_FORMATTER = new Intl.DateTimeFormat(undefined, { month: 'long' })
@@ -170,7 +186,8 @@ function computeDateParts(photo: Photo): DateParts {
 
   const yearSort = yearValue === UNKNOWN_VALUE ? Number.NEGATIVE_INFINITY : Number(yearValue)
   const monthSort = monthValue === UNKNOWN_VALUE ? Number.NEGATIVE_INFINITY : Number(monthValue)
-  const daySort = dayValue === UNKNOWN_VALUE ? Number.NEGATIVE_INFINITY : (parsed ?? new Date(0)).getTime()
+  const daySort =
+    dayValue === UNKNOWN_VALUE ? Number.NEGATIVE_INFINITY : (parsed ?? new Date(0)).getTime()
 
   const yearLabel = yearValue === UNKNOWN_VALUE ? 'Unknown date' : yearValue
   const monthLabel = localizedMonthLabel(monthValue)
@@ -329,7 +346,10 @@ function normalizeDayParam(value: string | null): string | null {
   return String(Math.trunc(day)).padStart(2, '0')
 }
 
-function detectAspect(width?: number | null, height?: number | null): 'portrait' | 'landscape' | 'square' {
+function detectAspect(
+  width?: number | null,
+  height?: number | null
+): 'portrait' | 'landscape' | 'square' {
   if (!width || !height) return 'square'
   if (width > height) return 'landscape'
   if (height > width) return 'portrait'
@@ -347,21 +367,27 @@ function mapAssetToPhoto(item: AssetListItem, existing?: Photo): Photo {
   const aspect = detectAspect(item.width, item.height)
   const placeholderRatio = existing?.placeholderRatio ?? placeholderRatioForAspect(aspect)
 
-  const isPreview = typeof item.is_preview === 'boolean' ? item.is_preview : existing?.isPreview ?? false
-  const ratingValue = typeof item.rating === 'number' ? item.rating : existing?.rating ?? 0
+  const isPreview =
+    typeof item.is_preview === 'boolean' ? item.is_preview : (existing?.isPreview ?? false)
+  const ratingValue = typeof item.rating === 'number' ? item.rating : (existing?.rating ?? 0)
   const rating = Math.max(0, Math.min(5, ratingValue)) as Photo['rating']
-  const picked = typeof item.picked === 'boolean' ? item.picked : existing?.picked ?? false
-  const rejected = typeof item.rejected === 'boolean' ? item.rejected : existing?.rejected ?? false
+  const picked = typeof item.picked === 'boolean' ? item.picked : (existing?.picked ?? false)
+  const rejected =
+    typeof item.rejected === 'boolean' ? item.rejected : (existing?.rejected ?? false)
   const colorFromApi = item.color_label ?? existing?.tag ?? 'None'
-  const colorLabel = (['None', 'Red', 'Green', 'Blue', 'Yellow', 'Purple'] as ColorTag[]).includes(colorFromApi as ColorTag)
+  const colorLabel = (['None', 'Red', 'Green', 'Blue', 'Yellow', 'Purple'] as ColorTag[]).includes(
+    colorFromApi as ColorTag
+  )
     ? (colorFromApi as ColorTag)
-    : existing?.tag ?? 'None'
-  const stackPrimaryAssetId = item.stack_primary_asset_id ?? existing?.stackPrimaryAssetId ?? item.id
+    : (existing?.tag ?? 'None')
+  const stackPrimaryAssetId =
+    item.stack_primary_asset_id ?? existing?.stackPrimaryAssetId ?? item.id
   const pairId = item.pair_id ?? existing?.pairId ?? null
   const pairedAssetId = item.paired_asset_id ?? existing?.pairedAssetId ?? null
   const pairedAssetType = item.paired_asset_type ?? existing?.pairedAssetType ?? null
   const basename = item.basename ?? existing?.basename ?? null
-  const metadataSourceProjectId = item.metadata_source_project_id ?? existing?.metadataSourceProjectId ?? null
+  const metadataSourceProjectId =
+    item.metadata_source_project_id ?? existing?.metadataSourceProjectId ?? null
 
   return {
     id: item.id,
@@ -378,8 +404,13 @@ function mapAssetToPhoto(item: AssetListItem, existing?: Photo): Photo {
     previewSrc,
     placeholderRatio,
     isPreview,
-    previewOrder: typeof item.preview_order === 'number' ? item.preview_order : existing?.previewOrder ?? null,
-    metadataWarnings: Array.isArray(item.metadata_warnings) ? item.metadata_warnings : existing?.metadataWarnings ?? [],
+    previewOrder:
+      typeof item.preview_order === 'number'
+        ? item.preview_order
+        : (existing?.previewOrder ?? null),
+    metadataWarnings: Array.isArray(item.metadata_warnings)
+      ? item.metadata_warnings
+      : (existing?.metadataWarnings ?? []),
     status: item.status,
     basename,
     pairId,
@@ -444,34 +475,39 @@ export default function ProjectWorkspace() {
     initialData: cachedProject,
   })
   const projectName = projectDetail?.title?.trim() || `Project ${id || '—'}`
-  const [stackPairsEnabled, setStackPairsEnabled] = useState(projectDetail?.stack_pairs_enabled ?? false)
+  const [stackPairsEnabled, setStackPairsEnabled] = useState(
+    projectDetail?.stack_pairs_enabled ?? false
+  )
   useEffect(() => {
     if (typeof projectDetail?.stack_pairs_enabled === 'boolean') {
       setStackPairsEnabled(projectDetail.stack_pairs_enabled)
     }
   }, [projectDetail?.stack_pairs_enabled])
-  const applyProjectUpdate = useCallback((updated: ProjectApiResponse) => {
-    if (!id) return
-    setStackPairsEnabled(updated.stack_pairs_enabled ?? false)
-    queryClient.setQueryData(['project', id], updated)
-    queryClient.setQueryData<ProjectApiResponse[] | undefined>(['projects'], (prev) => {
-      if (!prev) return prev
-      return prev.map((proj) =>
-        proj.id === updated.id
-          ? {
-            ...proj,
-            title: updated.title,
-            updated_at: updated.updated_at,
-            stack_pairs_enabled: updated.stack_pairs_enabled,
-            client: updated.client,
-            note: updated.note,
-            tags: updated.tags ?? proj.tags,
-            asset_count: updated.asset_count ?? proj.asset_count,
-          }
-          : proj,
-      )
-    })
-  }, [id, queryClient])
+  const applyProjectUpdate = useCallback(
+    (updated: ProjectApiResponse) => {
+      if (!id) return
+      setStackPairsEnabled(updated.stack_pairs_enabled ?? false)
+      queryClient.setQueryData(['project', id], updated)
+      queryClient.setQueryData<ProjectApiResponse[] | undefined>(['projects'], (prev) => {
+        if (!prev) return prev
+        return prev.map((proj) =>
+          proj.id === updated.id
+            ? {
+                ...proj,
+                title: updated.title,
+                updated_at: updated.updated_at,
+                stack_pairs_enabled: updated.stack_pairs_enabled,
+                client: updated.client,
+                note: updated.note,
+                tags: updated.tags ?? proj.tags,
+                asset_count: updated.asset_count ?? proj.asset_count,
+              }
+            : proj
+        )
+      })
+    },
+    [id, queryClient]
+  )
 
   const renameMutation = useMutation({
     mutationFn: ({ title }: { title: string }) => {
@@ -564,7 +600,9 @@ export default function ProjectWorkspace() {
     }
   }, [isMobileLayout, view])
   const [detailViewportResetKey, setDetailViewportResetKey] = useState(0)
-  const [previewPanRequest, setPreviewPanRequest] = useState<InspectorPreviewPanCommand | null>(null)
+  const [previewPanRequest, setPreviewPanRequest] = useState<InspectorPreviewPanCommand | null>(
+    null
+  )
   const [selectedPhotoIds, setSelectedPhotoIds] = useState<Set<string>>(() => new Set<string>())
   const lastSelectedPhotoIdRef = useRef<string | null>(null)
   const selectionAnchorRef = useRef<string | null>(null)
@@ -572,88 +610,117 @@ export default function ProjectWorkspace() {
   const [exportDialogOpen, setExportDialogOpen] = useState(false)
   const { settings: generalSettings, setSettings: setGeneralSettings } = useGeneralSettings()
   const experimentalUiEnabled = import.meta.env.DEV
-  const { data: experimentalStorageSettings } = useExperimentalStorageSettings({ enabled: experimentalUiEnabled })
-  const experimentalStorageWarning = experimentalUiEnabled && experimentalStorageSettings?.enabled && experimentalStorageSettings.warning_active
+  const { data: experimentalStorageSettings } = useExperimentalStorageSettings({
+    enabled: experimentalUiEnabled,
+  })
+  const experimentalStorageWarning =
+    experimentalUiEnabled &&
+    experimentalStorageSettings?.enabled &&
+    experimentalStorageSettings.warning_active
   const [generalSettingsOpen, setGeneralSettingsOpen] = useState(false)
   const openGeneralSettings = useCallback(() => setGeneralSettingsOpen(true), [])
   const closeGeneralSettings = useCallback(() => setGeneralSettingsOpen(false), [])
-  const handleGeneralSettingsSave = useCallback((nextSettings: GeneralSettings) => {
-    setGeneralSettings(nextSettings)
-  }, [setGeneralSettings])
-  const resolveActionTargetIds = useCallback((primaryId: string | null) => {
-    if (primaryId && selectedPhotoIds.has(primaryId)) {
-      return new Set(selectedPhotoIds)
-    }
-    return primaryId ? new Set([primaryId]) : new Set<string>()
-  }, [selectedPhotoIds])
+  const handleGeneralSettingsSave = useCallback(
+    (nextSettings: GeneralSettings) => {
+      setGeneralSettings(nextSettings)
+    },
+    [setGeneralSettings]
+  )
+  const resolveActionTargetIds = useCallback(
+    (primaryId: string | null) => {
+      if (primaryId && selectedPhotoIds.has(primaryId)) {
+        return new Set(selectedPhotoIds)
+      }
+      return primaryId ? new Set([primaryId]) : new Set<string>()
+    },
+    [selectedPhotoIds]
+  )
   const importInFlightRef = useRef(false)
-  const handleRename = useCallback(async (nextTitle: string) => {
-    if (!id) return
-    const trimmed = nextTitle.trim() || 'Untitled project'
-    if (trimmed === projectName.trim()) return
-    await renameMutation.mutateAsync({ title: trimmed })
-  }, [id, projectName, renameMutation])
-  const handleStackToggle = useCallback((next: boolean) => {
-    const previous = stackPairsEnabled
-    setStackPairsEnabled(next)
-    stackToggleMutation.mutate(next, {
-      onError: () => {
-        setStackPairsEnabled(previous)
-      },
-    })
-  }, [stackPairsEnabled, stackToggleMutation])
-  const handleProjectInfoChange = useCallback(async (patch: ProjectUpdatePayload) => {
-    if (!id) return
-    await projectInfoMutation.mutateAsync(patch)
-  }, [id, projectInfoMutation])
+  const handleRename = useCallback(
+    async (nextTitle: string) => {
+      if (!id) return
+      const trimmed = nextTitle.trim() || 'Untitled project'
+      if (trimmed === projectName.trim()) return
+      await renameMutation.mutateAsync({ title: trimmed })
+    },
+    [id, projectName, renameMutation]
+  )
+  const handleStackToggle = useCallback(
+    (next: boolean) => {
+      const previous = stackPairsEnabled
+      setStackPairsEnabled(next)
+      stackToggleMutation.mutate(next, {
+        onError: () => {
+          setStackPairsEnabled(previous)
+        },
+      })
+    },
+    [stackPairsEnabled, stackToggleMutation]
+  )
+  const handleProjectInfoChange = useCallback(
+    async (patch: ProjectUpdatePayload) => {
+      if (!id) return
+      await projectInfoMutation.mutateAsync(patch)
+    },
+    [id, projectInfoMutation]
+  )
 
-  const refreshAssets = useCallback(async (focusNewest: boolean = false) => {
-    if (!id) return
-    try {
-      const items = await listProjectAssets(id)
-      const prevPhotos = prevPhotosRef.current
-      const prevIds = new Set(prevPhotos.map((p) => p.id))
-      const prevMap = new Map(prevPhotos.map((p) => [p.id, p]))
-      const mapped = items.map((item) => mapAssetToPhoto(item, prevMap.get(item.id)))
-      const newItems = mapped.filter((p) => !prevIds.has(p.id))
+  const refreshAssets = useCallback(
+    async (focusNewest: boolean = false) => {
+      if (!id) return
+      try {
+        const items = await listProjectAssets(id)
+        const prevPhotos = prevPhotosRef.current
+        const prevIds = new Set(prevPhotos.map((p) => p.id))
+        const prevMap = new Map(prevPhotos.map((p) => [p.id, p]))
+        const mapped = items.map((item) => mapAssetToPhoto(item, prevMap.get(item.id)))
+        const newItems = mapped.filter((p) => !prevIds.has(p.id))
 
-      prevPhotosRef.current = mapped
-      setPhotos(mapped)
+        prevPhotosRef.current = mapped
+        setPhotos(mapped)
 
-      let nextIndex = currentIndexRef.current
-      if (focusNewest && newItems.length) {
-        const newestId = newItems[0].id
-        const idx = mapped.findIndex((p) => p.id === newestId)
-        nextIndex = idx >= 0 ? idx : 0
-      } else if (currentPhotoIdRef.current) {
-        const idx = mapped.findIndex((p) => p.id === currentPhotoIdRef.current)
-        if (idx >= 0) {
-          nextIndex = idx
+        let nextIndex = currentIndexRef.current
+        if (focusNewest && newItems.length) {
+          const newestId = newItems[0].id
+          const idx = mapped.findIndex((p) => p.id === newestId)
+          nextIndex = idx >= 0 ? idx : 0
+        } else if (currentPhotoIdRef.current) {
+          const idx = mapped.findIndex((p) => p.id === currentPhotoIdRef.current)
+          if (idx >= 0) {
+            nextIndex = idx
+          } else if (mapped.length) {
+            nextIndex = Math.min(nextIndex, mapped.length - 1)
+          } else {
+            nextIndex = 0
+          }
         } else if (mapped.length) {
-          nextIndex = Math.min(nextIndex, mapped.length - 1)
+          nextIndex = 0
         } else {
           nextIndex = 0
         }
-      } else if (mapped.length) {
-        nextIndex = 0
-      } else {
-        nextIndex = 0
-      }
 
-      if (mapped.length === 0) {
-        nextIndex = 0
-      } else {
-        nextIndex = Math.max(0, Math.min(nextIndex, mapped.length - 1))
-      }
+        if (mapped.length === 0) {
+          nextIndex = 0
+        } else {
+          nextIndex = Math.max(0, Math.min(nextIndex, mapped.length - 1))
+        }
 
-      setCurrent(nextIndex)
-    } catch (err) {
-      console.error(err)
-    }
-  }, [id])
+        setCurrent(nextIndex)
+      } catch (err) {
+        console.error(err)
+      }
+    },
+    [id]
+  )
 
   const interactionMutation = useMutation({
-    mutationFn: async ({ assetIds, changes }: { assetIds: string[]; changes: InteractionPatch }) => {
+    mutationFn: async ({
+      assetIds,
+      changes,
+    }: {
+      assetIds: string[]
+      changes: InteractionPatch
+    }) => {
       if (!id) {
         throw new Error('Missing project identifier')
       }
@@ -723,19 +790,24 @@ export default function ProjectWorkspace() {
   const [hideRejected, setHideRejected] = useState(true)
   const [filterColor, setFilterColor] = useState<'Any' | ColorTag>('Any')
 
-  const applyInteraction = useCallback((targetIds: Set<string>, patch: InteractionPatch) => {
-    if (!targetIds.size) return
-    const expanded = new Set<string>()
-    targetIds.forEach((assetId) => {
-      expanded.add(assetId)
-      const partner = pairLookup.get(assetId)
-      if (partner) {
-        expanded.add(partner)
-      }
-    })
-    setPhotos((arr) => arr.map((photo) => (expanded.has(photo.id) ? patchPhotoInteractions(photo, patch) : photo)))
-    interactionMutation.mutate({ assetIds: Array.from(expanded), changes: patch })
-  }, [pairLookup, interactionMutation])
+  const applyInteraction = useCallback(
+    (targetIds: Set<string>, patch: InteractionPatch) => {
+      if (!targetIds.size) return
+      const expanded = new Set<string>()
+      targetIds.forEach((assetId) => {
+        expanded.add(assetId)
+        const partner = pairLookup.get(assetId)
+        if (partner) {
+          expanded.add(partner)
+        }
+      })
+      setPhotos((arr) =>
+        arr.map((photo) => (expanded.has(photo.id) ? patchPhotoInteractions(photo, patch) : photo))
+      )
+      interactionMutation.mutate({ assetIds: Array.from(expanded), changes: patch })
+    },
+    [pairLookup, interactionMutation]
+  )
 
   const storageScope = useMemo(() => (id ? `workspace:${id}` : 'workspace'), [id])
   const leftWidthKey = `${storageScope}:left-width`
@@ -868,7 +940,7 @@ export default function ProjectWorkspace() {
       window.addEventListener('pointermove', handlePointerMove)
       window.addEventListener('pointerup', handlePointerUp)
     },
-    [leftPanelCollapsed, leftPanelWidth],
+    [leftPanelCollapsed, leftPanelWidth]
   )
 
   const handleRightHandlePointerDown = useCallback(
@@ -893,7 +965,7 @@ export default function ProjectWorkspace() {
       window.addEventListener('pointermove', handlePointerMove)
       window.addEventListener('pointerup', handlePointerUp)
     },
-    [rightPanelCollapsed, rightPanelWidth],
+    [rightPanelCollapsed, rightPanelWidth]
   )
 
   const handleLeftHandleKeyDown = useCallback(
@@ -911,7 +983,7 @@ export default function ProjectWorkspace() {
         setLeftPanelCollapsed((prev) => !prev)
       }
     },
-    [leftPanelCollapsed],
+    [leftPanelCollapsed]
   )
 
   const handleRightHandleKeyDown = useCallback(
@@ -919,26 +991,34 @@ export default function ProjectWorkspace() {
       if (event.key === 'ArrowLeft') {
         if (rightPanelCollapsed) return
         event.preventDefault()
-        setRightPanelWidth((prev) => clampNumber(prev - RESIZE_STEP, RIGHT_MIN_WIDTH, RIGHT_MAX_WIDTH))
+        setRightPanelWidth((prev) =>
+          clampNumber(prev - RESIZE_STEP, RIGHT_MIN_WIDTH, RIGHT_MAX_WIDTH)
+        )
       } else if (event.key === 'ArrowRight') {
         event.preventDefault()
         if (rightPanelCollapsed) {
           setRightPanelCollapsed(false)
           return
         }
-        setRightPanelWidth((prev) => clampNumber(prev + RESIZE_STEP, RIGHT_MIN_WIDTH, RIGHT_MAX_WIDTH))
+        setRightPanelWidth((prev) =>
+          clampNumber(prev + RESIZE_STEP, RIGHT_MIN_WIDTH, RIGHT_MAX_WIDTH)
+        )
       } else if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault()
         setRightPanelCollapsed((prev) => !prev)
       }
     },
-    [rightPanelCollapsed],
+    [rightPanelCollapsed]
   )
 
   const [folderMode, setFolderMode] = useState<'date' | 'custom'>('date')
   const [customFolder, setCustomFolder] = useState('My Folder')
 
-  const { years: dateTree, dayNodeMap, photoKeyMap } = useMemo(() => buildDateTree(photos), [photos])
+  const {
+    years: dateTree,
+    dayNodeMap,
+    photoKeyMap,
+  } = useMemo(() => buildDateTree(photos), [photos])
 
   const rawYear = searchParams.get('year')
   const rawMonth = searchParams.get('month')
@@ -963,22 +1043,26 @@ export default function ProjectWorkspace() {
     setSearchParams(next, { replace: true })
   }, [maybeSelectedKey, dayNodeMap, searchParams, setSearchParams])
 
-  const selectedDayKey = maybeSelectedKey && dayNodeMap.has(maybeSelectedKey) ? maybeSelectedKey : null
+  const selectedDayKey =
+    maybeSelectedKey && dayNodeMap.has(maybeSelectedKey) ? maybeSelectedKey : null
   const selectedDayNode = selectedDayKey ? dayNodeMap.get(selectedDayKey)! : null
 
-  const handleDaySelect = useCallback((day: DateTreeDayNode) => {
-    const next = new URLSearchParams(searchParams)
-    if (selectedDayKey === day.id) {
-      next.delete('year')
-      next.delete('month')
-      next.delete('day')
-    } else {
-      next.set('year', day.year)
-      next.set('month', day.month)
-      next.set('day', day.day)
-    }
-    setSearchParams(next, { replace: true })
-  }, [searchParams, selectedDayKey, setSearchParams])
+  const handleDaySelect = useCallback(
+    (day: DateTreeDayNode) => {
+      const next = new URLSearchParams(searchParams)
+      if (selectedDayKey === day.id) {
+        next.delete('year')
+        next.delete('month')
+        next.delete('day')
+      } else {
+        next.set('year', day.year)
+        next.set('month', day.month)
+        next.set('day', day.day)
+      }
+      setSearchParams(next, { replace: true })
+    },
+    [searchParams, selectedDayKey, setSearchParams]
+  )
 
   const clearDateFilter = useCallback(() => {
     if (!searchParams.get('year') && !searchParams.get('month') && !searchParams.get('day')) return
@@ -1014,16 +1098,33 @@ export default function ProjectWorkspace() {
     }, [])
   }, [photos, stackPairsEnabled])
 
-  const visible: Photo[] = useMemo(() => displayPhotos.filter((p) => {
-    const dateMatch = !selectedDayKey || photoKeyMap.get(p.id) === selectedDayKey
-    const typeOk =
-      (stackPairsEnabled && p.pairId && p.pairedAssetId ? showJPEG || showRAW : (p.type === 'JPEG' && showJPEG) || (p.type === 'RAW' && showRAW))
-    const ratingOk = p.rating >= minStars
-    const pickOk = !onlyPicked || p.picked
-    const rejectOk = !hideRejected || !p.rejected
-    const colorOk = filterColor === 'Any' || p.tag === filterColor
-    return dateMatch && typeOk && ratingOk && pickOk && rejectOk && colorOk
-  }), [displayPhotos, selectedDayKey, photoKeyMap, showJPEG, showRAW, minStars, onlyPicked, hideRejected, filterColor, stackPairsEnabled])
+  const visible: Photo[] = useMemo(
+    () =>
+      displayPhotos.filter((p) => {
+        const dateMatch = !selectedDayKey || photoKeyMap.get(p.id) === selectedDayKey
+        const typeOk =
+          stackPairsEnabled && p.pairId && p.pairedAssetId
+            ? showJPEG || showRAW
+            : (p.type === 'JPEG' && showJPEG) || (p.type === 'RAW' && showRAW)
+        const ratingOk = p.rating >= minStars
+        const pickOk = !onlyPicked || p.picked
+        const rejectOk = !hideRejected || !p.rejected
+        const colorOk = filterColor === 'Any' || p.tag === filterColor
+        return dateMatch && typeOk && ratingOk && pickOk && rejectOk && colorOk
+      }),
+    [
+      displayPhotos,
+      selectedDayKey,
+      photoKeyMap,
+      showJPEG,
+      showRAW,
+      minStars,
+      onlyPicked,
+      hideRejected,
+      filterColor,
+      stackPairsEnabled,
+    ]
+  )
 
   const selectedPhotos = useMemo(() => {
     if (!selectedPhotoIds.size) return []
@@ -1051,7 +1152,7 @@ export default function ProjectWorkspace() {
       if (!targets.size) return
       callback(targets)
     },
-    [shortcutPrimaryId, resolveActionTargetIds],
+    [shortcutPrimaryId, resolveActionTargetIds]
   )
 
   const togglePickSelection = useCallback(() => {
@@ -1080,7 +1181,7 @@ export default function ProjectWorkspace() {
         applyInteraction(targets, { rating })
       })
     },
-    [runWithShortcutTargets, applyInteraction],
+    [runWithShortcutTargets, applyInteraction]
   )
 
   const applyColorShortcut = useCallback(
@@ -1089,7 +1190,7 @@ export default function ProjectWorkspace() {
         applyInteraction(targets, { tag })
       })
     },
-    [runWithShortcutTargets, applyInteraction],
+    [runWithShortcutTargets, applyInteraction]
   )
 
   useEffect(() => {
@@ -1192,7 +1293,9 @@ export default function ProjectWorkspace() {
     // Placeholder for future non-destructive edit syncing.
   }, [])
 
-  useEffect(() => { if (current >= visible.length) setCurrent(Math.max(0, visible.length - 1)) }, [visible, current])
+  useEffect(() => {
+    if (current >= visible.length) setCurrent(Math.max(0, visible.length - 1))
+  }, [visible, current])
 
   const visibleCount = visible.length
 
@@ -1370,11 +1473,14 @@ export default function ProjectWorkspace() {
     }, 4000)
   }, [])
 
-  useEffect(() => () => {
-    if (uploadBannerTimeoutRef.current !== null) {
-      window.clearTimeout(uploadBannerTimeoutRef.current)
-    }
-  }, [])
+  useEffect(
+    () => () => {
+      if (uploadBannerTimeoutRef.current !== null) {
+        window.clearTimeout(uploadBannerTimeoutRef.current)
+      }
+    },
+    []
+  )
 
   const dismissUploadInfo = useCallback(() => {
     if (uploadInfoTimeoutRef.current !== null) {
@@ -1395,24 +1501,32 @@ export default function ProjectWorkspace() {
     }, 6000)
   }, [])
 
-  useEffect(() => () => {
-    if (uploadInfoTimeoutRef.current !== null) {
-      window.clearTimeout(uploadInfoTimeoutRef.current)
-    }
-  }, [])
-  const handleImport = useCallback(async (_args: { count: number; types: ImgType[]; dest: string }) => {
-    if (importInFlightRef.current) return
-    importInFlightRef.current = true
-    try {
-      await refreshAssets(true)
-      setImportOpen(false)
-    } finally {
-      importInFlightRef.current = false
-    }
-  }, [refreshAssets])
+  useEffect(
+    () => () => {
+      if (uploadInfoTimeoutRef.current !== null) {
+        window.clearTimeout(uploadInfoTimeoutRef.current)
+      }
+    },
+    []
+  )
+  const handleImport = useCallback(
+    async (_args: { count: number; types: ImgType[]; dest: string }) => {
+      if (importInFlightRef.current) return
+      importInFlightRef.current = true
+      try {
+        await refreshAssets(true)
+        setImportOpen(false)
+      } finally {
+        importInFlightRef.current = false
+      }
+    },
+    [refreshAssets]
+  )
 
   // Back to projects
-  function goBack() { navigate('/') }
+  function goBack() {
+    navigate('/')
+  }
 
   const currentPhoto = visible[current] ?? null
   useEffect(() => {
@@ -1433,7 +1547,7 @@ export default function ProjectWorkspace() {
           const anchorId =
             selectionAnchorRef.current ??
             lastSelectedPhotoIdRef.current ??
-            (prev.size ? prev.values().next().value ?? null : null)
+            (prev.size ? (prev.values().next().value ?? null) : null)
           if (anchorId) {
             const anchorIndex = visible.findIndex((item) => item.id === anchorId)
             if (anchorIndex !== -1) {
@@ -1474,7 +1588,7 @@ export default function ProjectWorkspace() {
         suppressSelectionSyncRef.current = false
       }
     },
-    [visible, current],
+    [visible, current]
   )
   const currentAssetId = currentPhoto?.id ?? null
   useEffect(() => {
@@ -1520,13 +1634,16 @@ export default function ProjectWorkspace() {
     staleTime: 1000 * 60 * 5,
   })
   const metadataSyncPending = metadataSyncMutation.isPending
-  const handleMetadataSourceChange = useCallback((nextId: MetadataSourceId) => {
-    if (!currentAssetId) return
-    if (nextId === CURRENT_CONFIG_SOURCE_ID) {
-      return
-    }
-    metadataSyncMutation.mutate({ assetId: currentAssetId, sourceProjectId: nextId })
-  }, [currentAssetId, metadataSyncMutation])
+  const handleMetadataSourceChange = useCallback(
+    (nextId: MetadataSourceId) => {
+      if (!currentAssetId) return
+      if (nextId === CURRENT_CONFIG_SOURCE_ID) {
+        return
+      }
+      metadataSyncMutation.mutate({ assetId: currentAssetId, sourceProjectId: nextId })
+    },
+    [currentAssetId, metadataSyncMutation]
+  )
   const metadataEntries = useMemo(() => {
     if (!currentAssetDetail?.metadata) return []
     return Object.entries(currentAssetDetail.metadata)
@@ -1551,11 +1668,26 @@ export default function ProjectWorkspace() {
           ? formatBytes(currentAssetDetail.size_bytes)
           : '—'
     return [
-      { label: 'File Name', value: currentAssetDetail?.original_filename ?? currentPhoto.name ?? '—' },
+      {
+        label: 'File Name',
+        value: currentAssetDetail?.original_filename ?? currentPhoto.name ?? '—',
+      },
       { label: 'File Type', value: currentPhoto.displayType ?? currentPhoto.type },
-      { label: 'Dimensions', value: formatDimensions(currentAssetDetail?.width, currentAssetDetail?.height) },
-      { label: 'Capture Date', value: formatCaptureDateLabel(currentAssetDetail?.metadata, currentAssetDetail?.taken_at ?? currentPhoto.capturedAt ?? null) },
-      { label: 'Import Date', value: formatImportDateLabel(currentPhoto.uploadedAt ?? currentPhoto.date) },
+      {
+        label: 'Dimensions',
+        value: formatDimensions(currentAssetDetail?.width, currentAssetDetail?.height),
+      },
+      {
+        label: 'Capture Date',
+        value: formatCaptureDateLabel(
+          currentAssetDetail?.metadata,
+          currentAssetDetail?.taken_at ?? currentPhoto.capturedAt ?? null
+        ),
+      },
+      {
+        label: 'Import Date',
+        value: formatImportDateLabel(currentPhoto.uploadedAt ?? currentPhoto.date),
+      },
       { label: 'File Size', value: sizeLabel },
       { label: 'Storage Origin', value: formatStorageOriginLabel(currentAssetDetail?.storage_uri) },
     ]
@@ -1601,7 +1733,8 @@ export default function ProjectWorkspace() {
     if (!currentPhoto) return null
     const detailPreviewUrl = withBase(currentAssetDetail?.preview_url ?? null)
     const detailThumbUrl = withBase(currentAssetDetail?.thumb_url ?? null)
-    const primarySrc = detailPreviewUrl ?? currentPhoto.previewSrc ?? currentPhoto.thumbSrc ?? detailThumbUrl
+    const primarySrc =
+      detailPreviewUrl ?? currentPhoto.previewSrc ?? currentPhoto.thumbSrc ?? detailThumbUrl
     const fallback = currentPhoto.thumbSrc ?? detailThumbUrl ?? null
     return {
       src: primarySrc,
@@ -1618,7 +1751,10 @@ export default function ProjectWorkspace() {
     currentAssetDetail?.preview_url,
     currentAssetDetail?.thumb_url,
   ])
-  const metadataSourceProjectId = currentPhoto?.metadataSourceProjectId ?? currentAssetDetail?.metadata_state?.source_project_id ?? null
+  const metadataSourceProjectId =
+    currentPhoto?.metadataSourceProjectId ??
+    currentAssetDetail?.metadata_state?.source_project_id ??
+    null
   const metadataSourceId: MetadataSourceId = metadataSourceProjectId ?? CURRENT_CONFIG_SOURCE_ID
   const projectOverview = useMemo(() => {
     if (!projectDetail) return null
@@ -1627,7 +1763,8 @@ export default function ProjectWorkspace() {
       description: projectDetail.note ?? '',
       client: projectDetail.client ?? '',
       tags: Array.isArray(projectDetail.tags) ? projectDetail.tags : [],
-      assetCount: typeof projectDetail.asset_count === 'number' ? projectDetail.asset_count : photos.length,
+      assetCount:
+        typeof projectDetail.asset_count === 'number' ? projectDetail.asset_count : photos.length,
       createdAt: projectDetail.created_at ?? null,
     }
   }, [projectDetail, projectName, photos.length])
@@ -1771,36 +1908,48 @@ export default function ProjectWorkspace() {
       />
       {experimentalStorageWarning ? (
         <div className="mx-4 mt-3 rounded-3xl border border-red-200 bg-red-50 px-4 py-3 text-[13px] text-red-800">
-          Experimental storage configuration: one or more paths are not available. Some images may be missing until all configured drives are available.
+          Experimental storage configuration: one or more paths are not available. Some images may
+          be missing until all configured drives are available.
         </div>
       ) : null}
       {uploadBanner && (
         <div className="pointer-events-none fixed bottom-6 right-6 z-50">
           <div
-            className={`pointer-events-auto w-72 rounded-lg border px-4 py-3 shadow-lg ${uploadBanner.status === 'error'
+            className={`pointer-events-auto w-72 rounded-lg border px-4 py-3 shadow-lg ${
+              uploadBanner.status === 'error'
                 ? 'border-[#F7C9C9] bg-[#FDF2F2]'
                 : 'border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]'
-              }`}
+            }`}
           >
             {uploadBanner.status === 'running' && (
               <>
                 <div className="flex items-center justify-between text-sm font-semibold text-[var(--text,#1F1E1B)]">
                   Uploading assets
-                  <span className="text-xs text-[var(--text-muted,#6B645B)]">{uploadBanner.percent}%</span>
+                  <span className="text-xs text-[var(--text-muted,#6B645B)]">
+                    {uploadBanner.percent}%
+                  </span>
                 </div>
                 <div className="mt-1 text-[11px] text-[var(--text-muted,#6B645B)]">
-                  {uploadBanner.completed}/{uploadBanner.total} assets • {formatBytes(uploadBanner.bytesUploaded)} of {formatBytes(uploadBanner.bytesTotal)}
+                  {uploadBanner.completed}/{uploadBanner.total} assets •{' '}
+                  {formatBytes(uploadBanner.bytesUploaded)} of{' '}
+                  {formatBytes(uploadBanner.bytesTotal)}
                 </div>
                 <div className="mt-3 h-1.5 rounded-full bg-[var(--sand-100,#F3EBDD)]">
-                  <div className="h-full rounded-full bg-[var(--charcoal-800,#1F1E1B)]" style={{ width: `${uploadBanner.percent}%` }} />
+                  <div
+                    className="h-full rounded-full bg-[var(--charcoal-800,#1F1E1B)]"
+                    style={{ width: `${uploadBanner.percent}%` }}
+                  />
                 </div>
               </>
             )}
             {uploadBanner.status === 'success' && (
               <div>
-                <div className="text-sm font-semibold text-[var(--text,#1F1E1B)]">Upload complete</div>
+                <div className="text-sm font-semibold text-[var(--text,#1F1E1B)]">
+                  Upload complete
+                </div>
                 <div className="mt-1 text-[11px] text-[var(--text-muted,#6B645B)]">
-                  {uploadBanner.total} asset{uploadBanner.total === 1 ? '' : 's'} imported • {formatBytes(uploadBanner.bytesTotal)}
+                  {uploadBanner.total} asset{uploadBanner.total === 1 ? '' : 's'} imported •{' '}
+                  {formatBytes(uploadBanner.bytesTotal)}
                 </div>
               </div>
             )}
@@ -1808,7 +1957,8 @@ export default function ProjectWorkspace() {
               <div>
                 <div className="text-sm font-semibold text-[#B42318]">Upload interrupted</div>
                 <div className="mt-1 text-[11px] text-[#B42318]">
-                  {uploadBanner.error ?? 'Something went wrong. Please reopen the import sheet to retry.'}
+                  {uploadBanner.error ??
+                    'Something went wrong. Please reopen the import sheet to retry.'}
                 </div>
               </div>
             )}
@@ -1850,8 +2000,8 @@ export default function ProjectWorkspace() {
                   selectedDay={selectedDayNode}
                   onClearDateFilter={clearDateFilter}
                   collapsed={false}
-                  onCollapse={() => { }}
-                  onExpand={() => { }}
+                  onCollapse={() => {}}
+                  onExpand={() => {}}
                   mode="mobile"
                 />
               </div>
@@ -1859,8 +2009,8 @@ export default function ProjectWorkspace() {
               <div className="h-full overflow-y-auto px-3">
                 <InspectorPanel
                   collapsed={false}
-                  onCollapse={() => { }}
-                  onExpand={() => { }}
+                  onCollapse={() => {}}
+                  onExpand={() => {}}
                   hasSelection={Boolean(currentPhoto)}
                   usedProjects={usedProjects}
                   usedProjectsLoading={assetProjectsLoading}
@@ -1869,7 +2019,10 @@ export default function ProjectWorkspace() {
                   onChangeMetadataSource={handleMetadataSourceChange}
                   metadataSourceBusy={metadataSyncPending}
                   metadataSourceError={metadataSourceActionError}
-                  keyMetadataSections={{ general: generalInspectorFields, capture: captureInspectorFields }}
+                  keyMetadataSections={{
+                    general: generalInspectorFields,
+                    capture: captureInspectorFields,
+                  }}
                   metadataSummary={metadataSummary}
                   metadataEntries={metadataEntries}
                   metadataWarnings={metadataWarnings}
@@ -1940,7 +2093,9 @@ export default function ProjectWorkspace() {
             aria-valuemin={LEFT_COLLAPSED_WIDTH}
             aria-valuemax={LEFT_MAX_WIDTH}
             aria-valuenow={leftPanelCollapsed ? LEFT_COLLAPSED_WIDTH : leftPanelWidth}
-            aria-valuetext={leftPanelCollapsed ? 'Collapsed' : `${Math.round(leftPanelWidth)} pixels`}
+            aria-valuetext={
+              leftPanelCollapsed ? 'Collapsed' : `${Math.round(leftPanelWidth)} pixels`
+            }
             aria-label="Resize Project Overview panel"
             tabIndex={0}
             className="group flex h-full w-full cursor-col-resize items-center justify-center border-x border-[var(--border,#EDE1C6)] bg-[var(--sand-50,#FBF7EF)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)]"
@@ -1948,10 +2103,16 @@ export default function ProjectWorkspace() {
             onKeyDown={handleLeftHandleKeyDown}
             onDoubleClick={() => setLeftPanelCollapsed((prev) => !prev)}
           >
-            <span className="h-10 w-[2px] rounded-full bg-[var(--border,#EDE1C6)] transition-colors group-hover:bg-[var(--text-muted,#6B645B)]" aria-hidden="true" />
+            <span
+              className="h-10 w-[2px] rounded-full bg-[var(--border,#EDE1C6)] transition-colors group-hover:bg-[var(--text-muted,#6B645B)]"
+              aria-hidden="true"
+            />
           </button>
 
-          <main ref={setContentRef} className="relative flex min-h-0 min-w-0 flex-col bg-[var(--surface,#FFFFFF)]">
+          <main
+            ref={setContentRef}
+            className="relative flex min-h-0 min-w-0 flex-col bg-[var(--surface,#FFFFFF)]"
+          >
             <div className="flex-1 min-h-0 min-w-0 overflow-hidden">{photosWorkspaceContent}</div>
           </main>
 
@@ -1962,7 +2123,9 @@ export default function ProjectWorkspace() {
             aria-valuemin={RIGHT_COLLAPSED_WIDTH}
             aria-valuemax={RIGHT_MAX_WIDTH}
             aria-valuenow={rightPanelCollapsed ? RIGHT_COLLAPSED_WIDTH : rightPanelWidth}
-            aria-valuetext={rightPanelCollapsed ? 'Collapsed' : `${Math.round(rightPanelWidth)} pixels`}
+            aria-valuetext={
+              rightPanelCollapsed ? 'Collapsed' : `${Math.round(rightPanelWidth)} pixels`
+            }
             aria-label="Resize Image Details panel"
             tabIndex={0}
             className="group flex h-full w-full cursor-col-resize items-center justify-center border-x border-[var(--border,#EDE1C6)] bg-[var(--sand-50,#FBF7EF)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)]"
@@ -1970,7 +2133,10 @@ export default function ProjectWorkspace() {
             onKeyDown={handleRightHandleKeyDown}
             onDoubleClick={() => setRightPanelCollapsed((prev) => !prev)}
           >
-            <span className="h-10 w-[2px] rounded-full bg-[var(--border,#EDE1C6)] transition-colors group-hover:bg-[var(--text-muted,#6B645B)]" aria-hidden="true" />
+            <span
+              className="h-10 w-[2px] rounded-full bg-[var(--border,#EDE1C6)] transition-colors group-hover:bg-[var(--text-muted,#6B645B)]"
+              aria-hidden="true"
+            />
           </button>
 
           <InspectorPanel
@@ -1985,7 +2151,10 @@ export default function ProjectWorkspace() {
             onChangeMetadataSource={handleMetadataSourceChange}
             metadataSourceBusy={metadataSyncPending}
             metadataSourceError={metadataSourceActionError}
-            keyMetadataSections={{ general: generalInspectorFields, capture: captureInspectorFields }}
+            keyMetadataSections={{
+              general: generalInspectorFields,
+              capture: captureInspectorFields,
+            }}
             metadataSummary={metadataSummary}
             metadataEntries={metadataEntries}
             metadataWarnings={metadataWarnings}
@@ -2005,19 +2174,27 @@ export default function ProjectWorkspace() {
       )}
 
       {importOpen && (
-        <ErrorBoundary fallback={(
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 p-4">
-            <div className="w-[min(95vw,640px)] rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-6 text-sm text-[var(--text,#1F1E1B)] shadow-2xl">
-              <div className="text-base font-semibold">Import panel crashed</div>
-              <p className="mt-2 text-[var(--text-muted,#6B645B)]">Something went wrong while loading the import sheet. Close it and try again.</p>
-              <div className="mt-4 flex justify-end">
-                <button type="button" onClick={() => setImportOpen(false)} className="rounded border border-[var(--border,#E1D3B9)] px-3 py-1.5">
-                  Close
-                </button>
+        <ErrorBoundary
+          fallback={
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 p-4">
+              <div className="w-[min(95vw,640px)] rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-6 text-sm text-[var(--text,#1F1E1B)] shadow-2xl">
+                <div className="text-base font-semibold">Import panel crashed</div>
+                <p className="mt-2 text-[var(--text-muted,#6B645B)]">
+                  Something went wrong while loading the import sheet. Close it and try again.
+                </p>
+                <div className="mt-4 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setImportOpen(false)}
+                    className="rounded border border-[var(--border,#E1D3B9)] px-3 py-1.5"
+                  >
+                    Close
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        )}>
+          }
+        >
           <ImportSheet
             projectId={id}
             onClose={() => setImportOpen(false)}
@@ -2035,12 +2212,28 @@ export default function ProjectWorkspace() {
         onClose={closeGeneralSettings}
         onSave={handleGeneralSettingsSave}
       />
-      <ExportDialog isOpen={exportDialogOpen} photos={selectedPhotos} projectId={projectId ?? null} onClose={() => setExportDialogOpen(false)} />
+      <ExportDialog
+        isOpen={exportDialogOpen}
+        photos={selectedPhotos}
+        projectId={projectId ?? null}
+        onClose={() => setExportDialogOpen(false)}
+      />
     </div>
   )
 }
 
-const RAW_LIKE_EXTENSIONS = new Set(['arw', 'cr2', 'cr3', 'nef', 'raf', 'orf', 'rw2', 'dng', 'sr2', 'pef'])
+const RAW_LIKE_EXTENSIONS = new Set([
+  'arw',
+  'cr2',
+  'cr3',
+  'nef',
+  'raf',
+  'orf',
+  'rw2',
+  'dng',
+  'sr2',
+  'pef',
+])
 
 function inferTypeFromName(name: string): ImgType {
   const ext = name.split('.').pop()?.toLowerCase()
@@ -2126,7 +2319,10 @@ function formatImportDateLabel(source?: string | null): string {
   return formatDateTimeLabel(source)
 }
 
-function formatCaptureDateLabel(metadata: Record<string, unknown> | null | undefined, fallback?: string | null): string {
+function formatCaptureDateLabel(
+  metadata: Record<string, unknown> | null | undefined,
+  fallback?: string | null
+): string {
   const cand =
     pickMetadataValue(metadata, [
       'exif:datetimeoriginal',
@@ -2155,7 +2351,12 @@ function formatStorageOriginLabel(storageUri?: string | null): string {
 }
 
 function formatCameraModel(metadata: Record<string, unknown> | null | undefined): string {
-  const raw = pickMetadataValue(metadata, ['camera_model_name', 'model', 'exif.image.model', 'exif:model'])
+  const raw = pickMetadataValue(metadata, [
+    'camera_model_name',
+    'model',
+    'exif.image.model',
+    'exif:model',
+  ])
   return formatMetadataText(raw)
 }
 
@@ -2221,7 +2422,10 @@ function formatMetadataText(value: unknown): string {
   return formatMetadataValue(value)
 }
 
-function pickMetadataValue(metadata: Record<string, unknown> | null | undefined, candidates: string[]): unknown {
+function pickMetadataValue(
+  metadata: Record<string, unknown> | null | undefined,
+  candidates: string[]
+): unknown {
   if (!metadata) return null
   const entries = Object.entries(metadata)
   if (!entries.length) return null
@@ -2366,13 +2570,16 @@ function deriveFolderFromRelativePath(relativePath?: string | null): string {
 function buildLocalDescriptorsFromFileList(fileList: FileList | File[]): LocalFileDescriptor[] {
   const files = Array.isArray(fileList) ? fileList : Array.from(fileList)
   return files.map((file) => {
-    const relativePath = (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name
+    const relativePath =
+      (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name
     const folder = deriveFolderFromRelativePath(relativePath)
     return { id: generateLocalDescriptorId(), file, folder, relativePath }
   })
 }
 
-async function collectFilesFromDataTransfer(dataTransfer: DataTransfer): Promise<LocalFileDescriptor[]> {
+async function collectFilesFromDataTransfer(
+  dataTransfer: DataTransfer
+): Promise<LocalFileDescriptor[]> {
   const descriptors: LocalFileDescriptor[] = []
   const items = dataTransfer.items ? Array.from(dataTransfer.items) : []
   const processAsFiles = () => {
@@ -2399,20 +2606,21 @@ async function collectFilesFromDataTransfer(dataTransfer: DataTransfer): Promise
     } else if ((entry as any).isDirectory) {
       const dirPath = parentPath ? `${parentPath}/${entry.name}` : entry.name
       const reader = entry.createReader()
-      const readEntries = async (): Promise<any[]> => new Promise((resolve, reject) => {
-        const all: any[] = []
-        const readChunk = () => {
-          reader.readEntries((batch: any[]) => {
-            if (!batch.length) {
-              resolve(all)
-            } else {
-              all.push(...batch)
-              readChunk()
-            }
-          }, reject)
-        }
-        readChunk()
-      })
+      const readEntries = async (): Promise<any[]> =>
+        new Promise((resolve, reject) => {
+          const all: any[] = []
+          const readChunk = () => {
+            reader.readEntries((batch: any[]) => {
+              if (!batch.length) {
+                resolve(all)
+              } else {
+                all.push(...batch)
+                readChunk()
+              }
+            }, reject)
+          }
+          readChunk()
+        })
       const children = await readEntries()
       await Promise.all(children.map((child) => traverseEntries(child, dirPath)))
     }
@@ -2452,7 +2660,14 @@ async function collectFilesFromDataTransfer(dataTransfer: DataTransfer): Promise
   return descriptors
 }
 
-type UploadPhase = 'pending' | 'initializing' | 'uploading' | 'finalizing' | 'success' | 'error' | 'blocked'
+type UploadPhase =
+  | 'pending'
+  | 'initializing'
+  | 'uploading'
+  | 'finalizing'
+  | 'success'
+  | 'error'
+  | 'blocked'
 
 type UploadTaskState = {
   id: string
@@ -2486,11 +2701,21 @@ type UploadProgressSnapshot = {
 
 type UploadBannerState = UploadProgressSnapshot & { status: 'running' | 'success' | 'error' }
 
-function PendingMiniGrid({ items, onToggle, className }: { items: PendingItem[]; onToggle: (id: string, opts?: ToggleOptions) => void; className?: string }) {
+function PendingMiniGrid({
+  items,
+  onToggle,
+  className,
+}: {
+  items: PendingItem[]
+  onToggle: (id: string, opts?: ToggleOptions) => void
+  className?: string
+}) {
   const extra = className ? ` ${className}` : ''
   if (!items.length) {
     return (
-      <div className={`rounded-md border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-4 text-center text-xs text-[var(--text-muted,#6B645B)]${extra}`}>
+      <div
+        className={`rounded-md border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-4 text-center text-xs text-[var(--text-muted,#6B645B)]${extra}`}
+      >
         Nothing selected yet.
       </div>
     )
@@ -2534,31 +2759,52 @@ function PendingMiniGrid({ items, onToggle, className }: { items: PendingItem[];
   const rowStride = VIRTUAL_TILE_HEIGHT + GRID_GAP
   const overscanRows = 2
 
-  const columns = useMemo(() => (containerWidth ? Math.max(1, computeCols(containerWidth, VIRTUAL_TILE_WIDTH, GRID_GAP)) : 1), [containerWidth])
+  const columns = useMemo(
+    () =>
+      containerWidth ? Math.max(1, computeCols(containerWidth, VIRTUAL_TILE_WIDTH, GRID_GAP)) : 1,
+    [containerWidth]
+  )
 
   const { startIndex, endIndex, paddingTop, paddingBottom } = useMemo(() => {
     if (!items.length) return { startIndex: 0, endIndex: 0, paddingTop: 0, paddingBottom: 0 }
     const rowCount = Math.max(1, Math.ceil(items.length / columns))
     const startRow = Math.max(0, Math.floor(scrollTop / rowStride) - overscanRows)
     const effectiveViewport = viewportHeight || rowStride
-    const endRow = Math.min(rowCount, Math.ceil((scrollTop + effectiveViewport) / rowStride) + overscanRows)
+    const endRow = Math.min(
+      rowCount,
+      Math.ceil((scrollTop + effectiveViewport) / rowStride) + overscanRows
+    )
     const clampedStart = Math.min(items.length, startRow * columns)
     const clampedEnd = Math.min(items.length, endRow * columns)
     const visibleRows = Math.max(0, endRow - startRow)
     const totalHeight = rowCount * VIRTUAL_TILE_HEIGHT + Math.max(0, rowCount - 1) * GRID_GAP
     const topPad = startRow * (VIRTUAL_TILE_HEIGHT + GRID_GAP)
-    const visibleHeight = visibleRows * VIRTUAL_TILE_HEIGHT + Math.max(0, visibleRows - 1) * GRID_GAP
+    const visibleHeight =
+      visibleRows * VIRTUAL_TILE_HEIGHT + Math.max(0, visibleRows - 1) * GRID_GAP
     const bottomPad = Math.max(0, totalHeight - topPad - visibleHeight)
-    return { startIndex: clampedStart, endIndex: clampedEnd, paddingTop: topPad, paddingBottom: bottomPad }
+    return {
+      startIndex: clampedStart,
+      endIndex: clampedEnd,
+      paddingTop: topPad,
+      paddingBottom: bottomPad,
+    }
   }, [items, columns, scrollTop, viewportHeight])
 
   const visibleItems = items.slice(startIndex, endIndex || items.length)
 
   return (
-    <div className={`rounded-md border border-[var(--border,#E1D3B9)] bg-[var(--sand-50,#FBF7EF)] p-2${extra}`}>
+    <div
+      className={`rounded-md border border-[var(--border,#E1D3B9)] bg-[var(--sand-50,#FBF7EF)] p-2${extra}`}
+    >
       <div className="h-full overflow-y-auto pr-1" ref={setScrollRef}>
         <div style={{ height: `${paddingTop}px` }} />
-        <div className="grid" style={{ gridTemplateColumns: `repeat(${columns}, minmax(88px, 1fr))`, gap: `${GRID_GAP}px` }}>
+        <div
+          className="grid"
+          style={{
+            gridTemplateColumns: `repeat(${columns}, minmax(88px, 1fr))`,
+            gap: `${GRID_GAP}px`,
+          }}
+        >
           {visibleItems.map((item) => (
             <label
               key={item.id}
@@ -2580,12 +2826,16 @@ function PendingMiniGrid({ items, onToggle, className }: { items: PendingItem[];
                   <img src={item.previewUrl} alt={item.name} className="h-16 w-full object-cover" />
                 ) : (
                   <div
-                    className={`flex h-16 w-full items-center justify-center text-[10px] font-medium text-[var(--text-muted,#6B645B)] ${item.ready === false ? 'animate-pulse' : ''
-                      }`}
+                    className={`flex h-16 w-full items-center justify-center text-[10px] font-medium text-[var(--text-muted,#6B645B)] ${
+                      item.ready === false ? 'animate-pulse' : ''
+                    }`}
                   >
                     {item.ready === false ? (
                       <span className="inline-flex items-center gap-1 text-[var(--text-muted,#6B645B)]">
-                        <span className="inline-block h-3 w-3 animate-spin rounded-full border border-[var(--charcoal-800,#1F1E1B)] border-b-transparent" aria-hidden />
+                        <span
+                          className="inline-block h-3 w-3 animate-spin rounded-full border border-[var(--charcoal-800,#1F1E1B)] border-b-transparent"
+                          aria-hidden
+                        />
                         Preparing…
                       </span>
                     ) : (
@@ -2595,10 +2845,14 @@ function PendingMiniGrid({ items, onToggle, className }: { items: PendingItem[];
                 )}
               </div>
               <div className="flex items-center justify-between px-2 py-1 text-[9px] font-medium uppercase tracking-wide">
-                <span className="text-[var(--charcoal-800,#1F1E1B)]">{item.ready === false ? 'Preparing' : 'Pending'}</span>
+                <span className="text-[var(--charcoal-800,#1F1E1B)]">
+                  {item.ready === false ? 'Preparing' : 'Pending'}
+                </span>
                 <span className="text-[var(--text-muted,#6B645B)]">{formatBytes(item.size)}</span>
               </div>
-              <div className="truncate px-2 pb-2 text-[10px] text-[var(--text-muted,#6B645B)]">{item.name}</div>
+              <div className="truncate px-2 pb-2 text-[10px] text-[var(--text-muted,#6B645B)]">
+                {item.name}
+              </div>
             </label>
           ))}
         </div>
@@ -2628,7 +2882,9 @@ export function ImportSheet({
   const [mode, setMode] = useState<'choose' | 'local' | 'hub' | 'upload'>('choose')
   const [localItems, setLocalItems] = useState<PendingItem[]>([])
   const [hubSelection, setHubSelection] = useState<PendingItem[]>([])
-  const [hubStatusSnapshot, setHubStatusSnapshot] = useState<Record<string, ImageHubAssetStatus>>({})
+  const [hubStatusSnapshot, setHubStatusSnapshot] = useState<Record<string, ImageHubAssetStatus>>(
+    {}
+  )
   const hubStatusRef = useRef<Record<string, ImageHubAssetStatus>>({})
   const [hubProjectDirectory, setHubProjectDirectory] = useState<Record<string, string>>({})
   const [hubResetSignal, setHubResetSignal] = useState(0)
@@ -2679,7 +2935,6 @@ export function ImportSheet({
     setHubProjectDirectory(directory)
   }, [])
 
-
   const derivedDest = folderMode === 'date' ? 'YYYY/MM/DD' : customFolder.trim() || 'Custom'
   const [uploadDestination, setUploadDestination] = useState(derivedDest)
   const [uploadTasks, setUploadTasks] = useState<UploadTaskState[]>([])
@@ -2700,7 +2955,9 @@ export function ImportSheet({
     uploadTasksRef.current = uploadTasks
   }, [uploadTasks])
 
-  useEffect(() => { (document.getElementById('import-sheet') as HTMLDivElement | null)?.focus() }, [])
+  useEffect(() => {
+    ;(document.getElementById('import-sheet') as HTMLDivElement | null)?.focus()
+  }, [])
 
   useEffect(() => {
     if (!folderInputRef.current) return
@@ -2708,17 +2965,20 @@ export function ImportSheet({
     folderInputRef.current.setAttribute('directory', '')
   }, [])
 
-  useEffect(() => () => {
-    if (localDescriptorTaskRef.current !== null) {
-      window.clearTimeout(localDescriptorTaskRef.current)
-      localDescriptorTaskRef.current = null
-    }
-    localDescriptorQueueRef.current = []
-    localDescriptorProcessingRef.current = false
-    localDescriptorRunTokenRef.current += 1
-    localPreviewUrlsRef.current.forEach((url) => URL.revokeObjectURL(url))
-    localPreviewUrlsRef.current = []
-  }, [])
+  useEffect(
+    () => () => {
+      if (localDescriptorTaskRef.current !== null) {
+        window.clearTimeout(localDescriptorTaskRef.current)
+        localDescriptorTaskRef.current = null
+      }
+      localDescriptorQueueRef.current = []
+      localDescriptorProcessingRef.current = false
+      localDescriptorRunTokenRef.current += 1
+      localPreviewUrlsRef.current.forEach((url) => URL.revokeObjectURL(url))
+      localPreviewUrlsRef.current = []
+    },
+    []
+  )
 
   const isUploadMode = mode === 'upload'
   const isHubMode = mode === 'hub'
@@ -2743,63 +3003,79 @@ export function ImportSheet({
     }
     return isHubMode ? hubSelection : localSelectedItems
   }, [isUploadMode, uploadTasks, isHubMode, hubSelection, localSelectedItems])
-  const selectedTypes = useMemo(() => Array.from(new Set(selectedItems.map((item) => item.type))) as ImgType[], [selectedItems])
-  const totalSelectedBytes = useMemo(() => selectedItems.reduce((acc, item) => acc + (item.size || 0), 0), [selectedItems])
+  const selectedTypes = useMemo(
+    () => Array.from(new Set(selectedItems.map((item) => item.type))) as ImgType[],
+    [selectedItems]
+  )
+  const totalSelectedBytes = useMemo(
+    () => selectedItems.reduce((acc, item) => acc + (item.size || 0), 0),
+    [selectedItems]
+  )
   const selectedFolders = useMemo(() => {
     const folders = new Set<string>()
     selectedItems.forEach((item) => folders.add(item.meta?.folder ?? 'Selection'))
     return folders
   }, [selectedItems])
 
-  const formatProjectName = useCallback((projectId: string) => (
-    hubProjectDirectory[projectId]
-    || `Project ${projectId.slice(0, 8).toUpperCase()}`
-  ), [hubProjectDirectory])
+  const formatProjectName = useCallback(
+    (projectId: string) =>
+      hubProjectDirectory[projectId] || `Project ${projectId.slice(0, 8).toUpperCase()}`,
+    [hubProjectDirectory]
+  )
 
-  const ensureHubStatusEntries = useCallback(async (assetIds: string[]) => {
-    if (!projectId) {
-      throw new Error('Missing project context.')
-    }
-    let snapshot = hubStatusRef.current
-    const missing = assetIds.filter((assetId) => !snapshot[assetId])
-    if (missing.length) {
-      const fetched = await Promise.all(
-        missing.map(async (assetId) => {
-          const status = await fetchImageHubAssetStatus(assetId, projectId)
-          return [assetId, status] as const
-        }),
-      )
-      snapshot = { ...snapshot }
-      fetched.forEach(([assetId, status]) => {
-        snapshot[assetId] = status
-      })
-      hubStatusRef.current = snapshot
-      setHubStatusSnapshot(snapshot)
-    }
-    return snapshot
-  }, [projectId])
-
-  const buildAutomaticInheritance = useCallback((assetsWithOptions: string[], statuses: Record<string, ImageHubAssetStatus>) => {
-    const inheritance: Record<string, string> = {}
-    assetsWithOptions.forEach((assetId) => {
-      const source = statuses[assetId]?.other_projects?.[0]
-      if (source) {
-        inheritance[assetId] = source
+  const ensureHubStatusEntries = useCallback(
+    async (assetIds: string[]) => {
+      if (!projectId) {
+        throw new Error('Missing project context.')
       }
-    })
-    return inheritance
-  }, [])
+      let snapshot = hubStatusRef.current
+      const missing = assetIds.filter((assetId) => !snapshot[assetId])
+      if (missing.length) {
+        const fetched = await Promise.all(
+          missing.map(async (assetId) => {
+            const status = await fetchImageHubAssetStatus(assetId, projectId)
+            return [assetId, status] as const
+          })
+        )
+        snapshot = { ...snapshot }
+        fetched.forEach(([assetId, status]) => {
+          snapshot[assetId] = status
+        })
+        hubStatusRef.current = snapshot
+        setHubStatusSnapshot(snapshot)
+      }
+      return snapshot
+    },
+    [projectId]
+  )
 
-  const finalizeHubLink = useCallback(async (assetIds: string[], inheritance: Record<string, string | null> = {}) => {
-    if (!projectId) {
-      throw new Error('Missing project context.')
-    }
-    await linkAssetsToProject(projectId, { assetIds, inheritance })
-    setHubSelection([])
-    setHubResetSignal((token) => token + 1)
-    const fallbackTypes = selectedTypes.length ? selectedTypes : (['JPEG'] as ImgType[])
-    onImport({ count: assetIds.length, types: fallbackTypes, dest: effectiveDest })
-  }, [projectId, onImport, selectedTypes, effectiveDest])
+  const buildAutomaticInheritance = useCallback(
+    (assetsWithOptions: string[], statuses: Record<string, ImageHubAssetStatus>) => {
+      const inheritance: Record<string, string> = {}
+      assetsWithOptions.forEach((assetId) => {
+        const source = statuses[assetId]?.other_projects?.[0]
+        if (source) {
+          inheritance[assetId] = source
+        }
+      })
+      return inheritance
+    },
+    []
+  )
+
+  const finalizeHubLink = useCallback(
+    async (assetIds: string[], inheritance: Record<string, string | null> = {}) => {
+      if (!projectId) {
+        throw new Error('Missing project context.')
+      }
+      await linkAssetsToProject(projectId, { assetIds, inheritance })
+      setHubSelection([])
+      setHubResetSignal((token) => token + 1)
+      const fallbackTypes = selectedTypes.length ? selectedTypes : (['JPEG'] as ImgType[])
+      onImport({ count: assetIds.length, types: fallbackTypes, dest: effectiveDest })
+    },
+    [projectId, onImport, selectedTypes, effectiveDest]
+  )
 
   const handleHubImport = useCallback(async () => {
     if (hubImporting) return
@@ -2813,9 +3089,13 @@ export function ImportSheet({
     try {
       const assetIds = Array.from(new Set(hubSelection.map((item) => item.id)))
       const statuses = await ensureHubStatusEntries(assetIds)
-      const assetsWithOptions = assetIds.filter((assetId) => (statuses[assetId]?.other_projects?.length))
+      const assetsWithOptions = assetIds.filter(
+        (assetId) => statuses[assetId]?.other_projects?.length
+      )
       if (metadataInheritance === 'ask' && assetsWithOptions.length) {
-        const candidateIds = Array.from(new Set(assetsWithOptions.flatMap((assetId) => statuses[assetId]?.other_projects ?? [])))
+        const candidateIds = Array.from(
+          new Set(assetsWithOptions.flatMap((assetId) => statuses[assetId]?.other_projects ?? []))
+        )
         if (candidateIds.length) {
           const candidateProjects = candidateIds.map((id) => ({ id, name: formatProjectName(id) }))
           setInheritancePrompt({ assetIds, assetsWithOptions, statuses, candidateProjects })
@@ -2834,7 +3114,16 @@ export function ImportSheet({
     } finally {
       setHubImporting(false)
     }
-  }, [hubImporting, projectId, hubSelection, ensureHubStatusEntries, metadataInheritance, formatProjectName, buildAutomaticInheritance, finalizeHubLink])
+  }, [
+    hubImporting,
+    projectId,
+    hubSelection,
+    ensureHubStatusEntries,
+    metadataInheritance,
+    formatProjectName,
+    buildAutomaticInheritance,
+    finalizeHubLink,
+  ])
 
   const handleInheritanceConfirm = useCallback(async () => {
     if (!inheritancePrompt || !selectedInheritanceProject) return
@@ -2873,12 +3162,21 @@ export function ImportSheet({
     }
   }, [inheritancePrompt, finalizeHubLink])
 
-  const uploadUploadedBytes = useMemo(() => uploadTasks.reduce((acc, task) => acc + task.bytesUploaded, 0), [uploadTasks])
-  const uploadTotalBytes = useMemo(() => uploadTasks.reduce((acc, task) => acc + task.size, 0), [uploadTasks])
+  const uploadUploadedBytes = useMemo(
+    () => uploadTasks.reduce((acc, task) => acc + task.bytesUploaded, 0),
+    [uploadTasks]
+  )
+  const uploadTotalBytes = useMemo(
+    () => uploadTasks.reduce((acc, task) => acc + task.size, 0),
+    [uploadTasks]
+  )
   const uploadCompletedCount = uploadTasks.filter((task) => task.status === 'success').length
-  const uploadOverallProgress = uploadTotalBytes > 0
-    ? uploadUploadedBytes / uploadTotalBytes
-    : (uploadTasks.length ? uploadCompletedCount / uploadTasks.length : 0)
+  const uploadOverallProgress =
+    uploadTotalBytes > 0
+      ? uploadUploadedBytes / uploadTotalBytes
+      : uploadTasks.length
+        ? uploadCompletedCount / uploadTasks.length
+        : 0
   const uploadOverallPercent = Math.max(0, Math.min(100, Math.round(uploadOverallProgress * 100)))
   const uploadIncludesHub = uploadTasks.some((item) => item.source === 'hub')
 
@@ -2927,9 +3225,13 @@ export function ImportSheet({
     return `${selectedItems.length} item${selectedItems.length === 1 ? '' : 's'} across ${folderCount} ${folderLabel} • ${formatBytes(totalSelectedBytes)} pending`
   }, [selectedItems, selectedFolders, isUploadMode, totalSelectedBytes, uploadUploadedBytes])
 
-  const localSelectedFolderCount = useMemo(() => (
-    localSelectedItems.length ? new Set(localSelectedItems.map((item) => item.meta?.folder ?? 'Selection')).size : 0
-  ), [localSelectedItems])
+  const localSelectedFolderCount = useMemo(
+    () =>
+      localSelectedItems.length
+        ? new Set(localSelectedItems.map((item) => item.meta?.folder ?? 'Selection')).size
+        : 0,
+    [localSelectedItems]
+  )
   const hubSelectionList = useMemo(() => {
     if (!hubSelection.length) return []
     const folders = new Set<string>()
@@ -2939,10 +3241,22 @@ export function ImportSheet({
 
   const localQueuePercent = useMemo(() => {
     if (localQueueProgress.totalBytes > 0) {
-      return Math.max(0, Math.min(100, Math.round((localQueueProgress.processedBytes / localQueueProgress.totalBytes) * 100)))
+      return Math.max(
+        0,
+        Math.min(
+          100,
+          Math.round((localQueueProgress.processedBytes / localQueueProgress.totalBytes) * 100)
+        )
+      )
     }
     if (localQueueProgress.totalFiles > 0) {
-      return Math.max(0, Math.min(100, Math.round((localQueueProgress.processedFiles / localQueueProgress.totalFiles) * 100)))
+      return Math.max(
+        0,
+        Math.min(
+          100,
+          Math.round((localQueueProgress.processedFiles / localQueueProgress.totalFiles) * 100)
+        )
+      )
     }
     return 0
   }, [localQueueProgress])
@@ -2953,7 +3267,9 @@ export function ImportSheet({
       pieces.push(`${localQueueProgress.processedFiles}/${localQueueProgress.totalFiles} files`)
     }
     if (localQueueProgress.totalBytes > 0) {
-      pieces.push(`${formatBytes(localQueueProgress.processedBytes)} of ${formatBytes(localQueueProgress.totalBytes)}`)
+      pieces.push(
+        `${formatBytes(localQueueProgress.processedBytes)} of ${formatBytes(localQueueProgress.totalBytes)}`
+      )
     }
     if (localQueuePercent > 0) {
       pieces.push(`${localQueuePercent}%`)
@@ -2962,24 +3278,38 @@ export function ImportSheet({
   }, [localQueuePercent, localQueueProgress])
 
   const hasLocalItems = localItems.length > 0
-  const totalLocalItems = useMemo(() => (hasLocalItems ? localItems.length : localQueueProgress.totalFiles), [hasLocalItems, localItems.length, localQueueProgress.totalFiles])
+  const totalLocalItems = useMemo(
+    () => (hasLocalItems ? localItems.length : localQueueProgress.totalFiles),
+    [hasLocalItems, localItems.length, localQueueProgress.totalFiles]
+  )
   const selectedLocalCount = useMemo(() => {
     if (localSelectedItems.length) return localSelectedItems.length
     if (localQueueProgress.active) {
       return Math.min(localQueueProgress.processedFiles, localQueueProgress.totalFiles)
     }
     return 0
-  }, [localQueueProgress.active, localQueueProgress.processedFiles, localQueueProgress.totalFiles, localSelectedItems.length])
+  }, [
+    localQueueProgress.active,
+    localQueueProgress.processedFiles,
+    localQueueProgress.totalFiles,
+    localSelectedItems.length,
+  ])
 
-  const canSubmit = !isUploadMode
-    && selectedItems.length > 0
-    && !(isLocalMode && localQueueProgress.active)
-    && !(isHubMode && (hubImporting || Boolean(inheritancePrompt)))
-  const primaryButtonLabel = isHubMode ? (hubImporting ? 'Importing…' : 'Import selected') : 'Start upload'
+  const canSubmit =
+    !isUploadMode &&
+    selectedItems.length > 0 &&
+    !(isLocalMode && localQueueProgress.active) &&
+    !(isHubMode && (hubImporting || Boolean(inheritancePrompt)))
+  const primaryButtonLabel = isHubMode
+    ? hubImporting
+      ? 'Importing…'
+      : 'Import selected'
+    : 'Start upload'
 
-  const isPreparingLocalSelection = mode !== 'upload'
-    && !hasLocalItems
-    && (localPriming || localQueueProgress.active || localQueueProgress.totalFiles > 0)
+  const isPreparingLocalSelection =
+    mode !== 'upload' &&
+    !hasLocalItems &&
+    (localPriming || localQueueProgress.active || localQueueProgress.totalFiles > 0)
 
   useEffect(() => {
     if (mode === 'choose' && (localQueueProgress.totalFiles > 0 || hasLocalItems)) {
@@ -3002,24 +3332,30 @@ export function ImportSheet({
 
   const localFolderGroups = useMemo(() => {
     if (!localItems.length) return []
-    const map = new Map<string, { items: PendingItem[]; selected: number; totalBytes: number; selectedBytes: number }>()
+    const map = new Map<
+      string,
+      { items: PendingItem[]; selected: number; totalBytes: number; selectedBytes: number }
+    >()
     localItems.forEach((item) => {
       const folder = item.meta?.folder ?? 'Loose selection'
-      if (!map.has(folder)) map.set(folder, { items: [], selected: 0, totalBytes: 0, selectedBytes: 0 })
+      if (!map.has(folder))
+        map.set(folder, { items: [], selected: 0, totalBytes: 0, selectedBytes: 0 })
       const entry = map.get(folder)!
       entry.items.push(item)
       if (item.selected) entry.selected += 1
       entry.totalBytes += item.size || 0
       if (item.selected) entry.selectedBytes += item.size || 0
     })
-    return Array.from(map.entries()).map(([folder, value]) => ({
-      folder,
-      items: value.items,
-      selected: value.selected,
-      total: value.items.length,
-      bytes: value.totalBytes,
-      selectedBytes: value.selectedBytes,
-    })).sort((a, b) => a.folder.localeCompare(b.folder))
+    return Array.from(map.entries())
+      .map(([folder, value]) => ({
+        folder,
+        items: value.items,
+        selected: value.selected,
+        total: value.items.length,
+        bytes: value.totalBytes,
+        selectedBytes: value.selectedBytes,
+      }))
+      .sort((a, b) => a.folder.localeCompare(b.folder))
   }, [localItems])
 
   function processLocalDescriptorQueue() {
@@ -3054,7 +3390,9 @@ export function ImportSheet({
 
       const preparedItems = makeLocalPendingItems(chunk)
       const preparedMap = new Map(preparedItems.map((item) => [item.id, item]))
-      const newUrls = preparedItems.map((item) => item.previewUrl).filter((url): url is string => Boolean(url))
+      const newUrls = preparedItems
+        .map((item) => item.previewUrl)
+        .filter((url): url is string => Boolean(url))
       if (newUrls.length) {
         localPreviewUrlsRef.current = [...localPreviewUrlsRef.current, ...newUrls]
       }
@@ -3274,13 +3612,18 @@ export function ImportSheet({
         }
       }
       lastLocalToggleIdRef.current = id
-      return prev.map((item, index) => (index === targetIndex ? { ...item, selected: nextSelected } : item))
+      return prev.map((item, index) =>
+        index === targetIndex ? { ...item, selected: nextSelected } : item
+      )
     })
   }
 
-  const mutateTask = useCallback((taskId: string, updater: (task: UploadTaskState) => UploadTaskState) => {
-    setUploadTasks((tasks) => tasks.map((task) => (task.id === taskId ? updater(task) : task)))
-  }, [])
+  const mutateTask = useCallback(
+    (taskId: string, updater: (task: UploadTaskState) => UploadTaskState) => {
+      setUploadTasks((tasks) => tasks.map((task) => (task.id === taskId ? updater(task) : task)))
+    },
+    []
+  )
 
   const markBlockedAfter = useCallback((failedId: string) => {
     setUploadTasks((tasks) => {
@@ -3303,41 +3646,78 @@ export function ImportSheet({
 
   function getStatusLabel(task: UploadTaskState): string {
     switch (task.status) {
-      case 'pending': return 'Queued'
-      case 'initializing': return 'Preparing'
-      case 'uploading': return 'Uploading'
-      case 'finalizing': return 'Finalizing'
-      case 'success': return 'Completed'
-      case 'error': return 'Error'
-      case 'blocked': return 'Blocked'
-      default: return 'Pending'
+      case 'pending':
+        return 'Queued'
+      case 'initializing':
+        return 'Preparing'
+      case 'uploading':
+        return 'Uploading'
+      case 'finalizing':
+        return 'Finalizing'
+      case 'success':
+        return 'Completed'
+      case 'error':
+        return 'Error'
+      case 'blocked':
+        return 'Blocked'
+      default:
+        return 'Pending'
     }
   }
 
-  function renderSummaryCard(wrapperClass: string, includeHubSelection: boolean, destination: string) {
+  function renderSummaryCard(
+    wrapperClass: string,
+    includeHubSelection: boolean,
+    destination: string
+  ) {
     return (
-      <aside className={`${wrapperClass} flex h-full min-h-0 flex-col gap-3 rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--sand-50,#FBF7EF)] p-3 text-[11px] leading-tight`}>
+      <aside
+        className={`${wrapperClass} flex h-full min-h-0 flex-col gap-3 rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--sand-50,#FBF7EF)] p-3 text-[11px] leading-tight`}
+      >
         <div>
-          <div className="font-semibold uppercase tracking-[0.08em] text-[10px] text-[var(--text-muted,#6B645B)]">Destination</div>
-          <div className="mt-1 truncate text-sm font-medium text-[var(--text,#1F1E1B)]">{destination}</div>
+          <div className="font-semibold uppercase tracking-[0.08em] text-[10px] text-[var(--text-muted,#6B645B)]">
+            Destination
+          </div>
+          <div className="mt-1 truncate text-sm font-medium text-[var(--text,#1F1E1B)]">
+            {destination}
+          </div>
         </div>
         <div>
-          <div className="font-semibold uppercase tracking-[0.08em] text-[10px] text-[var(--text-muted,#6B645B)]">Duplicates</div>
+          <div className="font-semibold uppercase tracking-[0.08em] text-[10px] text-[var(--text-muted,#6B645B)]">
+            Duplicates
+          </div>
           <label className="mt-1 flex items-center gap-2 text-[11px]">
-            <input type="checkbox" checked={ignoreDup} onChange={(e) => setIgnoreDup(e.target.checked)} className="h-4 w-4 accent-[var(--text,#1F1E1B)]" />
+            <input
+              type="checkbox"
+              checked={ignoreDup}
+              onChange={(e) => setIgnoreDup(e.target.checked)}
+              className="h-4 w-4 accent-[var(--text,#1F1E1B)]"
+            />
             Ignore duplicates
           </label>
         </div>
         <div>
-          <div className="font-semibold uppercase tracking-[0.08em] text-[10px] text-[var(--text-muted,#6B645B)]">Selection</div>
-          <div className="mt-1 text-sm font-medium text-[var(--text,#1F1E1B)]">{selectedItems.length ? `${selectedItems.length} asset${selectedItems.length === 1 ? '' : 's'} selected` : 'Nothing selected yet'}</div>
+          <div className="font-semibold uppercase tracking-[0.08em] text-[10px] text-[var(--text-muted,#6B645B)]">
+            Selection
+          </div>
+          <div className="mt-1 text-sm font-medium text-[var(--text,#1F1E1B)]">
+            {selectedItems.length
+              ? `${selectedItems.length} asset${selectedItems.length === 1 ? '' : 's'} selected`
+              : 'Nothing selected yet'}
+          </div>
           <div className="mt-1 text-[11px] text-[var(--text-muted,#6B645B)]">
             {selectedTypes.length ? selectedTypes.join(' / ') : 'Waiting for selection'}
           </div>
-          <div className="mt-1 text-[11px] text-[var(--text-muted,#6B645B)]">{selectionSummaryText}</div>
+          <div className="mt-1 text-[11px] text-[var(--text-muted,#6B645B)]">
+            {selectionSummaryText}
+          </div>
           {includeHubSelection && hubSelectionList.length > 0 && (
             <ul className="mt-2 space-y-1 text-[11px] text-[var(--text-muted,#6B645B)]">
-              {hubSelectionList.slice(0, 4).map((name) => <li key={name} className="truncate">- {name}</li>)}
+              {hubSelectionList.slice(0, 4).map((name) => (
+                <li key={name} className="truncate">
+                  - {name}
+                </li>
+              ))}
               {hubSelectionList.length > 4 && <li>- +{hubSelectionList.length - 4} more</li>}
             </ul>
           )}
@@ -3358,8 +3738,13 @@ export function ImportSheet({
     if (!selectedItems.length) return
     const missingFiles = selectedItems.filter((item) => !item.file)
     if (missingFiles.length) {
-      console.error('Upload aborted: missing File blobs for items', missingFiles.map((item) => item.id))
-      setUploadError('Some selected items are missing file data. Please reselect the files and try again.')
+      console.error(
+        'Upload aborted: missing File blobs for items',
+        missingFiles.map((item) => item.id)
+      )
+      setUploadError(
+        'Some selected items are missing file data. Please reselect the files and try again.'
+      )
       return
     }
     const tasks: UploadTaskState[] = selectedItems.map((item) => {
@@ -3400,11 +3785,13 @@ export function ImportSheet({
       const message = 'Cannot start upload: missing project context.'
       console.error(message)
       setUploadError(`${message} Please reopen the project and try again.`)
-      setUploadTasks((tasks) => tasks.map((task) => ({
-        ...task,
-        status: 'error',
-        error: task.error ?? message,
-      })))
+      setUploadTasks((tasks) =>
+        tasks.map((task) => ({
+          ...task,
+          status: 'error',
+          error: task.error ?? message,
+        }))
+      )
       setUploadRunning(false)
       return
     }
@@ -3458,10 +3845,14 @@ export function ImportSheet({
           progress: 1,
         }))
 
-        const completion = await completeUpload(init.assetId, init.uploadToken, { ignoreDuplicates: ignoreDup })
+        const completion = await completeUpload(init.assetId, init.uploadToken, {
+          ignoreDuplicates: ignoreDup,
+        })
 
         if (completion.status === 'DUPLICATE') {
-          onInfoMessage?.(`${task.name} was already in Image Hub, so we added the existing asset instead of uploading it again.`)
+          onInfoMessage?.(
+            `${task.name} was already in Image Hub, so we added the existing asset instead of uploading it again.`
+          )
         }
 
         mutateTask(taskId, (prev) => ({
@@ -3521,7 +3912,11 @@ export function ImportSheet({
             const taskId = pendingIds[pointer++]
             const currentTask = uploadTasksRef.current.find((candidate) => candidate.id === taskId)
             if (!currentTask) continue
-            if (currentTask.status === 'success' || currentTask.status === 'error' || currentTask.status === 'blocked') {
+            if (
+              currentTask.status === 'success' ||
+              currentTask.status === 'error' ||
+              currentTask.status === 'blocked'
+            ) {
               continue
             }
 
@@ -3569,10 +3964,14 @@ export function ImportSheet({
         setUploadError(null)
         if (!uploadCompletionNotifiedRef.current) {
           uploadCompletionNotifiedRef.current = true
-          const successTypes = Array.from(new Set(uploadTasksRef.current.map((task) => task.type))) as ImgType[]
+          const successTypes = Array.from(
+            new Set(uploadTasksRef.current.map((task) => task.type))
+          ) as ImgType[]
           const fallbackTypes = successTypes.length
             ? successTypes
-            : (uploadTypesRef.current.length ? uploadTypesRef.current : (['JPEG'] as ImgType[]))
+            : uploadTypesRef.current.length
+              ? uploadTypesRef.current
+              : (['JPEG'] as ImgType[])
           const count = uploadTasksRef.current.length
           if (count > 0) {
             onImport({ count, types: fallbackTypes, dest: uploadDestination })
@@ -3591,7 +3990,17 @@ export function ImportSheet({
     return () => {
       canceled = true
     }
-  }, [ignoreDup, isUploadMode, markBlockedAfter, mutateTask, onImport, projectId, uploadDestination, uploadRunning, onInfoMessage])
+  }, [
+    ignoreDup,
+    isUploadMode,
+    markBlockedAfter,
+    mutateTask,
+    onImport,
+    projectId,
+    uploadDestination,
+    uploadRunning,
+    onInfoMessage,
+  ])
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 p-4">
@@ -3604,12 +4013,24 @@ export function ImportSheet({
         onDragOver={handleDragOver}
         onDrop={handleLocalDrop}
       >
-        <DialogHeader title="Import photos" onClose={onClose} closeLabel="Close import flow" className="flex-shrink-0" />
+        <DialogHeader
+          title="Import photos"
+          onClose={onClose}
+          closeLabel="Close import flow"
+          className="flex-shrink-0"
+        />
         <div className="relative flex-1 min-h-0 px-5 pb-5 pt-2 text-sm text-[var(--text,#1F1E1B)]">
           {isPreparingLocalSelection && (
             <div className="absolute inset-0 z-30 flex items-center justify-center bg-[var(--surface,#FFFFFF)]/70 backdrop-blur-[1px]">
-              <div className="flex items-center gap-2 rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-4 py-2 text-sm font-semibold text-[var(--text,#1F1E1B)] shadow-lg" role="status" aria-live="polite">
-                <span className="inline-block h-5 w-5 animate-spin rounded-full border border-[var(--charcoal-800,#1F1E1B)] border-b-transparent" aria-hidden />
+              <div
+                className="flex items-center gap-2 rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-4 py-2 text-sm font-semibold text-[var(--text,#1F1E1B)] shadow-lg"
+                role="status"
+                aria-live="polite"
+              >
+                <span
+                  className="inline-block h-5 w-5 animate-spin rounded-full border border-[var(--charcoal-800,#1F1E1B)] border-b-transparent"
+                  aria-hidden
+                />
                 Preparing files…
               </div>
             </div>
@@ -3617,18 +4038,38 @@ export function ImportSheet({
           {mode === 'choose' && (
             <div className="flex h-full flex-col justify-center gap-6">
               <div className="grid gap-4 md:grid-cols-2">
-                <button type="button" onClick={() => setMode('local')} className="flex flex-col items-start gap-3 rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-6 text-left transition hover:border-[var(--charcoal-800,#1F1E1B)]">
+                <button
+                  type="button"
+                  onClick={() => setMode('local')}
+                  className="flex flex-col items-start gap-3 rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-6 text-left transition hover:border-[var(--charcoal-800,#1F1E1B)]"
+                >
                   <div className="text-base font-semibold">Upload Photo</div>
-                  <p className="text-xs text-[var(--text-muted,#6B645B)]">Open the native picker to choose individual images or entire folders from your computer.</p>
-                  <span className="mt-auto inline-flex items-center gap-1 text-xs font-medium text-[var(--charcoal-800,#1F1E1B)]">Choose files…</span>
+                  <p className="text-xs text-[var(--text-muted,#6B645B)]">
+                    Open the native picker to choose individual images or entire folders from your
+                    computer.
+                  </p>
+                  <span className="mt-auto inline-flex items-center gap-1 text-xs font-medium text-[var(--charcoal-800,#1F1E1B)]">
+                    Choose files…
+                  </span>
                 </button>
-                <button type="button" onClick={() => setMode('hub')} className="flex flex-col items-start gap-3 rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-6 text-left transition hover:border-[var(--charcoal-800,#1F1E1B)]">
+                <button
+                  type="button"
+                  onClick={() => setMode('hub')}
+                  className="flex flex-col items-start gap-3 rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-6 text-left transition hover:border-[var(--charcoal-800,#1F1E1B)]"
+                >
                   <div className="text-base font-semibold">Upload from ImageHub</div>
-                  <p className="text-xs text-[var(--text-muted,#6B645B)]">Browse the shared ImageHub library to pull complete project folders into this workspace.</p>
-                  <span className="mt-auto inline-flex items-center gap-1 text-xs font-medium text-[var(--charcoal-800,#1F1E1B)]">Open ImageHub</span>
+                  <p className="text-xs text-[var(--text-muted,#6B645B)]">
+                    Browse the shared ImageHub library to pull complete project folders into this
+                    workspace.
+                  </p>
+                  <span className="mt-auto inline-flex items-center gap-1 text-xs font-medium text-[var(--charcoal-800,#1F1E1B)]">
+                    Open ImageHub
+                  </span>
                 </button>
               </div>
-              <p className="text-xs text-[var(--text-muted,#6B645B)] text-center md:text-left">You can switch sources at any time before importing.</p>
+              <p className="text-xs text-[var(--text-muted,#6B645B)] text-center md:text-left">
+                You can switch sources at any time before importing.
+              </p>
             </div>
           )}
 
@@ -3642,71 +4083,118 @@ export function ImportSheet({
                   onDragOver={handleDragOver}
                   onDrop={handleLocalDrop}
                 >
-                  <div className="text-sm font-medium">Select photos or folders from your computer</div>
-                  <div className="mt-1 text-xs text-[var(--text-muted,#6B645B)]">We support JPEG and RAW formats. Picking a folder pulls in everything inside.</div>
-                  <div className="mt-4 flex justify-center gap-3 text-sm">
-                    <button type="button" onClick={() => openLocalPicker('files')} className="rounded-md bg-[var(--primary,#A56A4A)] px-3 py-2 font-medium text-[var(--primary-contrast,#FFFFFF)]">Choose files…</button>
-                    <button type="button" onClick={() => openLocalPicker('folder')} className="rounded-md border border-[var(--border,#E1D3B9)] px-3 py-2">Choose folder…</button>
+                  <div className="text-sm font-medium">
+                    Select photos or folders from your computer
                   </div>
-                  <div className="mt-3 text-xs text-[var(--text-muted,#6B645B)]">Or just drag & drop files and folders here.</div>
+                  <div className="mt-1 text-xs text-[var(--text-muted,#6B645B)]">
+                    We support JPEG and RAW formats. Picking a folder pulls in everything inside.
+                  </div>
+                  <div className="mt-4 flex justify-center gap-3 text-sm">
+                    <button
+                      type="button"
+                      onClick={() => openLocalPicker('files')}
+                      className="rounded-md bg-[var(--primary,#A56A4A)] px-3 py-2 font-medium text-[var(--primary-contrast,#FFFFFF)]"
+                    >
+                      Choose files…
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openLocalPicker('folder')}
+                      className="rounded-md border border-[var(--border,#E1D3B9)] px-3 py-2"
+                    >
+                      Choose folder…
+                    </button>
+                  </div>
+                  <div className="mt-3 text-xs text-[var(--text-muted,#6B645B)]">
+                    Or just drag & drop files and folders here.
+                  </div>
                   {localQueueProgress.active && (
-                    <div role="status" aria-live="polite" className="mt-4 flex w-full max-w-[260px] flex-col items-center gap-2 rounded-md border border-[var(--border,#E1D3B9)] bg-[var(--surface-frosted-strong,#FBF7EF)] px-3 py-2 text-center text-[11px] text-[var(--text,#1F1E1B)]">
+                    <div
+                      role="status"
+                      aria-live="polite"
+                      className="mt-4 flex w-full max-w-[260px] flex-col items-center gap-2 rounded-md border border-[var(--border,#E1D3B9)] bg-[var(--surface-frosted-strong,#FBF7EF)] px-3 py-2 text-center text-[11px] text-[var(--text,#1F1E1B)]"
+                    >
                       <div className="flex items-center justify-center gap-2 font-medium">
-                        <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border border-[var(--charcoal-800,#1F1E1B)] border-b-transparent" aria-hidden />
+                        <span
+                          className="inline-block h-3.5 w-3.5 animate-spin rounded-full border border-[var(--charcoal-800,#1F1E1B)] border-b-transparent"
+                          aria-hidden
+                        />
                         Preparing files…
                       </div>
                       {localQueueDetails && (
-                        <div className="text-[10px] text-[var(--text-muted,#6B645B)]">{localQueueDetails}</div>
+                        <div className="text-[10px] text-[var(--text-muted,#6B645B)]">
+                          {localQueueDetails}
+                        </div>
                       )}
                       <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--sand-100,#F3EBDD)]">
-                        <div className="h-full rounded-full bg-[var(--charcoal-800,#1F1E1B)] transition-[width]" style={{ width: `${localQueuePercent}%` }} />
+                        <div
+                          className="h-full rounded-full bg-[var(--charcoal-800,#1F1E1B)] transition-[width]"
+                          style={{ width: `${localQueuePercent}%` }}
+                        />
                       </div>
                     </div>
                   )}
                   {isDragging && (
                     <div className="mt-4 rounded-md border border-dashed border-[var(--charcoal-800,#1F1E1B)] bg-[var(--surface-frosted,#F8F0E4)] px-3 py-2 text-xs font-medium text-[var(--charcoal-800,#1F1E1B)]">
-                      Drop to add {mode === 'local' ? 'to your selection' : 'and review before importing'}.
+                      Drop to add{' '}
+                      {mode === 'local' ? 'to your selection' : 'and review before importing'}.
                     </div>
                   )}
                 </div>
                 {localItems.length > 0 && (
                   <div className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]">
                     <div className="flex items-center justify-between px-4 pt-3">
-                      <div className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">Selected files & folders</div>
-                      <div className="text-[11px] text-[var(--text-muted,#6B645B)]">{selectedLocalCount}/{totalLocalItems}</div>
+                      <div className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">
+                        Selected files & folders
+                      </div>
+                      <div className="text-[11px] text-[var(--text-muted,#6B645B)]">
+                        {selectedLocalCount}/{totalLocalItems}
+                      </div>
                     </div>
                     <div className="mt-2 flex-1 overflow-y-auto px-4 pb-3">
                       <ul className="space-y-3 text-[11px] text-[var(--text-muted,#6B645B)]">
-                        {localFolderGroups.map(({ folder, items, selected, total, bytes, selectedBytes }) => (
-                          <li key={folder}>
-                            <div className="flex items-center justify-between text-[var(--text,#1F1E1B)]">
-                              <div className="flex flex-col">
-                                <span className="text-xs font-medium">{folder}</span>
-                                <span className="text-[10px] text-[var(--text-muted,#6B645B)]">{formatBytes(selectedBytes)} of {formatBytes(bytes)}</span>
+                        {localFolderGroups.map(
+                          ({ folder, items, selected, total, bytes, selectedBytes }) => (
+                            <li key={folder}>
+                              <div className="flex items-center justify-between text-[var(--text,#1F1E1B)]">
+                                <div className="flex flex-col">
+                                  <span className="text-xs font-medium">{folder}</span>
+                                  <span className="text-[10px] text-[var(--text-muted,#6B645B)]">
+                                    {formatBytes(selectedBytes)} of {formatBytes(bytes)}
+                                  </span>
+                                </div>
+                                <span className="text-[10px] font-medium text-[var(--text-muted,#6B645B)]">
+                                  {selected}/{total} pending
+                                </span>
                               </div>
-                              <span className="text-[10px] font-medium text-[var(--text-muted,#6B645B)]">{selected}/{total} pending</span>
-                            </div>
-                            <ul className="mt-1 space-y-1">
-                              {items.map((item) => (
-                                <li key={item.id}>
-                                  <button
-                                    type="button"
-                                    onClick={(event) => toggleLocalItem(item.id, { shiftKey: event.shiftKey })}
-                                    className={`flex w-full items-center gap-2 rounded px-2 py-1 text-left transition ${item.selected ? 'bg-[var(--sand-50,#FBF7EF)] text-[var(--text,#1F1E1B)]' : 'text-[var(--text-muted,#6B645B)] hover:bg-[var(--sand-50,#FBF7EF)]/60'}`}
-                                  >
-                                    <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border border-[var(--border,#E1D3B9)] text-[10px]">
-                                      {item.selected ? '✓' : ''}
-                                    </span>
-                                    <span className="flex-1 truncate">
-                                      <span className="block truncate text-[11px] leading-snug">{item.name}</span>
-                                      <span className="block text-[9px] uppercase tracking-wide text-[var(--text-muted,#6B645B)]">Pending • {formatBytes(item.size)}</span>
-                                    </span>
-                                  </button>
-                                </li>
-                              ))}
-                            </ul>
-                          </li>
-                        ))}
+                              <ul className="mt-1 space-y-1">
+                                {items.map((item) => (
+                                  <li key={item.id}>
+                                    <button
+                                      type="button"
+                                      onClick={(event) =>
+                                        toggleLocalItem(item.id, { shiftKey: event.shiftKey })
+                                      }
+                                      className={`flex w-full items-center gap-2 rounded px-2 py-1 text-left transition ${item.selected ? 'bg-[var(--sand-50,#FBF7EF)] text-[var(--text,#1F1E1B)]' : 'text-[var(--text-muted,#6B645B)] hover:bg-[var(--sand-50,#FBF7EF)]/60'}`}
+                                    >
+                                      <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border border-[var(--border,#E1D3B9)] text-[10px]">
+                                        {item.selected ? '✓' : ''}
+                                      </span>
+                                      <span className="flex-1 truncate">
+                                        <span className="block truncate text-[11px] leading-snug">
+                                          {item.name}
+                                        </span>
+                                        <span className="block text-[9px] uppercase tracking-wide text-[var(--text-muted,#6B645B)]">
+                                          Pending • {formatBytes(item.size)}
+                                        </span>
+                                      </span>
+                                    </button>
+                                  </li>
+                                ))}
+                              </ul>
+                            </li>
+                          )
+                        )}
                       </ul>
                     </div>
                   </div>
@@ -3715,11 +4203,15 @@ export function ImportSheet({
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-4">
                 <div className="flex items-center justify-between">
                   <div className="text-sm font-semibold">Ready to import</div>
-                  <div className="text-xs text-[var(--text-muted,#6B645B)]">{selectedLocalCount} selected / {totalLocalItems} total</div>
+                  <div className="text-xs text-[var(--text-muted,#6B645B)]">
+                    {selectedLocalCount} selected / {totalLocalItems} total
+                  </div>
                 </div>
                 <div className="mt-1 text-xs text-[var(--text-muted,#6B645B)]">
                   {localQueueProgress.active
-                    ? (localQueueDetails ? `Preparing ${localQueueDetails}` : `Preparing ${totalLocalItems} file${totalLocalItems === 1 ? '' : 's'}…`)
+                    ? localQueueDetails
+                      ? `Preparing ${localQueueDetails}`
+                      : `Preparing ${totalLocalItems} file${totalLocalItems === 1 ? '' : 's'}…`
                     : localSelectedItems.length
                       ? `${localSelectedItems.length} item${localSelectedItems.length === 1 ? '' : 's'} across ${Math.max(1, localSelectedFolderCount)} folder${Math.max(1, localSelectedFolderCount) === 1 ? '' : 's'} • ${formatBytes(totalSelectedBytes)} pending`
                       : totalLocalItems
@@ -3736,21 +4228,34 @@ export function ImportSheet({
                       aria-live="polite"
                     >
                       <span className="inline-flex items-center gap-2 font-medium">
-                        <span className="inline-block h-4 w-4 animate-spin rounded-full border border-[var(--charcoal-800,#1F1E1B)] border-b-transparent" aria-hidden />
+                        <span
+                          className="inline-block h-4 w-4 animate-spin rounded-full border border-[var(--charcoal-800,#1F1E1B)] border-b-transparent"
+                          aria-hidden
+                        />
                         Preparing files…
                       </span>
-                      <span className="text-[var(--text-muted,#6B645B)]">{localQueueDetails || `Preparing ${totalLocalItems} file${totalLocalItems === 1 ? '' : 's'}…`}</span>
+                      <span className="text-[var(--text-muted,#6B645B)]">
+                        {localQueueDetails ||
+                          `Preparing ${totalLocalItems} file${totalLocalItems === 1 ? '' : 's'}…`}
+                      </span>
                     </div>
                   )}
                   <div className="flex-1 min-h-0">
                     {localItems.length ? (
-                      <PendingMiniGrid items={localItems} onToggle={toggleLocalItem} className="h-full" />
+                      <PendingMiniGrid
+                        items={localItems}
+                        onToggle={toggleLocalItem}
+                        className="h-full"
+                      />
                     ) : (
                       <div className="flex h-full items-center justify-center rounded border border-[var(--border,#E1D3B9)] bg-[var(--sand-50,#FBF7EF)] text-xs text-[var(--text-muted,#6B645B)]">
                         <div className="flex flex-col items-center gap-2 py-6">
-                          {(localPriming || localQueueProgress.active) ? (
+                          {localPriming || localQueueProgress.active ? (
                             <>
-                              <span className="inline-block h-4 w-4 animate-spin rounded-full border border-[var(--charcoal-800,#1F1E1B)] border-b-transparent" aria-hidden />
+                              <span
+                                className="inline-block h-4 w-4 animate-spin rounded-full border border-[var(--charcoal-800,#1F1E1B)] border-b-transparent"
+                                aria-hidden
+                              />
                               <span>{localQueueDetails || 'Preparing file list…'}</span>
                             </>
                           ) : (
@@ -3762,7 +4267,13 @@ export function ImportSheet({
                   </div>
                 </div>
                 <div className="mt-3 flex-shrink-0 text-xs">
-                  <button type="button" onClick={clearLocalSelection} className="text-[var(--river-500,#6B7C7A)] underline">Clear selection</button>
+                  <button
+                    type="button"
+                    onClick={clearLocalSelection}
+                    className="text-[var(--river-500,#6B7C7A)] underline"
+                  >
+                    Clear selection
+                  </button>
                 </div>
               </div>
               {renderSummaryCard('w-56 flex-shrink-0', false, effectiveDest)}
@@ -3788,12 +4299,17 @@ export function ImportSheet({
                 <div className="border-b border-[var(--border,#E1D3B9)] px-4 py-3">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <div className="text-sm font-semibold text-[var(--text,#1F1E1B)]">Uploading {uploadCompletedCount}/{uploadTasks.length} assets</div>
+                      <div className="text-sm font-semibold text-[var(--text,#1F1E1B)]">
+                        Uploading {uploadCompletedCount}/{uploadTasks.length} assets
+                      </div>
                       <div className="mt-1 text-xs text-[var(--text-muted,#6B645B)]">
-                        {formatBytes(uploadUploadedBytes)} of {formatBytes(uploadTotalBytes)} • {uploadOverallPercent}%
+                        {formatBytes(uploadUploadedBytes)} of {formatBytes(uploadTotalBytes)} •{' '}
+                        {uploadOverallPercent}%
                       </div>
                     </div>
-                    <span className="text-xs text-[var(--text-muted,#6B645B)]">{uploadRunning ? 'In progress…' : 'Queue stopped'}</span>
+                    <span className="text-xs text-[var(--text-muted,#6B645B)]">
+                      {uploadRunning ? 'In progress…' : 'Queue stopped'}
+                    </span>
                   </div>
                   {uploadError && (
                     <div className="mt-3 rounded border border-[#F7C9C9] bg-[#FDF2F2] px-3 py-2 text-xs text-[#B42318]">
@@ -3805,34 +4321,49 @@ export function ImportSheet({
                   {uploadTasks.length ? (
                     <ul className="space-y-3">
                       {uploadTasks.map((task) => {
-                        const progressPercent = Math.max(0, Math.min(100, Math.round(task.progress * 100)))
+                        const progressPercent = Math.max(
+                          0,
+                          Math.min(100, Math.round(task.progress * 100))
+                        )
                         const statusLabel = getStatusLabel(task)
-                        const barColor = task.status === 'error'
-                          ? 'bg-[#B42318]'
-                          : task.status === 'blocked'
-                            ? 'bg-[var(--sand-300,#E1D3B9)]'
-                            : 'bg-[var(--charcoal-800,#1F1E1B)]'
+                        const barColor =
+                          task.status === 'error'
+                            ? 'bg-[#B42318]'
+                            : task.status === 'blocked'
+                              ? 'bg-[var(--sand-300,#E1D3B9)]'
+                              : 'bg-[var(--charcoal-800,#1F1E1B)]'
                         return (
-                          <li key={task.id} className="rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-3 shadow-sm">
+                          <li
+                            key={task.id}
+                            className="rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-3 shadow-sm"
+                          >
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-2">
                                   <span className="inline-flex h-5 items-center justify-center rounded bg-[var(--sand-50,#FBF7EF)] px-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">
                                     {task.type}
                                   </span>
-                                  <span className="truncate text-sm font-medium text-[var(--text,#1F1E1B)]">{task.name}</span>
+                                  <span className="truncate text-sm font-medium text-[var(--text,#1F1E1B)]">
+                                    {task.name}
+                                  </span>
                                 </div>
                                 <div className="mt-1 text-xs text-[var(--text-muted,#6B645B)]">
-                                  {formatBytes(task.bytesUploaded)} / {formatBytes(task.size)} • {statusLabel}
+                                  {formatBytes(task.bytesUploaded)} / {formatBytes(task.size)} •{' '}
+                                  {statusLabel}
                                 </div>
                                 {task.error && (
                                   <div className="mt-1 text-xs text-[#B42318]">{task.error}</div>
                                 )}
                               </div>
-                              <span className="text-xs text-[var(--text-muted,#6B645B)]">{progressPercent}%</span>
+                              <span className="text-xs text-[var(--text-muted,#6B645B)]">
+                                {progressPercent}%
+                              </span>
                             </div>
                             <div className="mt-3 h-2 rounded bg-[var(--sand-100,#F3EBDD)]">
-                              <div className={`h-2 rounded ${barColor}`} style={{ width: `${progressPercent}%` }} />
+                              <div
+                                className={`h-2 rounded ${barColor}`}
+                                style={{ width: `${progressPercent}%` }}
+                              />
                             </div>
                           </li>
                         )
@@ -3851,9 +4382,17 @@ export function ImportSheet({
         </div>
         <div className="flex flex-shrink-0 items-center justify-end gap-2 border-t border-[var(--border,#E1D3B9)] px-5 py-4 text-sm">
           {(isLocalMode || isHubMode) && (
-            <button onClick={() => setMode('choose')} className="px-3 py-1.5 rounded border border-[var(--border,#E1D3B9)]">Back</button>
+            <button
+              onClick={() => setMode('choose')}
+              className="px-3 py-1.5 rounded border border-[var(--border,#E1D3B9)]"
+            >
+              Back
+            </button>
           )}
-          <button onClick={onClose} className="px-3 py-1.5 rounded border border-[var(--border,#E1D3B9)]">
+          <button
+            onClick={onClose}
+            className="px-3 py-1.5 rounded border border-[var(--border,#E1D3B9)]"
+          >
             {isUploadMode ? 'Close' : 'Cancel'}
           </button>
           {(isLocalMode || isHubMode) && (
@@ -3867,15 +4406,37 @@ export function ImportSheet({
           )}
         </div>
         {isHubMode && hubImportError && (
-          <div className="px-5 pb-4 text-xs text-[#B42318]" role="alert">{hubImportError}</div>
+          <div className="px-5 pb-4 text-xs text-[#B42318]" role="alert">
+            {hubImportError}
+          </div>
         )}
       </div>
-      <input ref={fileInputRef} type="file" multiple onChange={handleLocalFilesChange} className="hidden" accept="image/*" />
-      <input ref={folderInputRef} type="file" multiple onChange={handleLocalFilesChange} className="hidden" accept="image/*" />
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        onChange={handleLocalFilesChange}
+        className="hidden"
+        accept="image/*"
+      />
+      <input
+        ref={folderInputRef}
+        type="file"
+        multiple
+        onChange={handleLocalFilesChange}
+        className="hidden"
+        accept="image/*"
+      />
       {inheritancePrompt && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 px-4 py-8">
-          <div className="w-full max-w-md rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-6 shadow-2xl" role="dialog" aria-modal="true">
-            <div className="text-base font-semibold text-[var(--text,#1F1E1B)]">Load settings from another project?</div>
+          <div
+            className="w-full max-w-md rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-6 shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+          >
+            <div className="text-base font-semibold text-[var(--text,#1F1E1B)]">
+              Load settings from another project?
+            </div>
             <p className="mt-2 text-sm text-[var(--text-muted,#6B645B)]">
               {inheritancePrompt.assetsWithOptions.length === 1
                 ? 'This asset already exists in another project. Choose where to inherit ratings, labels, and picks from.'
@@ -3889,15 +4450,24 @@ export function ImportSheet({
                 className="rounded border border-[var(--border,#E1D3B9)] px-3 py-2 text-sm"
               >
                 {inheritancePrompt.candidateProjects.map((proj) => (
-                  <option key={proj.id} value={proj.id}>{proj.name}</option>
+                  <option key={proj.id} value={proj.id}>
+                    {proj.name}
+                  </option>
                 ))}
               </select>
             </label>
             <div className="mt-2 text-[11px] text-[var(--text-muted,#6B645B)]">
-              Assets that are not part of the selected project will import without inheriting metadata.
+              Assets that are not part of the selected project will import without inheriting
+              metadata.
             </div>
             <div className="mt-6 flex flex-wrap justify-end gap-2 text-sm">
-              <button type="button" onClick={handleInheritanceSkip} className="rounded border border-[var(--border,#E1D3B9)] px-3 py-1.5">Don’t inherit</button>
+              <button
+                type="button"
+                onClick={handleInheritanceSkip}
+                className="rounded border border-[var(--border,#E1D3B9)] px-3 py-1.5"
+              >
+                Don’t inherit
+              </button>
               <button
                 type="button"
                 onClick={handleInheritanceConfirm}

@@ -1,18 +1,18 @@
-import React from 'react';
-import DialogHeader from '../DialogHeader';
+import React from 'react'
+import DialogHeader from '../DialogHeader'
 
 export interface ModalShellProps {
-  title: string;
-  subtitle?: string;
-  onClose: () => void;
-  closeDisabled?: boolean;
-  onPrimary?: () => void;
-  primaryLabel?: string;
-  primaryDisabled?: boolean;
-  headerRight?: React.ReactNode;
-  footerLeft?: React.ReactNode;
-  footerRight?: React.ReactNode;
-  children: React.ReactNode;
+  title: string
+  subtitle?: string
+  onClose: () => void
+  closeDisabled?: boolean
+  onPrimary?: () => void
+  primaryLabel?: string
+  primaryDisabled?: boolean
+  headerRight?: React.ReactNode
+  footerLeft?: React.ReactNode
+  footerRight?: React.ReactNode
+  children: React.ReactNode
 }
 
 /**
@@ -34,7 +34,7 @@ const ModalShell: React.FC<ModalShellProps> = ({
   children,
 }) => {
   const renderFooterRight = () => {
-    if (footerRight) return footerRight;
+    if (footerRight) return footerRight
     if (!primaryLabel || !onPrimary) {
       return (
         <button
@@ -44,7 +44,7 @@ const ModalShell: React.FC<ModalShellProps> = ({
         >
           Close
         </button>
-      );
+      )
     }
     return (
       <>
@@ -68,8 +68,8 @@ const ModalShell: React.FC<ModalShellProps> = ({
           {primaryLabel}
         </button>
       </>
-    );
-  };
+    )
+  }
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30 px-4 py-6 sm:px-6">
@@ -85,11 +85,13 @@ const ModalShell: React.FC<ModalShellProps> = ({
         <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5">{children}</div>
         <div className="flex flex-col gap-3 border-t border-[var(--border,#E1D3B9)] bg-[var(--surface-subtle,#FBF7EF)] px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-wrap gap-2 text-sm">{footerLeft}</div>
-          <div className="flex flex-wrap items-center justify-end gap-2 text-sm">{renderFooterRight()}</div>
+          <div className="flex flex-wrap items-center justify-end gap-2 text-sm">
+            {renderFooterRight()}
+          </div>
         </div>
       </div>
     </div>
-  );
-};
+  )
+}
 
-export default ModalShell;
+export default ModalShell

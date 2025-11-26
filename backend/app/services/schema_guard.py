@@ -16,4 +16,6 @@ ASSET_STATUS_VALUES = [
 
 async def ensure_enum_values(db: AsyncSession) -> None:
     for value in ASSET_STATUS_VALUES:
-        await db.execute(text(f"ALTER TYPE assetstatus ADD VALUE IF NOT EXISTS '{value}'"))
+        await db.execute(
+            text(f"ALTER TYPE assetstatus ADD VALUE IF NOT EXISTS '{value}'")
+        )

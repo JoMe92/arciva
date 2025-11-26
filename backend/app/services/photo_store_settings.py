@@ -73,24 +73,62 @@ def _read_state_file(default_root: Path) -> PhotoStoreState:
                 locations: list[StoredLocation] = []
                 for entry in raw_locations:
                     path_value = entry.get("path") if isinstance(entry, dict) else None
-                    normalized = _normalize_path(path_value) if isinstance(path_value, str) else None
+                    normalized = (
+                        _normalize_path(path_value)
+                        if isinstance(path_value, str)
+                        else None
+                    )
                     if not normalized:
                         continue
                     role = entry.get("role")
                     if role not in ("primary", "secondary"):
                         role = "secondary"
-                    loc_id = entry.get("id") if isinstance(entry.get("id"), str) else str(uuid.uuid4())
-                    created_at = entry.get("created_at") if isinstance(entry.get("created_at"), str) else _now_iso()
-                    locations.append(StoredLocation(id=loc_id, path=str(normalized), role=role, created_at=created_at))
-                last_option = data.get("last_option") if data.get("last_option") in {"move", "fresh", "add", "load"} else None
-                updated_at = data.get("updated_at") if isinstance(data.get("updated_at"), str) else None
+                    loc_id = (
+                        entry.get("id")
+                        if isinstance(entry.get("id"), str)
+                        else str(uuid.uuid4())
+                    )
+                    created_at = (
+                        entry.get("created_at")
+                        if isinstance(entry.get("created_at"), str)
+                        else _now_iso()
+                    )
+                    locations.append(
+                        StoredLocation(
+                            id=loc_id,
+                            path=str(normalized),
+                            role=role,
+                            created_at=created_at,
+                        )
+                    )
+                last_option = (
+                    data.get("last_option")
+                    if data.get("last_option") in {"move", "fresh", "add", "load"}
+                    else None
+                )
+                updated_at = (
+                    data.get("updated_at")
+                    if isinstance(data.get("updated_at"), str)
+                    else None
+                )
                 if locations:
-                    return PhotoStoreState(locations=locations, last_option=last_option, updated_at=updated_at)
+                    return PhotoStoreState(
+                        locations=locations,
+                        last_option=last_option,
+                        updated_at=updated_at,
+                    )
         except json.JSONDecodeError:
             logger.warning("photo_store_settings: invalid JSON in %s", CONFIG_FILE)
     created_at = _now_iso()
-    default_location = StoredLocation(id=str(uuid.uuid4()), path=str(default_root), role="primary", created_at=created_at)
-    state = PhotoStoreState(locations=[default_location], last_option=None, updated_at=created_at)
+    default_location = StoredLocation(
+        id=str(uuid.uuid4()),
+        path=str(default_root),
+        role="primary",
+        created_at=created_at,
+    )
+    state = PhotoStoreState(
+        locations=[default_location], last_option=None, updated_at=created_at
+    )
     _write_state_file(state)
     return state
 
@@ -192,27 +230,51 @@ def validate_candidate_path(candidate: str) -> tuple[bool, str | None]:
     return True, None
 
 
-def update_state(state: PhotoStoreState, new_path: Path, mode: PhotoStoreMode) -> PhotoStoreState:
+def update_state(
+    state: PhotoStoreState, new_path: Path, mode: PhotoStoreMode
+) -> PhotoStoreState:
     normalized = new_path
     next_state = copy.deepcopy(state)
     if mode == "move":
         logger.info("photo_store_settings: copying data to %s", normalized)
         current_primary = Path(state.locations[0].path)
         _copy_directory(current_primary, normalized)
-        new_location = StoredLocation(id=str(uuid.uuid4()), path=str(normalized), role="primary", created_at=_now_iso())
+        new_location = StoredLocation(
+            id=str(uuid.uuid4()),
+            path=str(normalized),
+            role="primary",
+            created_at=_now_iso(),
+        )
         next_state.locations = [new_location]
     elif mode in ("fresh", "load"):
         logger.info("photo_store_settings: preparing %s path at %s", mode, normalized)
         ensure_photo_store_dirs(normalized)
-        new_location = StoredLocation(id=str(uuid.uuid4()), path=str(normalized), role="primary", created_at=_now_iso())
+        new_location = StoredLocation(
+            id=str(uuid.uuid4()),
+            path=str(normalized),
+            role="primary",
+            created_at=_now_iso(),
+        )
         next_state.locations = [new_location]
     else:
         logger.info("photo_store_settings: adding secondary path %s", normalized)
         ensure_photo_store_dirs(normalized)
-        new_location = StoredLocation(id=str(uuid.uuid4()), path=str(normalized), role="primary", created_at=_now_iso())
+        new_location = StoredLocation(
+            id=str(uuid.uuid4()),
+            path=str(normalized),
+            role="primary",
+            created_at=_now_iso(),
+        )
         updated = [new_location]
         for existing in state.locations:
-            updated.append(StoredLocation(id=existing.id, path=existing.path, role="secondary", created_at=existing.created_at))
+            updated.append(
+                StoredLocation(
+                    id=existing.id,
+                    path=existing.path,
+                    role="secondary",
+                    created_at=existing.created_at,
+                )
+            )
         next_state.locations = updated
     next_state.last_option = mode
     next_state.updated_at = _now_iso()
@@ -223,7 +285,12 @@ def prepare_state(default_root: Path) -> PhotoStoreState:
     state = load_photo_store_state(default_root)
     if not state.locations:
         ensure_photo_store_dirs(default_root)
-        default_location = StoredLocation(id=str(uuid.uuid4()), path=str(default_root), role="primary", created_at=_now_iso())
+        default_location = StoredLocation(
+            id=str(uuid.uuid4()),
+            path=str(default_root),
+            role="primary",
+            created_at=_now_iso(),
+        )
         state.locations = [default_location]
         _write_state_file(state)
     return state
@@ -248,11 +315,13 @@ def make_location_payload(state: PhotoStoreState) -> list[dict[str, str | None]]
     for loc in state.locations:
         path = Path(loc.path)
         status, message = describe_location(path)
-        entries.append({
-            "id": loc.id,
-            "path": loc.path,
-            "role": loc.role,
-            "status": status,
-            "message": message,
-        })
+        entries.append(
+            {
+                "id": loc.id,
+                "path": loc.path,
+                "role": loc.role,
+                "status": status,
+                "message": message,
+            }
+        )
     return entries

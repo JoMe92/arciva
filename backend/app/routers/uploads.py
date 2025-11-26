@@ -29,6 +29,7 @@ logger = logging.getLogger("arciva.uploads")
 
 router = APIRouter(prefix="/v1", tags=["uploads"])
 
+
 # naive in-memory token store for MVP (process lifetime)
 class UploadSession(TypedDict, total=False):
     token: str
@@ -40,7 +41,12 @@ class UploadSession(TypedDict, total=False):
 
 UPLOAD_TOKENS: dict[str, UploadSession] = {}
 
-@router.post("/projects/{project_id}/uploads/init", response_model=schemas.UploadInitOut, status_code=201)
+
+@router.post(
+    "/projects/{project_id}/uploads/init",
+    response_model=schemas.UploadInitOut,
+    status_code=201,
+)
 async def upload_init(
     project_id: UUID,
     body: schemas.UploadInitIn,
@@ -63,7 +69,9 @@ async def upload_init(
 
     # Link to project now
     await ensure_preview_columns(db)
-    link = models.ProjectAsset(project_id=project_id, asset_id=asset.id, user_id=current_user.id)
+    link = models.ProjectAsset(
+        project_id=project_id, asset_id=asset.id, user_id=current_user.id
+    )
     db.add(link)
     await db.flush()
     await ensure_state_for_link(db, link)
@@ -86,7 +94,10 @@ async def upload_init(
         "duplicate_asset_id": None,
         "temp_removed": False,
     }
-    return schemas.UploadInitOut(asset_id=asset.id, upload_token=token, max_bytes=body.size_bytes)
+    return schemas.UploadInitOut(
+        asset_id=asset.id, upload_token=token, max_bytes=body.size_bytes
+    )
+
 
 @router.put("/uploads/{asset_id}")
 async def upload_file(
@@ -149,7 +160,9 @@ async def upload_file(
         session["duplicate_asset_id"] = str(duplicate.id)
         storage.remove_temp(asset_id)
         session["temp_removed"] = True
-        logger.info("upload_file: dedupe hit asset=%s existing=%s", asset_id, duplicate.id)
+        logger.info(
+            "upload_file: dedupe hit asset=%s existing=%s", asset_id, duplicate.id
+        )
         return {"ok": True, "bytes": total, "sha256": sha, "duplicate": True}
 
     asset.sha256 = sha
@@ -188,6 +201,7 @@ async def upload_file(
 
     return {"ok": True, "bytes": total, "sha256": sha, "duplicate": False}
 
+
 @router.post("/uploads/complete")
 async def upload_complete(
     body: schemas.UploadCompleteIn,
@@ -199,7 +213,9 @@ async def upload_complete(
     if not session:
         raise HTTPException(400, "no upload in progress")
 
-    asset = (await db.execute(select(models.Asset).where(models.Asset.id==body.asset_id))).scalar_one_or_none()
+    asset = (
+        await db.execute(select(models.Asset).where(models.Asset.id == body.asset_id))
+    ).scalar_one_or_none()
     if not asset:
         raise HTTPException(404, "asset not found")
     if asset.user_id != current_user.id:

@@ -3,14 +3,12 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
-from uuid import UUID
 
 from sqlalchemy import func, select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .. import models
 from ..storage import PosixStorage
-from .metadata_states import ensure_state_for_link
 from .links import link_asset_to_project
 
 logger = logging.getLogger("arciva.dedup")
@@ -40,7 +38,10 @@ async def adopt_duplicate_asset(
     link_rows = (
         await db.execute(
             select(models.ProjectAsset, models.MetadataState)
-            .outerjoin(models.MetadataState, models.MetadataState.link_id == models.ProjectAsset.id)
+            .outerjoin(
+                models.MetadataState,
+                models.MetadataState.link_id == models.ProjectAsset.id,
+            )
             .where(
                 models.ProjectAsset.asset_id == duplicate_asset.id,
                 models.ProjectAsset.user_id == duplicate_asset.user_id,
@@ -61,13 +62,17 @@ async def adopt_duplicate_asset(
             linked += 1
 
     await db.execute(
-        delete(models.ProjectAsset).where(models.ProjectAsset.asset_id == duplicate_asset.id)
+        delete(models.ProjectAsset).where(
+            models.ProjectAsset.asset_id == duplicate_asset.id
+        )
     )
     await db.execute(delete(models.Asset).where(models.Asset.id == duplicate_asset.id))
 
     count = (
         await db.execute(
-            select(func.count()).select_from(models.ProjectAsset).where(
+            select(func.count())
+            .select_from(models.ProjectAsset)
+            .where(
                 models.ProjectAsset.asset_id == existing_asset.id,
                 models.ProjectAsset.user_id == existing_asset.user_id,
             )

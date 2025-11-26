@@ -10,7 +10,6 @@ from uuid import UUID
 
 from arq.connections import RedisSettings
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app import models
 from backend.app.deps import get_settings
@@ -20,7 +19,6 @@ from backend.app.logging_utils import setup_logging
 from backend.app.storage import PosixStorage
 from backend.app.schema_utils import ensure_asset_metadata_column
 from backend.app.services.raw_reader import RawReadResult, RawReaderService
-from backend.app.services.metadata_states import ensure_state_for_link
 from backend.app.services.dedup import adopt_duplicate_asset
 from backend.app.utils.assets import detect_asset_format
 
@@ -42,11 +40,20 @@ async def _sha256_async(path: Path) -> str:
     return await asyncio.to_thread(sha256_file, path)
 
 
-async def _read_exif_async(path: Path) -> tuple[Optional[datetime], Tuple[Optional[int], Optional[int]], Optional[dict[str, Any]], list[str]]:
+async def _read_exif_async(
+    path: Path,
+) -> tuple[
+    Optional[datetime],
+    Tuple[Optional[int], Optional[int]],
+    Optional[dict[str, Any]],
+    list[str],
+]:
     return await asyncio.to_thread(read_exif, path)
 
 
-async def _make_derivative_async(path: Optional[Path], size: int, *, image_bytes: bytes | None = None):
+async def _make_derivative_async(
+    path: Optional[Path], size: int, *, image_bytes: bytes | None = None
+):
     return await asyncio.to_thread(make_thumb, path, size, image_bytes=image_bytes)
 
 
@@ -87,11 +94,7 @@ def _merge_metadata(
         merged["legacy_metadata"] = existing
 
     for key, value in addition.items():
-        if (
-            key in merged
-            and isinstance(merged[key], dict)
-            and isinstance(value, dict)
-        ):
+        if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
             nested = dict(merged[key])
             nested.update(value)
             merged[key] = nested
@@ -107,9 +110,7 @@ async def ingest_asset(ctx, asset_id: str):
 
     async with SessionLocal() as db:  # type: AsyncSession
         asset = (
-            await db.execute(
-                select(models.Asset).where(models.Asset.id == asset_uuid)
-            )
+            await db.execute(select(models.Asset).where(models.Asset.id == asset_uuid))
         ).scalar_one_or_none()
         if not asset:
             logger.warning("ingest_asset: asset=%s not found", asset_id)
@@ -132,7 +133,11 @@ async def ingest_asset(ctx, asset_id: str):
             try:
                 original_path = storage.path_from_key(asset.storage_uri)
             except ValueError:
-                logger.warning("ingest_asset: invalid storage key asset=%s key=%s", asset.id, asset.storage_uri)
+                logger.warning(
+                    "ingest_asset: invalid storage key asset=%s key=%s",
+                    asset.id,
+                    asset.storage_uri,
+                )
                 original_path = None
         if original_path and not original_path.exists():
             original_path = None
@@ -163,7 +168,9 @@ async def ingest_asset(ctx, asset_id: str):
 
         try:
             sha = await _sha256_async(source_path)
-            logger.info("ingest_asset: asset=%s sha256=%s source=%s", asset_id, sha, source_path)
+            logger.info(
+                "ingest_asset: asset=%s sha256=%s source=%s", asset_id, sha, source_path
+            )
 
             if temp_exists:
                 duplicate = (
@@ -206,12 +213,16 @@ async def ingest_asset(ctx, asset_id: str):
             raw_metadata: dict[str, Any] | None = None
             raw_preview_bytes: bytes | None = None
 
-            is_raw_candidate = RAW_READER.supports(Path(asset.original_filename)) or RAW_READER.supports(source_path)
+            is_raw_candidate = RAW_READER.supports(
+                Path(asset.original_filename)
+            ) or RAW_READER.supports(source_path)
             if is_raw_candidate:
                 try:
                     raw_result = await asyncio.to_thread(RAW_READER.read, source_path)
                 except Exception:  # pragma: no cover - best effort protection
-                    logger.exception("ingest_asset: raw reader failed asset=%s", asset_id)
+                    logger.exception(
+                        "ingest_asset: raw reader failed asset=%s", asset_id
+                    )
                     warnings.append("RAW_PREVIEW_ERROR")
                 else:
                     if raw_result.warnings:
@@ -231,7 +242,12 @@ async def ingest_asset(ctx, asset_id: str):
                         )
 
             try:
-                exif_taken_at, dims, exif_metadata, exif_warnings = await _read_exif_async(source_path)
+                (
+                    exif_taken_at,
+                    dims,
+                    exif_metadata,
+                    exif_warnings,
+                ) = await _read_exif_async(source_path)
                 if exif_taken_at:
                     taken_at = exif_taken_at
                 dw, dh = dims
@@ -243,7 +259,7 @@ async def ingest_asset(ctx, asset_id: str):
                     metadata_payload = exif_metadata
                 if exif_warnings:
                     warnings.extend(exif_warnings)
-            except Exception as exc:  # pragma: no cover - best effort
+            except Exception:  # pragma: no cover - best effort
                 logger.exception("ingest_asset: read_exif failed asset=%s", asset_id)
                 warnings.append("EXIF_ERROR")
 
@@ -251,7 +267,9 @@ async def ingest_asset(ctx, asset_id: str):
                 warnings.append("EXIF_UNAVAILABLE")
 
             if raw_metadata:
-                base_metadata = metadata_payload if isinstance(metadata_payload, dict) else None
+                base_metadata = (
+                    metadata_payload if isinstance(metadata_payload, dict) else None
+                )
                 metadata_payload = _merge_metadata(base_metadata, raw_metadata)
 
             if (width is None or height is None) and raw_preview_bytes:
@@ -265,7 +283,9 @@ async def ingest_asset(ctx, asset_id: str):
 
                     width, height = await asyncio.to_thread(_preview_size)
                 except Exception:  # pragma: no cover - best effort
-                    logger.exception("ingest_asset: raw preview size failed asset=%s", asset_id)
+                    logger.exception(
+                        "ingest_asset: raw preview size failed asset=%s", asset_id
+                    )
 
             if (width is None or height is None) and source_path.exists():
                 try:
@@ -278,7 +298,9 @@ async def ingest_asset(ctx, asset_id: str):
 
                     width, height = await asyncio.to_thread(_size)
                 except Exception:  # pragma: no cover - best effort
-                    logger.exception("ingest_asset: fallback image size failed asset=%s", asset_id)
+                    logger.exception(
+                        "ingest_asset: fallback image size failed asset=%s", asset_id
+                    )
 
             pixel_hash: str | None = None
             pixel_format = asset_format or "UNKNOWN"
@@ -290,7 +312,9 @@ async def ingest_asset(ctx, asset_id: str):
                         image_bytes=raw_preview_bytes,
                     )
                 elif source_path.exists():
-                    pixel_hash = await asyncio.to_thread(compute_pixel_hash, source_path)
+                    pixel_hash = await asyncio.to_thread(
+                        compute_pixel_hash, source_path
+                    )
             except Exception:  # pragma: no cover - best effort
                 logger.exception("ingest_asset: pixel hash failed asset=%s", asset_id)
 
@@ -345,7 +369,9 @@ async def ingest_asset(ctx, asset_id: str):
                                 variant,
                                 asset_id,
                             )
-                            derivative_failures.append(f"DERIVATIVE_{variant.upper()}_FAILED")
+                            derivative_failures.append(
+                                f"DERIVATIVE_{variant.upper()}_FAILED"
+                            )
                             continue
                     else:
                         logger.exception(
@@ -353,7 +379,9 @@ async def ingest_asset(ctx, asset_id: str):
                             variant,
                             asset_id,
                         )
-                        derivative_failures.append(f"DERIVATIVE_{variant.upper()}_FAILED")
+                        derivative_failures.append(
+                            f"DERIVATIVE_{variant.upper()}_FAILED"
+                        )
                         continue
 
                 tpath = storage.derivative_path(sha, variant, "jpg")
@@ -391,8 +419,15 @@ async def ingest_asset(ctx, asset_id: str):
                 preview_path.write_bytes(raw_preview_bytes)
 
                 preview_dims: tuple[int, int] | None = None
-                if raw_result and raw_result.preview_width and raw_result.preview_height:
-                    preview_dims = (int(raw_result.preview_width), int(raw_result.preview_height))
+                if (
+                    raw_result
+                    and raw_result.preview_width
+                    and raw_result.preview_height
+                ):
+                    preview_dims = (
+                        int(raw_result.preview_width),
+                        int(raw_result.preview_height),
+                    )
                 else:
                     try:
                         from PIL import Image, ImageOps
@@ -404,11 +439,18 @@ async def ingest_asset(ctx, asset_id: str):
 
                         preview_dims = await asyncio.to_thread(_preview_size)
                     except Exception:  # pragma: no cover - best effort
-                        logger.exception("ingest_asset: preview dims fallback failed asset=%s", asset_id)
+                        logger.exception(
+                            "ingest_asset: preview dims fallback failed asset=%s",
+                            asset_id,
+                        )
 
                 if preview_dims is None:
-                    fallback_w = int(width or (raw_result.preview_width if raw_result else 0) or 0)
-                    fallback_h = int(height or (raw_result.preview_height if raw_result else 0) or 0)
+                    fallback_w = int(
+                        width or (raw_result.preview_width if raw_result else 0) or 0
+                    )
+                    fallback_h = int(
+                        height or (raw_result.preview_height if raw_result else 0) or 0
+                    )
                     preview_dims = (fallback_w, fallback_h)
 
                 preview_derivative = (
@@ -421,13 +463,19 @@ async def ingest_asset(ctx, asset_id: str):
                 ).scalar_one_or_none()
                 px, py = preview_dims
                 if px <= 0 or py <= 0:
-                    px = int(width or (raw_result.preview_width if raw_result else 0) or 1)
-                    py = int(height or (raw_result.preview_height if raw_result else 0) or 1)
+                    px = int(
+                        width or (raw_result.preview_width if raw_result else 0) or 1
+                    )
+                    py = int(
+                        height or (raw_result.preview_height if raw_result else 0) or 1
+                    )
                 if preview_derivative:
                     preview_derivative.width = px
                     preview_derivative.height = py
                     preview_derivative.format = "jpg"
-                    preview_derivative.storage_key = storage.storage_key_for(preview_path)
+                    preview_derivative.storage_key = storage.storage_key_for(
+                        preview_path
+                    )
                 else:
                     db.add(
                         models.Derivative(

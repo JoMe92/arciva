@@ -15,7 +15,9 @@ from . import models
 from .db import get_db
 from .deps import Settings, get_settings
 
-_PASSWORD_HASHER = PasswordHasher(time_cost=2, memory_cost=102400, parallelism=8, hash_len=32, salt_len=16)
+_PASSWORD_HASHER = PasswordHasher(
+    time_cost=2, memory_cost=102400, parallelism=8, hash_len=32, salt_len=16
+)
 SESSION_COOKIE_NAME = "arciva_session"
 SESSION_TTL_SECONDS = 60 * 60 * 24 * 14  # two weeks
 

@@ -1,6 +1,5 @@
 import logging
 from datetime import datetime, timezone
-from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc, func
@@ -22,6 +21,7 @@ from ..utils.projects import ensure_project_access
 router = APIRouter(prefix="/v1", tags=["assets"])
 logger = logging.getLogger("arciva.assets")
 
+
 @router.get("/projects/{project_id}/assets", response_model=list[schemas.AssetListItem])
 async def list_assets(
     project_id: UUID,
@@ -34,10 +34,20 @@ async def list_assets(
     await ensure_preview_columns(db)
     await sync_project_pairs(db, project_id)
     q = (
-        select(models.Asset, models.ProjectAsset, models.ProjectAssetPair, models.MetadataState)
+        select(
+            models.Asset,
+            models.ProjectAsset,
+            models.ProjectAssetPair,
+            models.MetadataState,
+        )
         .join(models.ProjectAsset, models.ProjectAsset.asset_id == models.Asset.id)
-        .outerjoin(models.ProjectAssetPair, models.ProjectAssetPair.id == models.ProjectAsset.pair_id)
-        .outerjoin(models.MetadataState, models.MetadataState.link_id == models.ProjectAsset.id)
+        .outerjoin(
+            models.ProjectAssetPair,
+            models.ProjectAssetPair.id == models.ProjectAsset.pair_id,
+        )
+        .outerjoin(
+            models.MetadataState, models.MetadataState.link_id == models.ProjectAsset.id
+        )
         .where(
             models.ProjectAsset.project_id == project_id,
             models.ProjectAsset.user_id == current_user.id,
@@ -47,7 +57,13 @@ async def list_assets(
     )
     rows = (await db.execute(q)).all()
     storage = PosixStorage.from_env()
-    return [assets_service.serialize_asset_item(asset, project_asset, pair, storage, metadata) for asset, project_asset, pair, metadata in rows]
+    return [
+        assets_service.serialize_asset_item(
+            asset, project_asset, pair, storage, metadata
+        )
+        for asset, project_asset, pair, metadata in rows
+    ]
+
 
 @router.get("/assets/{asset_id}", response_model=schemas.AssetDetail)
 async def get_asset(
@@ -72,8 +88,7 @@ async def get_asset(
     if project_id:
         link = (
             await db.execute(
-                select(models.ProjectAsset)
-                .where(
+                select(models.ProjectAsset).where(
                     models.ProjectAsset.project_id == project_id,
                     models.ProjectAsset.asset_id == asset.id,
                     models.ProjectAsset.user_id == current_user.id,
@@ -84,17 +99,23 @@ async def get_asset(
             raise HTTPException(404, "asset not linked to project")
         metadata = (
             await db.execute(
-                select(models.MetadataState).where(models.MetadataState.link_id == link.id)
+                select(models.MetadataState).where(
+                    models.MetadataState.link_id == link.id
+                )
             )
         ).scalar_one_or_none()
         if metadata is None:
             metadata = await ensure_state_for_link(db, link)
     storage = PosixStorage.from_env()
     await assets_service.ensure_asset_metadata_populated(asset, db, storage)
-    return await assets_service.asset_detail(asset, db, storage, link=link, metadata=metadata)
+    return await assets_service.asset_detail(
+        asset, db, storage, link=link, metadata=metadata
+    )
 
 
-@router.get("/assets/{asset_id}/projects", response_model=list[schemas.AssetProjectUsage])
+@router.get(
+    "/assets/{asset_id}/projects", response_model=list[schemas.AssetProjectUsage]
+)
 async def asset_project_usage(
     asset_id: UUID,
     db: AsyncSession = Depends(get_db),
@@ -109,7 +130,9 @@ async def asset_project_usage(
     rows = (
         await db.execute(
             select(models.Project, models.ProjectAsset.updated_at)
-            .join(models.ProjectAsset, models.ProjectAsset.project_id == models.Project.id)
+            .join(
+                models.ProjectAsset, models.ProjectAsset.project_id == models.Project.id
+            )
             .where(
                 models.ProjectAsset.asset_id == asset_id,
                 models.ProjectAsset.user_id == current_user.id,
@@ -161,13 +184,18 @@ async def reprocess_asset(
 
     settings = get_settings()
     try:
-        from arq.connections import RedisSettings, ArqRedis  # local import for optional dependency
+        from arq.connections import (
+            RedisSettings,
+            ArqRedis,
+        )  # local import for optional dependency
+
         redis_settings = RedisSettings.from_dsn(settings.redis_url)
         redis = None
         try:
             redis = await ArqRedis.create(redis_settings)  # type: ignore[attr-defined]
         except AttributeError:
             from arq.connections import create_pool  # type: ignore
+
             redis = await create_pool(redis_settings)
         await redis.enqueue_job("ingest_asset", str(asset.id))
     except Exception as exc:  # pragma: no cover
@@ -229,7 +257,9 @@ async def get_derivative(
     return FileResponse(path=str(path), media_type="image/jpeg")
 
 
-@router.post("/projects/{project_id}/assets:link", response_model=schemas.ProjectAssetsLinkOut)
+@router.post(
+    "/projects/{project_id}/assets:link", response_model=schemas.ProjectAssetsLinkOut
+)
 async def link_existing_assets(
     project_id: UUID,
     body: schemas.ProjectAssetsLinkIn,
@@ -253,13 +283,17 @@ async def link_existing_assets(
 
     # fetch existing assets
     assets = (
-        await db.execute(
-            select(models.Asset).where(
-                models.Asset.id.in_(want_ids),
-                models.Asset.user_id == current_user.id,
+        (
+            await db.execute(
+                select(models.Asset).where(
+                    models.Asset.id.in_(want_ids),
+                    models.Asset.user_id == current_user.id,
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     found_ids = {a.id for a in assets}
     missing = [aid for aid in want_ids if aid not in found_ids]
     if missing:
@@ -279,7 +313,9 @@ async def link_existing_assets(
         inherit_source = inherit_map.get(a.id)
         template = None
         if inherit_source:
-            await ensure_project_access(db, project_id=inherit_source, user_id=current_user.id)
+            await ensure_project_access(
+                db, project_id=inherit_source, user_id=current_user.id
+            )
             template = await assets_service.load_metadata_template(
                 db,
                 asset_id=a.id,
@@ -303,7 +339,9 @@ async def link_existing_assets(
         if not created:
             duplicates += 1
             logger.info(
-                "link_existing_assets: project=%s asset=%s already linked", project_id, a.id
+                "link_existing_assets: project=%s asset=%s already linked",
+                project_id,
+                a.id,
             )
             continue
         linked += 1
@@ -324,7 +362,9 @@ async def link_existing_assets(
         for a in assets:
             count = (
                 await db.execute(
-                    select(func.count()).select_from(models.ProjectAsset).where(
+                    select(func.count())
+                    .select_from(models.ProjectAsset)
+                    .where(
                         models.ProjectAsset.asset_id == a.id,
                         models.ProjectAsset.user_id == current_user.id,
                     )
@@ -334,16 +374,23 @@ async def link_existing_assets(
         await db.commit()
 
     await sync_project_pairs(db, project_id)
-    ordered_items = await assets_service.load_asset_items(db, project_id, want_ids, user_id=current_user.id)
+    ordered_items = await assets_service.load_asset_items(
+        db, project_id, want_ids, user_id=current_user.id
+    )
     logger.info(
         "link_existing_assets: project=%s response_items=%s",
         project_id,
         [item.id for item in ordered_items],
     )
-    return schemas.ProjectAssetsLinkOut(linked=linked, duplicates=duplicates, items=ordered_items)
+    return schemas.ProjectAssetsLinkOut(
+        linked=linked, duplicates=duplicates, items=ordered_items
+    )
 
 
-@router.post("/projects/{project_id}/assets/interactions:apply", response_model=schemas.AssetInteractionUpdateOut)
+@router.post(
+    "/projects/{project_id}/assets/interactions:apply",
+    response_model=schemas.AssetInteractionUpdateOut,
+)
 async def apply_asset_interactions(
     project_id: UUID,
     body: schemas.AssetInteractionUpdate,
@@ -360,10 +407,20 @@ async def apply_asset_interactions(
 
     base_ids = list(dict.fromkeys(body.asset_ids))
     query = (
-        select(models.Asset, models.ProjectAsset, models.ProjectAssetPair, models.MetadataState)
+        select(
+            models.Asset,
+            models.ProjectAsset,
+            models.ProjectAssetPair,
+            models.MetadataState,
+        )
         .join(models.ProjectAsset, models.ProjectAsset.asset_id == models.Asset.id)
-        .outerjoin(models.ProjectAssetPair, models.ProjectAssetPair.id == models.ProjectAsset.pair_id)
-        .outerjoin(models.MetadataState, models.MetadataState.link_id == models.ProjectAsset.id)
+        .outerjoin(
+            models.ProjectAssetPair,
+            models.ProjectAssetPair.id == models.ProjectAsset.pair_id,
+        )
+        .outerjoin(
+            models.MetadataState, models.MetadataState.link_id == models.ProjectAsset.id
+        )
         .where(
             models.ProjectAsset.project_id == project_id,
             models.ProjectAsset.asset_id.in_(base_ids),
@@ -376,22 +433,48 @@ async def apply_asset_interactions(
     if missing:
         raise HTTPException(404, f"assets not linked to project: {missing}")
 
-    assets_map: dict[UUID, tuple[models.Asset, models.ProjectAsset, models.ProjectAssetPair | None, models.MetadataState | None]] = {
-        asset.id: (asset, project_asset, pair, metadata) for asset, project_asset, pair, metadata in rows
+    assets_map: dict[
+        UUID,
+        tuple[
+            models.Asset,
+            models.ProjectAsset,
+            models.ProjectAssetPair | None,
+            models.MetadataState | None,
+        ],
+    ] = {
+        asset.id: (asset, project_asset, pair, metadata)
+        for asset, project_asset, pair, metadata in rows
     }
     for asset, _, pair, _ in rows:
         if pair:
-            counterpart_id = pair.raw_asset_id if asset.id == pair.jpeg_asset_id else pair.jpeg_asset_id
+            counterpart_id = (
+                pair.raw_asset_id
+                if asset.id == pair.jpeg_asset_id
+                else pair.jpeg_asset_id
+            )
             assets_map.setdefault(counterpart_id, tuple())
 
     missing_pairs = [aid for aid, data in assets_map.items() if not data]
     if missing_pairs:
         extra_rows = (
             await db.execute(
-                select(models.Asset, models.ProjectAsset, models.ProjectAssetPair, models.MetadataState)
-                .join(models.ProjectAsset, models.ProjectAsset.asset_id == models.Asset.id)
-                .outerjoin(models.ProjectAssetPair, models.ProjectAssetPair.id == models.ProjectAsset.pair_id)
-                .outerjoin(models.MetadataState, models.MetadataState.link_id == models.ProjectAsset.id)
+                select(
+                    models.Asset,
+                    models.ProjectAsset,
+                    models.ProjectAssetPair,
+                    models.MetadataState,
+                )
+                .join(
+                    models.ProjectAsset, models.ProjectAsset.asset_id == models.Asset.id
+                )
+                .outerjoin(
+                    models.ProjectAssetPair,
+                    models.ProjectAssetPair.id == models.ProjectAsset.pair_id,
+                )
+                .outerjoin(
+                    models.MetadataState,
+                    models.MetadataState.link_id == models.ProjectAsset.id,
+                )
                 .where(
                     models.ProjectAsset.project_id == project_id,
                     models.ProjectAsset.asset_id.in_(missing_pairs),
@@ -405,7 +488,11 @@ async def apply_asset_interactions(
     rating_value = None if body.rating is None else max(0, min(body.rating, 5))
     color_value = None
     if body.color_label is not None:
-        color_value = models.ColorLabel(body.color_label.value if isinstance(body.color_label, schemas.ColorLabel) else body.color_label)
+        color_value = models.ColorLabel(
+            body.color_label.value
+            if isinstance(body.color_label, schemas.ColorLabel)
+            else body.color_label
+        )
     picked_value = body.picked
     rejected_value = body.rejected
     if rejected_value:
@@ -413,7 +500,12 @@ async def apply_asset_interactions(
     elif picked_value:
         rejected_value = False
 
-    if rating_value is None and color_value is None and picked_value is None and rejected_value is None:
+    if (
+        rating_value is None
+        and color_value is None
+        and picked_value is None
+        and rejected_value is None
+    ):
         return schemas.AssetInteractionUpdateOut(items=[])
 
     touched_pairs: list[tuple[models.Asset, models.MetadataState]] = []
@@ -453,11 +545,16 @@ async def apply_asset_interactions(
             ordered_ids.append(aid)
             seen.add(aid)
 
-    items = await assets_service.load_asset_items(db, project_id, ordered_ids, user_id=current_user.id)
+    items = await assets_service.load_asset_items(
+        db, project_id, ordered_ids, user_id=current_user.id
+    )
     return schemas.AssetInteractionUpdateOut(items=items)
 
 
-@router.put("/projects/{project_id}/assets/{asset_id}/preview", response_model=schemas.AssetListItem)
+@router.put(
+    "/projects/{project_id}/assets/{asset_id}/preview",
+    response_model=schemas.AssetListItem,
+)
 async def update_preview_flag(
     project_id: UUID,
     asset_id: UUID,
@@ -470,8 +567,7 @@ async def update_preview_flag(
     await ensure_preview_columns(db)
     link = (
         await db.execute(
-            select(models.ProjectAsset)
-            .where(
+            select(models.ProjectAsset).where(
                 models.ProjectAsset.project_id == project_id,
                 models.ProjectAsset.asset_id == asset_id,
                 models.ProjectAsset.user_id == current_user.id,
@@ -493,19 +589,23 @@ async def update_preview_flag(
         raise HTTPException(404, "asset not found")
 
     preview_rows = (
-        await db.execute(
-            select(models.ProjectAsset)
-            .where(
-                models.ProjectAsset.project_id == project_id,
-                models.ProjectAsset.is_preview.is_(True),
-                models.ProjectAsset.user_id == current_user.id,
-            )
-            .order_by(
-                models.ProjectAsset.preview_order.asc().nulls_last(),
-                models.ProjectAsset.added_at.desc(),
+        (
+            await db.execute(
+                select(models.ProjectAsset)
+                .where(
+                    models.ProjectAsset.project_id == project_id,
+                    models.ProjectAsset.is_preview.is_(True),
+                    models.ProjectAsset.user_id == current_user.id,
+                )
+                .order_by(
+                    models.ProjectAsset.preview_order.asc().nulls_last(),
+                    models.ProjectAsset.added_at.desc(),
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     # normalise current ordering
     preview_ordered: list[models.ProjectAsset] = []
@@ -532,7 +632,9 @@ async def update_preview_flag(
             if index is not None:
                 preview_ordered.insert(min(index, len(preview_ordered)), link)
         if body.make_primary and link in preview_ordered:
-            preview_ordered = [link] + [row for row in preview_ordered if row is not link]
+            preview_ordered = [link] + [
+                row for row in preview_ordered if row is not link
+            ]
         link.is_preview = True
     else:
         link.is_preview = False
@@ -569,7 +671,9 @@ async def update_preview_flag(
     if link.pair_id:
         pair = (
             await db.execute(
-                select(models.ProjectAssetPair).where(models.ProjectAssetPair.id == link.pair_id)
+                select(models.ProjectAssetPair).where(
+                    models.ProjectAssetPair.id == link.pair_id
+                )
             )
         ).scalar_one_or_none()
 

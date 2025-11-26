@@ -2,10 +2,11 @@
 
 FROM node:20-bookworm-slim AS frontend-builder
 WORKDIR /frontend
-COPY frontend/package*.json ./
-RUN npm ci
+RUN corepack enable
+COPY frontend/package.json frontend/pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
 COPY frontend .
-RUN npm run build
+RUN pnpm build
 
 FROM python:3.11-slim AS runtime
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -14,14 +15,14 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        build-essential \
-        libraw-dev \
-        libjpeg-dev \
-        libpng-dev \
-        libtiff5-dev \
-        libglib2.0-0 \
-        libgl1 \
-        exiftool \
+    build-essential \
+    libraw-dev \
+    libjpeg-dev \
+    libpng-dev \
+    libtiff5-dev \
+    libglib2.0-0 \
+    libgl1 \
+    exiftool \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

@@ -146,8 +146,12 @@ class RawPyAdapter:
                     thumbnail is not None and thumbnail.format != "jpeg"
                 )
                 if needs_render:
-                    preview_jpeg, preview_width, preview_height = self._render_preview(raw)
-        except rawpy.LibRawError as exc:  # pragma: no cover - passthrough for envs without RAWs
+                    preview_jpeg, preview_width, preview_height = self._render_preview(
+                        raw
+                    )
+        except (
+            rawpy.LibRawError
+        ) as exc:  # pragma: no cover - passthrough for envs without RAWs
             raise RawPyAdapterError(str(exc)) from exc
 
         return RawPyReadResult(
@@ -231,15 +235,21 @@ class RawPyAdapter:
         except rawpy.LibRawUnsupportedThumbnailError:
             return None
 
-        thumb_format = getattr(thumb.format, "name", str(getattr(thumb, "format", ""))).lower()
+        thumb_format = getattr(
+            thumb.format, "name", str(getattr(thumb, "format", ""))
+        ).lower()
         data = bytes(getattr(thumb, "data", b""))
         width = self._to_int(getattr(thumb, "width", None))
         height = self._to_int(getattr(thumb, "height", None))
         if not data:
             return None
-        return RawPyThumbnail(format=thumb_format, data=data, width=width, height=height)
+        return RawPyThumbnail(
+            format=thumb_format, data=data, width=width, height=height
+        )
 
-    def _render_preview(self, raw: Any) -> tuple[Optional[bytes], Optional[int], Optional[int]]:
+    def _render_preview(
+        self, raw: Any
+    ) -> tuple[Optional[bytes], Optional[int], Optional[int]]:
         """
         Render a JPEG preview by post-processing the RAW when no thumbnail exists.
 

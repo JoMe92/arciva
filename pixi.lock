@@ -37,6 +37,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pnpm-9.15.3-ha573bdf_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/python-3.11.14-hd63d673_2_cpython.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/readline-8.2-h8c095d6_2.conda
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/ruff-0.14.6-h813ae00_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/setuptools-80.9.0-pyhff2d567_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/tk-8.6.13-noxft_hd72426e_102.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/tzdata-2025b-h78e105d_0.conda
@@ -107,6 +108,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-64/pnpm-9.15.3-h824c07a_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/python-3.11.14-h74c2667_2_cpython.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/readline-8.2-h7cca4af_2.conda
+      - conda: https://conda.anaconda.org/conda-forge/osx-64/ruff-0.14.6-hd9f4cfa_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/setuptools-80.9.0-pyhff2d567_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/tk-8.6.13-hf689a15_2.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/tzdata-2025b-h78e105d_0.conda
@@ -1239,6 +1241,37 @@ packages:
   - pyopenssl==23.2.1 ; extra == 'ocsp'
   - requests>=2.31.0 ; extra == 'ocsp'
   requires_python: '>=3.8'
+- conda: https://conda.anaconda.org/conda-forge/linux-64/ruff-0.14.6-h813ae00_0.conda
+  noarch: python
+  sha256: 2c811e3c15b343a7cf4f3d3985710d63d36310d7c21a2db4c00a42e0e3c9fc1a
+  md5: 406217e531c7261aa6ea8cba649693b4
+  depends:
+  - python
+  - __glibc >=2.17,<3.0.a0
+  - libgcc >=14
+  constrains:
+  - __glibc >=2.17
+  license: MIT
+  license_family: MIT
+  purls:
+  - pkg:pypi/ruff?source=compressed-mapping
+  size: 11216432
+  timestamp: 1763741549592
+- conda: https://conda.anaconda.org/conda-forge/osx-64/ruff-0.14.6-hd9f4cfa_0.conda
+  noarch: python
+  sha256: 34c78cade1caec6f8a208390d369ac60d20a4faf8d4a11f5774f0c6549d0f12c
+  md5: c37c67bc8f186c79e7d281aed6c4e394
+  depends:
+  - python
+  - __osx >=10.13
+  constrains:
+  - __osx >=10.13
+  license: MIT
+  license_family: MIT
+  purls:
+  - pkg:pypi/ruff?source=hash-mapping
+  size: 11120290
+  timestamp: 1763741757142
 - conda: https://conda.anaconda.org/conda-forge/noarch/setuptools-80.9.0-pyhff2d567_0.conda
   sha256: 972560fcf9657058e3e1f97186cc94389144b46dbdf58c807ce62e83f977e863
   md5: 4de79c071274a53dcaf2a8c749d1499e

@@ -19,6 +19,7 @@ class AuthLoginRequest(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=8)
 
+
 class AssetStatus(str, Enum):
     UPLOADING = "UPLOADING"
     QUEUED = "QUEUED"
@@ -105,6 +106,7 @@ class PhotoStoreApplyRequest(BaseModel):
     mode: Literal["fresh", "load"]
     acknowledge: bool = False
 
+
 # Projects
 class ProjectCreate(BaseModel):
     title: str = Field(..., min_length=1)
@@ -112,12 +114,14 @@ class ProjectCreate(BaseModel):
     note: Optional[str] = None
     stack_pairs_enabled: bool = False
 
+
 class ProjectPreviewImage(BaseModel):
     asset_id: UUID
     thumb_url: Optional[str] = None
     order: int = 0
     width: Optional[int] = None
     height: Optional[int] = None
+
 
 class ProjectOut(BaseModel):
     id: UUID
@@ -130,6 +134,7 @@ class ProjectOut(BaseModel):
     preview_images: List[ProjectPreviewImage] = Field(default_factory=list)
     stack_pairs_enabled: bool = False
 
+
 class ProjectDelete(BaseModel):
     confirm_title: str = Field(..., min_length=1)
     delete_assets: bool = False
@@ -141,19 +146,23 @@ class ProjectUpdate(BaseModel):
     note: Optional[str] = None
     stack_pairs_enabled: Optional[bool] = None
 
+
 # Uploads/Assets
 class UploadInitIn(BaseModel):
     filename: str
     size_bytes: int
     mime: str
 
+
 class UploadInitOut(BaseModel):
     asset_id: UUID
     upload_token: str
     max_bytes: int
 
+
 class UploadCompleteIn(BaseModel):
     asset_id: UUID
+
 
 class AssetListItem(BaseModel):
     id: UUID
@@ -186,11 +195,13 @@ class AssetListItem(BaseModel):
     metadata_state_id: Optional[UUID] = None
     metadata_source_project_id: Optional[UUID] = None
 
+
 class AssetDerivativeOut(BaseModel):
     variant: str
     width: int
     height: int
     url: str
+
 
 class AssetDetail(BaseModel):
     id: UUID
@@ -243,15 +254,18 @@ class MetadataStateOut(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+
 # Project-asset linking
 class ProjectAssetsLinkIn(BaseModel):
     asset_ids: List[UUID]
     inheritance: Dict[UUID, Optional[UUID]] = Field(default_factory=dict)
 
+
 class ProjectAssetsLinkOut(BaseModel):
     linked: int
     duplicates: int
     items: List[AssetListItem]
+
 
 class ProjectAssetPreviewUpdate(BaseModel):
     is_preview: bool

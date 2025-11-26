@@ -1,8 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import {
-  getExperimentalStorageSettings,
-  type ExperimentalStorageSettings,
-} from '../api/settings'
+import { getExperimentalStorageSettings, type ExperimentalStorageSettings } from '../api/settings'
 
 export const EXPERIMENTAL_STORAGE_QUERY_KEY = ['experimental-storage-settings'] as const
 

@@ -16,7 +16,17 @@ const Row: React.FC<{
   archiveMode: boolean
   onEdit: (p: Project) => void
   onSelectPrimary?: (projectId: string, assetId: string) => Promise<void>
-}> = ({ row, index, onOpen, onArchive, onUnarchive, onCreate, archiveMode, onEdit, onSelectPrimary }) => {
+}> = ({
+  row,
+  index,
+  onOpen,
+  onArchive,
+  onUnarchive,
+  onCreate,
+  archiveMode,
+  onEdit,
+  onSelectPrimary,
+}) => {
   const colsClass = row.cols === 4 ? 'grid-cols-4' : 'grid-cols-3'
   const rowHasProjects = row.items.some((it) => it.kind === 'project')
   const isCompactRow = index === 0 && rowHasProjects

@@ -6,7 +6,8 @@ type BeforeInstallPromptEvent = Event & {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>
 }
 
-const IOS_PROMPT_TEXT = 'To install Arciva on iOS, open the Share menu in Safari and pick “Add to Home Screen”.'
+const IOS_PROMPT_TEXT =
+  'To install Arciva on iOS, open the Share menu in Safari and pick “Add to Home Screen”.'
 
 function useIsIosStandalone(): [boolean, boolean] {
   const [isIos, setIsIos] = useState(false)
@@ -19,7 +20,9 @@ function useIsIosStandalone(): [boolean, boolean] {
 
     const ua = window.navigator.userAgent.toLowerCase()
     const detectedIos = /iphone|ipad|ipod/.test(ua)
-    const standalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as Navigator & { standalone?: boolean }).standalone
+    const standalone =
+      window.matchMedia('(display-mode: standalone)').matches ||
+      (window.navigator as Navigator & { standalone?: boolean }).standalone
     setIsIos(detectedIos)
     setIsStandalone(Boolean(standalone))
 
@@ -75,7 +78,10 @@ export default function PwaInstallPrompt() {
     }
   }, [])
 
-  const shouldShowIosHint = useMemo(() => isIos && !isStandalone && !iosHintDismissed && !hasInstalled, [isIos, isStandalone, iosHintDismissed, hasInstalled])
+  const shouldShowIosHint = useMemo(
+    () => isIos && !isStandalone && !iosHintDismissed && !hasInstalled,
+    [isIos, isStandalone, iosHintDismissed, hasInstalled]
+  )
 
   const handleInstall = useCallback(async () => {
     if (!deferredPrompt) {
@@ -90,8 +96,7 @@ export default function PwaInstallPrompt() {
       if (outcome === 'accepted') {
         setHasInstalled(true)
       }
-    } catch {
-    }
+    } catch {}
     setDeferredPrompt(null)
   }, [deferredPrompt])
 
@@ -109,7 +114,9 @@ export default function PwaInstallPrompt() {
         <div className="install-hint__card">
           <div>
             <p className="install-hint__title">Install Arciva</p>
-            <p className="install-hint__body">Add Arciva to your home screen for fullscreen access and offline caching.</p>
+            <p className="install-hint__body">
+              Add Arciva to your home screen for fullscreen access and offline caching.
+            </p>
           </div>
           <div className="install-hint__actions">
             <button type="button" className="install-hint__dismiss" onClick={handleDismiss}>
@@ -128,7 +135,11 @@ export default function PwaInstallPrompt() {
             <p className="install-hint__title">Install on iOS</p>
             <p className="install-hint__body">{IOS_PROMPT_TEXT}</p>
           </div>
-          <button type="button" className="install-hint__dismiss" onClick={() => setIosHintDismissed(true)}>
+          <button
+            type="button"
+            className="install-hint__dismiss"
+            onClick={() => setIosHintDismissed(true)}
+          >
             Got it
           </button>
         </div>

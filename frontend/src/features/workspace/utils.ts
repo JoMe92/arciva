@@ -17,7 +17,17 @@ export const TOKENS = {
   river500: cssVar('--river-500', '#6B7C7A'),
 }
 
-const DEMO_RATIOS: import('../../shared/placeholder').PlaceholderRatio[] = ['3x2', '4x3', '16x9', '2x3', '3x4', '9x16', '1x2', '2x1', '1x1']
+const DEMO_RATIOS: import('../../shared/placeholder').PlaceholderRatio[] = [
+  '3x2',
+  '4x3',
+  '16x9',
+  '2x3',
+  '3x4',
+  '9x16',
+  '1x2',
+  '2x1',
+  '1x1',
+]
 
 export function randomPlaceholderRatio() {
   return DEMO_RATIOS[Math.floor(Math.random() * DEMO_RATIOS.length)]
@@ -76,7 +86,8 @@ export const COLOR_MAP: Record<ColorTag, string> = {
   Purple: '#C084FC',
 }
 
-export const PROJECT_DATE_FORMAT = typeof Intl !== 'undefined' ? new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }) : null
+export const PROJECT_DATE_FORMAT =
+  typeof Intl !== 'undefined' ? new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }) : null
 
 export function projectInitials(name: string): string {
   const parts = name.split(/\s+/).filter(Boolean)

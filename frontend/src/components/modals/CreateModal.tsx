@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useState } from 'react'
 import ModalShell from './ModalShell'
 import ProjectFields from './ProjectFields'
 
@@ -10,13 +10,7 @@ export interface CreateModalProps {
   busy?: boolean
 }
 
-/**
- * Modal for creating a new project. It collects title, description,
- * client and tag information and passes the values to the onCreate
- * handler. The modal remains mounted only when open is true.
- */
-const CreateModal: React.FC<CreateModalProps> = ({
-  open,
+const CreateModalContent: React.FC<Omit<CreateModalProps, 'open'>> = ({
   onClose,
   onCreate,
   existingTags,
@@ -28,19 +22,6 @@ const CreateModal: React.FC<CreateModalProps> = ({
   const [selTags, setSelTags] = useState<string[]>([])
   const [newTag, setNewTag] = useState('')
   const [titleError, setTitleError] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (!open) {
-      setTitle('')
-      setDesc('')
-      setClient('')
-      setSelTags([])
-      setNewTag('')
-      setTitleError(null)
-    }
-  }, [open])
-
-  if (!open) return null
 
   const validateTitle = () => {
     if (!title.trim()) {
@@ -112,6 +93,17 @@ const CreateModal: React.FC<CreateModalProps> = ({
       </form>
     </ModalShell>
   )
+}
+
+/**
+ * Modal for creating a new project. It collects title, description,
+ * client and tag information and passes the values to the onCreate
+ * handler. The modal remains mounted only when open is true.
+ */
+const CreateModal: React.FC<CreateModalProps> = (props) => {
+  if (!props.open) return null
+  const { open: _open, ...rest } = props
+  return <CreateModalContent {...rest} />
 }
 
 export default CreateModal

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import ModalShell from './ModalShell'
 import type { Project } from '../../features/projects/types'
 
@@ -11,8 +11,7 @@ type DeleteModalProps = {
   error?: string | null
 }
 
-const DeleteModal: React.FC<DeleteModalProps> = ({
-  open,
+const DeleteModalContent: React.FC<Omit<DeleteModalProps, 'open'> & { project: Project }> = ({
   project,
   onClose,
   onConfirm,
@@ -22,19 +21,11 @@ const DeleteModal: React.FC<DeleteModalProps> = ({
   const [confirmation, setConfirmation] = useState('')
   const [deleteAssets, setDeleteAssets] = useState(false)
 
-  useEffect(() => {
-    if (open) {
-      setConfirmation('')
-      setDeleteAssets(false)
-    }
-  }, [open, project?.id])
-
   const normalizedTitle = useMemo(
     () => (project?.title ? project.title.trim() : ''),
     [project?.title]
   )
 
-  if (!open || !project) return null
   const confirmationMatches = confirmation.trim() === normalizedTitle
 
   const submit = () => {
@@ -123,6 +114,11 @@ const DeleteModal: React.FC<DeleteModalProps> = ({
       </div>
     </ModalShell>
   )
+}
+
+const DeleteModal: React.FC<DeleteModalProps> = ({ open, project, ...rest }) => {
+  if (!open || !project) return null
+  return <DeleteModalContent project={project} {...rest} />
 }
 
 export default DeleteModal

@@ -139,7 +139,7 @@ export function buildLayout(
         const idx = rest.findIndex((x) => x.aspect !== 'landscape')
         if (idx > 0) {
           const swapped = rest.splice(idx, 1)[0]
-          const sSpan: 1 = 1
+          const sSpan = 1 as const
           if (usedCols + sSpan <= cols) {
             items.push({ kind: 'project', project: swapped, span: sSpan })
             usedCols += sSpan

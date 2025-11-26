@@ -152,12 +152,12 @@ function groupAssetsByPair(assets: ImageHubAsset[]): HubTile[] {
 type AssetStatusMap = Map<string, { already_linked: boolean; other_projects: string[] }>
 
 function useAssetStatuses(assetIds: string[], currentProjectId: string | null) {
-  const cacheRef = useRef<AssetStatusMap>(new Map())
+  const [statusMap, setStatusMap] = useState<AssetStatusMap>(() => new Map())
   const [version, forceRender] = useState(0)
 
   useEffect(() => {
     if (!assetIds.length || !currentProjectId) return
-    const missing = assetIds.filter((id) => !cacheRef.current.has(id))
+    const missing = assetIds.filter((id) => !statusMap.has(id))
     if (!missing.length) return
     let canceled = false
 
@@ -166,11 +166,19 @@ function useAssetStatuses(assetIds: string[], currentProjectId: string | null) {
         if (canceled) break
         try {
           const status = await fetchImageHubAssetStatus(assetId, currentProjectId)
-          cacheRef.current.set(assetId, status)
+          setStatusMap((prev) => {
+            const nextMap = new Map(prev)
+            nextMap.set(assetId, status)
+            return nextMap
+          })
           forceRender((v) => v + 1)
         } catch (err) {
           console.error('Failed to load status for ImageHub asset', assetId, err)
-          cacheRef.current.set(assetId, { already_linked: false, other_projects: [] })
+          setStatusMap((prev) => {
+            const nextMap = new Map(prev)
+            nextMap.set(assetId, { already_linked: false, other_projects: [] })
+            return nextMap
+          })
           forceRender((v) => v + 1)
         }
       }
@@ -181,9 +189,9 @@ function useAssetStatuses(assetIds: string[], currentProjectId: string | null) {
     return () => {
       canceled = true
     }
-  }, [assetIds, currentProjectId])
+  }, [assetIds, currentProjectId, statusMap])
 
-  return [cacheRef.current, version] as const
+  return [statusMap, version] as const
 }
 
 type VirtualizedGridProps<T> = {
@@ -321,46 +329,17 @@ export default function ImageHubImportPane({
   const [viewMode, setViewMode] = useState<HubViewMode>('grid')
   const [search, setSearch] = useState('')
   const [filters, setFilters] = useState<HubFilterState>(() => createDefaultFilters())
-  const [activeProjectId, setActiveProjectId] = useState<string | null>(null)
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
   const [dateSelection, setDateSelection] = useState<{
     year?: number
     month?: number
     day?: number
   }>({})
-  const [selectionMap, setSelectionMap] = useState<Map<string, PendingItem[]>>(new Map())
+  const [selectionBuckets, setSelectionBuckets] = useState<
+    Record<string, Map<string, PendingItem[]>>
+  >({})
 
   const debouncedSearch = useDebouncedValue(search, 300)
-
-  useEffect(() => {
-    onSelectionChange(Array.from(selectionMap.values()).flat())
-  }, [selectionMap, onSelectionChange])
-
-  useEffect(() => {
-    setSelectionMap(new Map())
-  }, [tab])
-
-  useEffect(() => {
-    if (tab !== 'project') return
-    setSelectionMap(new Map())
-  }, [tab, activeProjectId])
-
-  useEffect(() => {
-    if (tab !== 'date') return
-    setSelectionMap(new Map())
-  }, [tab, dateSelection.year, dateSelection.month, dateSelection.day])
-
-  const resetRef = useRef<number | undefined>(undefined)
-  useEffect(() => {
-    if (resetSignal === undefined) return
-    if (resetRef.current === undefined) {
-      resetRef.current = resetSignal
-      return
-    }
-    if (resetSignal !== resetRef.current) {
-      resetRef.current = resetSignal
-      setSelectionMap(new Map())
-    }
-  }, [resetSignal])
 
   const projectQuery = useInfiniteQuery({
     queryKey: ['imagehub-projects', debouncedSearch],
@@ -386,13 +365,42 @@ export default function ImageHubImportPane({
     )
   }, [projects, onProjectDirectoryChange])
 
-  useEffect(() => {
-    if (tab !== 'project') return
-    if (activeProjectId && projects.some((proj) => proj.project_id === activeProjectId)) return
-    if (projects.length) {
-      setActiveProjectId(projects[0].project_id)
+  const activeProjectId = useMemo(() => {
+    if (tab !== 'project') return selectedProjectId
+    if (selectedProjectId && projects.some((proj) => proj.project_id === selectedProjectId)) {
+      return selectedProjectId
     }
-  }, [projects, activeProjectId, tab])
+    return projects[0]?.project_id ?? null
+  }, [tab, selectedProjectId, projects])
+
+  const selectionKey = useMemo(() => {
+    const scope =
+      tab === 'project'
+        ? `project:${activeProjectId ?? 'none'}`
+        : `date:${dateSelection.year ?? 'all'}-${dateSelection.month ?? 'all'}-${dateSelection.day ?? 'all'}`
+    return `${scope}|${resetSignal ?? 0}`
+  }, [tab, activeProjectId, dateSelection, resetSignal])
+
+  const selectionMap = useMemo(() => {
+    const existing = selectionBuckets[selectionKey]
+    return existing ?? new Map<string, PendingItem[]>()
+  }, [selectionBuckets, selectionKey])
+
+  const updateSelectionMap = useCallback(
+    (updater: (current: Map<string, PendingItem[]>) => Map<string, PendingItem[]>) => {
+      setSelectionBuckets((prev) => {
+        const current = prev[selectionKey] ?? new Map<string, PendingItem[]>()
+        const nextMap = updater(current)
+        if (nextMap === current) return prev
+        return { ...prev, [selectionKey]: nextMap }
+      })
+    },
+    [selectionKey]
+  )
+
+  useEffect(() => {
+    onSelectionChange(Array.from(selectionMap.values()).flat())
+  }, [selectionMap, onSelectionChange])
 
   const filtersPayload = useMemo(
     () => buildFilters(filters, debouncedSearch),
@@ -515,8 +523,8 @@ export default function ImageHubImportPane({
 
   const toggleSelection = useCallback(
     (tile: HubTile) => {
-      setSelectionMap((prev) => {
-        const next = new Map(prev)
+      updateSelectionMap((current) => {
+        const next = new Map(current)
         if (next.has(tile.id)) {
           next.delete(tile.id)
           return next
@@ -529,7 +537,7 @@ export default function ImageHubImportPane({
         return next
       })
     },
-    [activeProjectId, projects, tab, dateSelection]
+    [activeProjectId, projects, tab, dateSelection, updateSelectionMap]
   )
 
   const hasMore =
@@ -713,7 +721,7 @@ export default function ImageHubImportPane({
                   : null
               }
               activeProjectId={activeProjectId}
-              onSelectProject={setActiveProjectId}
+              onSelectProject={setSelectedProjectId}
               hasMore={!!projectQuery.hasNextPage}
               onLoadMore={() => projectQuery.fetchNextPage()}
               isFetchingMore={projectQuery.isFetchingNextPage}

@@ -81,30 +81,27 @@ const getScale = (size: ArtistSize) => {
   return typeof value === 'function' ? value() : value
 }
 
-type CachedPlan = { key: string; plan?: FirstRowArtistPlan }
-
 function useFirstRowArtistPlan(
   projects: Project[],
   withCreate: boolean
 ): FirstRowArtistPlan | undefined {
-  const cacheRef = React.useRef<CachedPlan | null>(null)
-  if (!withCreate || projects.length < 2) {
-    return undefined
-  }
-
-  const first = projects[0]
-  const second = projects[1]
-  if (!first || !second) return undefined
-  const key = `${first.id}:${second.id}:${first.aspect}:${second.aspect}`
-
-  if (!cacheRef.current || cacheRef.current.key !== key) {
-    cacheRef.current = {
-      key,
-      plan: buildFirstRowArtistPlan(first, second),
+  return React.useMemo(() => {
+    if (!withCreate || projects.length < 2) {
+      return undefined
     }
-  }
 
-  return cacheRef.current.plan
+    const first = projects[0]
+    const second = projects[1]
+    if (!first || !second) return undefined
+
+    return buildFirstRowArtistPlan(first, second)
+  }, [
+    withCreate,
+    projects[0]?.id,
+    projects[1]?.id,
+    projects[0]?.aspect,
+    projects[1]?.aspect,
+  ])
 }
 
 function buildFirstRowArtistPlan(primary: Project, secondary: Project): FirstRowArtistPlan {

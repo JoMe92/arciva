@@ -113,10 +113,11 @@ async def mock_user(TestSessionLocal):
 
 
 @pytest.fixture(scope="session")
-def app(test_settings, TestSessionLocal):
+def app(test_settings, TestSessionLocal, test_engine):
     # Monkeypatch get_settings and get_db before creating the app
     from backend.app import deps as deps_module
     from backend.app import db as db_module
+    from backend.app import schema_utils
 
     # override settings cache by replacing function to return our object
     def _get_settings_override():
@@ -129,6 +130,17 @@ def app(test_settings, TestSessionLocal):
     async def _get_db_override() -> AsyncSession:
         async with TestSessionLocal() as session:
             yield session
+
+    # Ensure all modules reuse the test engine/session factory instead of a global one
+    db_module.SessionLocal = TestSessionLocal  # type: ignore[assignment]
+    db_module.engine = test_engine  # type: ignore[assignment]
+    schema_utils.async_engine = test_engine  # type: ignore[assignment]
+
+    # Services that spin up their own sessions (e.g. background tasks)
+    from backend.app.services import bulk_image_exports, export_jobs
+
+    bulk_image_exports.SessionLocal = TestSessionLocal  # type: ignore[assignment]
+    export_jobs.SessionLocal = TestSessionLocal  # type: ignore[assignment]
 
     db_module.get_db = _get_db_override  # type: ignore[assignment]
 

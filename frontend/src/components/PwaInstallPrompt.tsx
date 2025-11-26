@@ -10,21 +10,28 @@ const IOS_PROMPT_TEXT =
   'To install Arciva on iOS, open the Share menu in Safari and pick “Add to Home Screen”.'
 
 function useIsIosStandalone(): [boolean, boolean] {
-  const [isIos, setIsIos] = useState(false)
-  const [isStandalone, setIsStandalone] = useState(false)
+  const detectIos = () => {
+    if (typeof window === 'undefined') return false
+    const ua = window.navigator.userAgent.toLowerCase()
+    return /iphone|ipad|ipod/.test(ua)
+  }
+
+  const detectStandalone = () => {
+    if (typeof window === 'undefined') return false
+    return (
+      window.matchMedia('(display-mode: standalone)').matches ||
+      (window.navigator as Navigator & { standalone?: boolean }).standalone ||
+      false
+    )
+  }
+
+  const [isIos] = useState(detectIos)
+  const [isStandalone, setIsStandalone] = useState(detectStandalone)
 
   useEffect(() => {
     if (typeof window === 'undefined') {
       return
     }
-
-    const ua = window.navigator.userAgent.toLowerCase()
-    const detectedIos = /iphone|ipad|ipod/.test(ua)
-    const standalone =
-      window.matchMedia('(display-mode: standalone)').matches ||
-      (window.navigator as Navigator & { standalone?: boolean }).standalone
-    setIsIos(detectedIos)
-    setIsStandalone(Boolean(standalone))
 
     const mediaQuery = window.matchMedia('(display-mode: standalone)')
     const listener = (event: MediaQueryListEvent) => setIsStandalone(event.matches)
@@ -96,7 +103,9 @@ export default function PwaInstallPrompt() {
       if (outcome === 'accepted') {
         setHasInstalled(true)
       }
-    } catch {}
+    } catch (error) {
+      console.error('Failed to prompt install', error)
+    }
     setDeferredPrompt(null)
   }, [deferredPrompt])
 

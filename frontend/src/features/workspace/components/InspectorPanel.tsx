@@ -106,7 +106,7 @@ export function InspectorPanel({
   const [keyDataOpen, setKeyDataOpen] = useState(true)
   const [projectsOpen, setProjectsOpen] = useState(true)
   const [metadataOpen, setMetadataOpen] = useState(true)
-  const [pendingTarget, setPendingTarget] = useState<RightPanelTarget | null>(null)
+  const pendingTargetRef = useRef<RightPanelTarget | null>(null)
   const generalFields = keyMetadataSections?.general ?? []
   const captureFields = keyMetadataSections?.capture ?? []
   const metadataGroups = useMemo(() => groupMetadataEntries(metadataEntries), [metadataEntries])
@@ -174,17 +174,19 @@ export function InspectorPanel({
   }, [])
 
   useEffect(() => {
-    if (collapsed || !pendingTarget) return
-    ensureSectionOpen(pendingTarget)
-    scrollToTarget(pendingTarget)
-    setPendingTarget(null)
-  }, [collapsed, ensureSectionOpen, pendingTarget, scrollToTarget])
+    if (collapsed) return
+    const target = pendingTargetRef.current
+    if (!target) return
+    ensureSectionOpen(target)
+    scrollToTarget(target)
+    pendingTargetRef.current = null
+  }, [collapsed, ensureSectionOpen, scrollToTarget])
 
   const handleRailSelect = useCallback(
     (target: RightPanelTarget) => {
       ensureSectionOpen(target)
       if (collapsed) {
-        setPendingTarget(target)
+        pendingTargetRef.current = target
         onExpand()
         return
       }

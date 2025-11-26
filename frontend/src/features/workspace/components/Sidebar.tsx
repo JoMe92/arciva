@@ -80,7 +80,7 @@ export function Sidebar({
   const [importSectionOpen, setImportSectionOpen] = useState(true)
   const [dateSectionOpen, setDateSectionOpen] = useState(true)
   const [folderSectionOpen, setFolderSectionOpen] = useState(true)
-  const [pendingTarget, setPendingTarget] = useState<LeftPanelTarget | null>(null)
+  const pendingTargetRef = useRef<LeftPanelTarget | null>(null)
   const overviewSectionRef = useRef<HTMLDivElement | null>(null)
   const importSectionRef = useRef<HTMLDivElement | null>(null)
   const dateSectionRef = useRef<HTMLDivElement | null>(null)
@@ -124,17 +124,19 @@ export function Sidebar({
   }, [])
 
   useEffect(() => {
-    if (collapsed || !pendingTarget) return
-    ensureSectionOpen(pendingTarget)
-    scrollToTarget(pendingTarget)
-    setPendingTarget(null)
-  }, [collapsed, ensureSectionOpen, pendingTarget, scrollToTarget])
+    if (collapsed) return
+    const target = pendingTargetRef.current
+    if (!target) return
+    ensureSectionOpen(target)
+    scrollToTarget(target)
+    pendingTargetRef.current = null
+  }, [collapsed, ensureSectionOpen, scrollToTarget])
 
   const handleRailSelect = useCallback(
     (target: LeftPanelTarget) => {
       ensureSectionOpen(target)
       if (collapsed) {
-        setPendingTarget(target)
+        pendingTargetRef.current = target
         onExpand()
         return
       }

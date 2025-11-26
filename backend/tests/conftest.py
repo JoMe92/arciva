@@ -93,6 +93,19 @@ def TestSessionLocal(test_engine):
     return async_sessionmaker(test_engine, expire_on_commit=False, class_=AsyncSession)
 
 
+@pytest_asyncio.fixture(scope="session", autouse=True)
+async def mock_user(TestSessionLocal):
+    import uuid
+    from backend.app import models
+    async with TestSessionLocal() as session:
+        user_id = uuid.UUID("12345678-1234-5678-1234-567812345678")
+        user = await session.get(models.User, user_id)
+        if not user:
+            user = models.User(id=user_id, email="test@example.com", password_hash="mock")
+            session.add(user)
+            await session.commit()
+
+
 @pytest.fixture(scope="session")
 def app(test_settings, TestSessionLocal):
     # Monkeypatch get_settings and get_db before creating the app
@@ -112,6 +125,17 @@ def app(test_settings, TestSessionLocal):
             yield session
 
     db_module.get_db = _get_db_override  # type: ignore[assignment]
+
+    # override get_current_user
+    from backend.app import security
+    from backend.app import models
+    import uuid
+
+    async def _get_current_user_override():
+        # Return the same user created by mock_user fixture
+        return models.User(id=uuid.UUID("12345678-1234-5678-1234-567812345678"), email="test@example.com", password_hash="mock")
+
+    security.get_current_user = _get_current_user_override
 
     # Import here after overrides so modules see test settings
     from backend.app.main import create_app

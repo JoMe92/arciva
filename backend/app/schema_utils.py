@@ -106,9 +106,7 @@ async def ensure_preview_columns(_: AsyncSession | None = None) -> None:
                     logger.info("ensure_preview_columns: applying %s", stmt)
                     await conn.execute(text(stmt))
         except SQLAlchemyError:
-            logger.exception(
-                "ensure_preview_columns: failed to apply schema patch"
-            )
+            logger.exception("ensure_preview_columns: failed to apply schema patch")
             raise
 
         _preview_columns_ready = True
@@ -131,12 +129,8 @@ async def ensure_asset_metadata_column(_: AsyncSession | None = None) -> None:
             async with async_engine.begin() as conn:
                 column_present = False
                 if conn.dialect.name == "sqlite":
-                    pragma = await conn.execute(
-                        text("PRAGMA table_info('assets')")
-                    )
-                    column_present = any(
-                        row[1] == "metadata_json" for row in pragma
-                    )
+                    pragma = await conn.execute(text("PRAGMA table_info('assets')"))
+                    column_present = any(row[1] == "metadata_json" for row in pragma)
                 else:
                     result = await conn.execute(
                         text(
@@ -158,9 +152,7 @@ async def ensure_asset_metadata_column(_: AsyncSession | None = None) -> None:
                         else "ALTER TABLE assets ADD COLUMN IF NOT EXISTS "
                         "metadata_json JSONB"
                     )
-                    logger.info(
-                        "ensure_asset_metadata_column: applying %s", stmt
-                    )
+                    logger.info("ensure_asset_metadata_column: applying %s", stmt)
                     await conn.execute(text(stmt))
         except SQLAlchemyError:
             logger.exception(

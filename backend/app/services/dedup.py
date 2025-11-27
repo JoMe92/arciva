@@ -31,8 +31,7 @@ async def adopt_duplicate_asset(
 
     if existing_asset.user_id != duplicate_asset.user_id:
         logger.warning(
-            "dedup: skipping merge for asset=%s existing=%s due to "
-            "mismatched users",
+            "dedup: skipping merge for asset=%s existing=%s due to " "mismatched users",
             duplicate_asset.id,
             existing_asset.id,
         )
@@ -70,9 +69,7 @@ async def adopt_duplicate_asset(
             models.ProjectAsset.asset_id == duplicate_asset.id
         )
     )
-    await db.execute(
-        delete(models.Asset).where(models.Asset.id == duplicate_asset.id)
-    )
+    await db.execute(delete(models.Asset).where(models.Asset.id == duplicate_asset.id))
 
     count = (
         await db.execute(
@@ -97,8 +94,7 @@ async def adopt_duplicate_asset(
 
     await db.commit()
     logger.info(
-        "dedup: merged asset=%s into existing=%s new_links=%s "
-        "total_refs=%s",
+        "dedup: merged asset=%s into existing=%s new_links=%s " "total_refs=%s",
         duplicate_asset.id,
         existing_asset.id,
         linked,

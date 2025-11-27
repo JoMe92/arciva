@@ -216,11 +216,7 @@ class RawReaderService:
             "color_description": raw_result.color_description,
             "raw_type": raw_result.raw_type,
         }
-        return {
-            key: value
-            for key, value in candidates.items()
-            if value is not None
-        }
+        return {key: value for key, value in candidates.items() if value is not None}
 
     def _normalise_thumbnail(
         self, thumbnail: RawPyThumbnail
@@ -278,9 +274,7 @@ class RawReaderService:
         """
 
         if thumbnail.width is None or thumbnail.height is None:
-            raise RawReaderProcessingError(
-                "Bitmap thumbnail missing dimensions"
-            )
+            raise RawReaderProcessingError("Bitmap thumbnail missing dimensions")
 
         image = None
         try:
@@ -296,9 +290,7 @@ class RawReaderService:
             with BytesIO() as buffer:
                 image.save(buffer, format="JPEG", quality=90)
                 return buffer.getvalue(), thumbnail.width, thumbnail.height
-        except (
-            OSError
-        ) as exc:  # pragma: no cover - depends on pillow internals
+        except OSError as exc:  # pragma: no cover - depends on pillow internals
             raise RawReaderProcessingError(str(exc)) from exc
         finally:
             if image is not None:

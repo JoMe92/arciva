@@ -30,9 +30,7 @@ class PosixStorage:
         locations = getattr(s, "photo_store_locations", None)
         if isinstance(locations, list) and len(locations) > 1:
             for entry in locations[1:]:
-                path_value = (
-                    entry.get("path") if isinstance(entry, dict) else None
-                )
+                path_value = entry.get("path") if isinstance(entry, dict) else None
                 if not isinstance(path_value, str):
                     continue
                 extra_roots.append(Path(path_value) / "derivatives")
@@ -52,9 +50,7 @@ class PosixStorage:
         root_resolved = self.root.resolve()
         try:
             relative = (
-                path.expanduser()
-                .resolve(strict=False)
-                .relative_to(root_resolved)
+                path.expanduser().resolve(strict=False).relative_to(root_resolved)
             )
         except ValueError as exc:
             raise ValueError(
@@ -84,9 +80,7 @@ class PosixStorage:
         posix_path = PurePosixPath(raw)
         if any(part == ".." for part in posix_path.parts):
             raise ValueError(f"Invalid storage key: {storage_key!r}")
-        parts = [
-            part for part in posix_path.parts if part not in {"", ".", "/"}
-        ]
+        parts = [part for part in posix_path.parts if part not in {"", ".", "/"}]
         if not parts:
             raise ValueError(f"Invalid storage key: {storage_key!r}")
         resolved = self.root
@@ -115,9 +109,7 @@ class PosixStorage:
         dest.parent.mkdir(parents=True, exist_ok=True)
         return dest
 
-    def move_to_originals(
-        self, temp_path: Path, sha256_hex: str, ext: str
-    ) -> Path:
+    def move_to_originals(self, temp_path: Path, sha256_hex: str, ext: str) -> Path:
         dest = self.original_path_for(sha256_hex, ext)
         # If already exists (dedupe), remove temp and return existing
         if dest.exists():
@@ -131,9 +123,7 @@ class PosixStorage:
         p.parent.mkdir(parents=True, exist_ok=True)
         return p
 
-    def find_derivative(
-        self, sha256_hex: str, variant: str, fmt: str
-    ) -> Path | None:
+    def find_derivative(self, sha256_hex: str, variant: str, fmt: str) -> Path | None:
         for root in [self.derivatives, *self._extra_derivative_roots]:
             candidate = root / sha256_hex / f"{variant}.{fmt}"
             if candidate.exists():

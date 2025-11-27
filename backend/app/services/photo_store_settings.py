@@ -77,9 +77,7 @@ def _read_state_file(default_root: Path) -> PhotoStoreState:
             if isinstance(raw_locations, list) and raw_locations:
                 locations: list[StoredLocation] = []
                 for entry in raw_locations:
-                    path_value = (
-                        entry.get("path") if isinstance(entry, dict) else None
-                    )
+                    path_value = entry.get("path") if isinstance(entry, dict) else None
                     normalized = (
                         _normalize_path(path_value)
                         if isinstance(path_value, str)
@@ -110,8 +108,7 @@ def _read_state_file(default_root: Path) -> PhotoStoreState:
                     )
                 last_option = (
                     data.get("last_option")
-                    if data.get("last_option")
-                    in {"move", "fresh", "add", "load"}
+                    if data.get("last_option") in {"move", "fresh", "add", "load"}
                     else None
                 )
                 updated_at = (
@@ -126,9 +123,7 @@ def _read_state_file(default_root: Path) -> PhotoStoreState:
                         updated_at=updated_at,
                     )
         except json.JSONDecodeError:
-            logger.warning(
-                "photo_store_settings: invalid JSON in %s", CONFIG_FILE
-            )
+            logger.warning("photo_store_settings: invalid JSON in %s", CONFIG_FILE)
     created_at = _now_iso()
     default_location = StoredLocation(
         id=str(uuid.uuid4()),
@@ -257,9 +252,7 @@ def update_state(
         )
         next_state.locations = [new_location]
     elif mode in ("fresh", "load"):
-        logger.info(
-            "photo_store_settings: preparing %s path at %s", mode, normalized
-        )
+        logger.info("photo_store_settings: preparing %s path at %s", mode, normalized)
         ensure_photo_store_dirs(normalized)
         new_location = StoredLocation(
             id=str(uuid.uuid4()),
@@ -269,9 +262,7 @@ def update_state(
         )
         next_state.locations = [new_location]
     else:
-        logger.info(
-            "photo_store_settings: adding secondary path %s", normalized
-        )
+        logger.info("photo_store_settings: adding secondary path %s", normalized)
         ensure_photo_store_dirs(normalized)
         new_location = StoredLocation(
             id=str(uuid.uuid4()),

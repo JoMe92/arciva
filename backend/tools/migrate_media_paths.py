@@ -53,9 +53,7 @@ def _require_path(value: str | None, description: str) -> Path:
     return path
 
 
-def _relative_key(
-    root: Path, absolute: str, legacy_prefix: Path | None
-) -> str | None:
+def _relative_key(root: Path, absolute: str, legacy_prefix: Path | None) -> str | None:
     raw = absolute.strip()
     if not raw:
         return None
@@ -88,9 +86,7 @@ def _update_table(
     dry_run: bool,
 ) -> int:
     cursor = conn.cursor()
-    cursor.execute(
-        f"SELECT rowid, {column} FROM {table} WHERE {column} IS NOT NULL"
-    )
+    cursor.execute(f"SELECT rowid, {column} FROM {table} WHERE {column} IS NOT NULL")
     rows = cursor.fetchall()
     updated = 0
     for rowid, value in rows:
@@ -115,9 +111,7 @@ def main() -> None:
     db_path = _require_path(args.db_path, "Database path")
     media_root = _require_path(args.media_root, "Media root")
     legacy_prefix = (
-        Path(args.legacy_prefix).expanduser().resolve()
-        if args.legacy_prefix
-        else None
+        Path(args.legacy_prefix).expanduser().resolve() if args.legacy_prefix else None
     )
 
     conn = sqlite3.connect(db_path)

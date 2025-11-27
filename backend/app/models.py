@@ -79,9 +79,7 @@ class AssetStatus(str, enum.Enum):
 class User(Base):
     __tablename__ = "users"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        GUID, primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(GUID, primary_key=True, default=uuid.uuid4)
     email: Mapped[str] = mapped_column(
         String(255), nullable=False, unique=True, index=True
     )
@@ -94,15 +92,11 @@ class User(Base):
 class UserSession(Base):
     __tablename__ = "user_sessions"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        GUID, primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(GUID, primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    token_hash: Mapped[str] = mapped_column(
-        String(128), nullable=False, unique=True
-    )
+    token_hash: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -117,9 +111,7 @@ class UserSession(Base):
 class Project(Base):
     __tablename__ = "projects"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        GUID, primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(GUID, primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
@@ -150,9 +142,7 @@ class ColorLabel(str, enum.Enum):
 class Asset(Base):
     __tablename__ = "assets"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        GUID, primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(GUID, primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
@@ -191,22 +181,16 @@ class Asset(Base):
         DateTime(timezone=True), nullable=True
     )
     last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    metadata_warnings: Mapped[Optional[str]] = mapped_column(
-        Text, nullable=True
-    )
+    metadata_warnings: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     metadata_json: Mapped[Optional[dict[str, Any]]] = mapped_column(
         JSON().with_variant(JSONB, "postgresql"),
         nullable=True,
     )
-    pixel_format: Mapped[Optional[str]] = mapped_column(
-        String(32), nullable=True
-    )
+    pixel_format: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     pixel_hash: Mapped[Optional[str]] = mapped_column(
         String(64), nullable=True, unique=False
     )
-    reference_count: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=1
-    )
+    reference_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -215,9 +199,7 @@ class Asset(Base):
 class ProjectAssetPair(Base):
     __tablename__ = "project_asset_pairs"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        GUID, primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(GUID, primary_key=True, default=uuid.uuid4)
     project_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
     )
@@ -278,9 +260,7 @@ class ProjectAsset(Base):
     is_preview: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=text("false")
     )
-    preview_order: Mapped[Optional[int]] = mapped_column(
-        Integer, nullable=True
-    )
+    preview_order: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     pair_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         ForeignKey("project_asset_pairs.id", ondelete="SET NULL"),
         nullable=True,
@@ -303,9 +283,7 @@ class Derivative(Base):
     format: Mapped[str] = mapped_column(String(16))  # e.g., "jpg"
     width: Mapped[int] = mapped_column(Integer)
     height: Mapped[int] = mapped_column(Integer)
-    storage_key: Mapped[str] = mapped_column(
-        Text
-    )  # Relative path under APP_MEDIA_ROOT
+    storage_key: Mapped[str] = mapped_column(Text)  # Relative path under APP_MEDIA_ROOT
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -316,9 +294,7 @@ class Derivative(Base):
 class MetadataState(Base):
     __tablename__ = "asset_metadata_states"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        GUID, primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(GUID, primary_key=True, default=uuid.uuid4)
     link_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("project_assets.link_id", ondelete="CASCADE"), unique=True
     )
@@ -371,9 +347,7 @@ class ExportJobStatus(str, enum.Enum):
 class ExportJob(Base):
     __tablename__ = "export_jobs"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        GUID, primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(GUID, primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
@@ -393,28 +367,18 @@ class ExportJob(Base):
             ExportJobStatus,
             name="exportjobstatus",
             native_enum=False,
-            values_callable=lambda enum_cls: [
-                entry.value for entry in enum_cls
-            ],
+            values_callable=lambda enum_cls: [entry.value for entry in enum_cls],
             validate_strings=True,
         ),
         nullable=False,
         default=ExportJobStatus.QUEUED,
     )
     progress: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    total_photos: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=0
-    )
-    exported_files: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=0
-    )
+    total_photos: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    exported_files: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     artifact_path: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    artifact_filename: Mapped[Optional[str]] = mapped_column(
-        Text, nullable=True
-    )
-    artifact_size: Mapped[Optional[int]] = mapped_column(
-        BigInteger, nullable=True
-    )
+    artifact_filename: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    artifact_size: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -433,9 +397,7 @@ class ExportJob(Base):
 class BulkImageExport(Base):
     __tablename__ = "bulk_image_exports"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        GUID, primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(GUID, primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
@@ -448,28 +410,18 @@ class BulkImageExport(Base):
             ExportJobStatus,
             name="exportjobstatus",
             native_enum=False,
-            values_callable=lambda enum_cls: [
-                entry.value for entry in enum_cls
-            ],
+            values_callable=lambda enum_cls: [entry.value for entry in enum_cls],
             validate_strings=True,
         ),
         nullable=False,
         default=ExportJobStatus.QUEUED,
     )
     progress: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    processed_files: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=0
-    )
-    total_files: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=0
-    )
+    processed_files: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    total_files: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     artifact_path: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    artifact_filename: Mapped[Optional[str]] = mapped_column(
-        Text, nullable=True
-    )
-    artifact_size: Mapped[Optional[int]] = mapped_column(
-        BigInteger, nullable=True
-    )
+    artifact_filename: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    artifact_size: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
     date_basis: Mapped[str] = mapped_column(
         String(32), nullable=False, default="capture-date"
     )

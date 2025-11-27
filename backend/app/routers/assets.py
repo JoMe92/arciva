@@ -22,18 +22,14 @@ router = APIRouter(prefix="/v1", tags=["assets"])
 logger = logging.getLogger("arciva.assets")
 
 
-@router.get(
-    "/projects/{project_id}/assets", response_model=list[schemas.AssetListItem]
-)
+@router.get("/projects/{project_id}/assets", response_model=list[schemas.AssetListItem])
 async def list_assets(
     project_id: UUID,
     limit: int = 1000,
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    await ensure_project_access(
-        db, project_id=project_id, user_id=current_user.id
-    )
+    await ensure_project_access(db, project_id=project_id, user_id=current_user.id)
     await ensure_asset_metadata_column(db)
     await ensure_preview_columns(db)
     await sync_project_pairs(db, project_id)
@@ -160,17 +156,13 @@ async def asset_project_usage(
                 project_id=project.id,
                 name=project.title,
                 cover_thumb=None,
-                last_modified=(
-                    last_modified.isoformat() if last_modified else None
-                ),
+                last_modified=(last_modified.isoformat() if last_modified else None),
             )
         )
     return usages
 
 
-@router.post(
-    "/assets/{asset_id}/reprocess", response_model=schemas.AssetDetail
-)
+@router.post("/assets/{asset_id}/reprocess", response_model=schemas.AssetDetail)
 async def reprocess_asset(
     asset_id: UUID,
     db: AsyncSession = Depends(get_db),
@@ -206,9 +198,7 @@ async def reprocess_asset(
         redis_settings = RedisSettings.from_dsn(settings.redis_url)
         redis = None
         try:
-            redis = await ArqRedis.create(
-                redis_settings
-            )  # type: ignore[attr-defined]
+            redis = await ArqRedis.create(redis_settings)  # type: ignore[attr-defined]
         except AttributeError:
             from arq.connections import create_pool  # type: ignore
 
@@ -283,9 +273,7 @@ async def link_existing_assets(
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    await ensure_project_access(
-        db, project_id=project_id, user_id=current_user.id
-    )
+    await ensure_project_access(db, project_id=project_id, user_id=current_user.id)
     await ensure_asset_metadata_column(db)
     await ensure_preview_columns(db)
 
@@ -422,9 +410,7 @@ async def apply_asset_interactions(
     if not body.asset_ids:
         raise HTTPException(400, "asset_ids required")
 
-    await ensure_project_access(
-        db, project_id=project_id, user_id=current_user.id
-    )
+    await ensure_project_access(db, project_id=project_id, user_id=current_user.id)
     await ensure_asset_metadata_column(db)
     await ensure_preview_columns(db)
     await sync_project_pairs(db, project_id)
@@ -558,8 +544,7 @@ async def apply_asset_interactions(
         await write_annotations_for_assets(touched_pairs)
     except Exception:  # pragma: no cover - best effort metadata write
         logger.exception(
-            "apply_asset_interactions: metadata write failed project=%s "
-            "assets=%s",
+            "apply_asset_interactions: metadata write failed project=%s " "assets=%s",
             project_id,
             [a.id for a, _ in touched_pairs],
         )
@@ -592,9 +577,7 @@ async def update_preview_flag(
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    await ensure_project_access(
-        db, project_id=project_id, user_id=current_user.id
-    )
+    await ensure_project_access(db, project_id=project_id, user_id=current_user.id)
     await ensure_asset_metadata_column(db)
     await ensure_preview_columns(db)
     link = (
@@ -651,20 +634,14 @@ async def update_preview_flag(
     if body.is_preview:
         if link not in preview_rows:
             if len(preview_ordered) >= max_previews:
-                raise HTTPException(
-                    400, f"preview limit ({max_previews}) reached"
-                )
+                raise HTTPException(400, f"preview limit ({max_previews}) reached")
             preview_ordered.append(link)
         elif body.make_primary:
             preview_ordered.insert(0, link)
         else:
             # re-insert at original position
             index = next(
-                (
-                    i
-                    for i, row in enumerate(preview_rows)
-                    if row.asset_id == asset_id
-                ),
+                (i for i, row in enumerate(preview_rows) if row.asset_id == asset_id),
                 None,
             )
             if index is not None:
@@ -717,14 +694,10 @@ async def update_preview_flag(
 
     metadata = (
         await db.execute(
-            select(models.MetadataState).where(
-                models.MetadataState.link_id == link.id
-            )
+            select(models.MetadataState).where(models.MetadataState.link_id == link.id)
         )
     ).scalar_one_or_none()
     if metadata is None:
         metadata = await ensure_state_for_link(db, link)
     storage = PosixStorage.from_env()
-    return assets_service.serialize_asset_item(
-        asset, link, pair, storage, metadata
-    )
+    return assets_service.serialize_asset_item(asset, link, pair, storage, metadata)

@@ -97,9 +97,7 @@ async def test_engine(test_settings):
 
 @pytest.fixture(scope="session")
 def TestSessionLocal(test_engine):
-    return async_sessionmaker(
-        test_engine, expire_on_commit=False, class_=AsyncSession
-    )
+    return async_sessionmaker(test_engine, expire_on_commit=False, class_=AsyncSession)
 
 
 @pytest_asyncio.fixture(scope="session", autouse=True)
@@ -130,9 +128,7 @@ def app(test_settings, TestSessionLocal, test_engine):
         return test_settings
 
     deps_module.get_settings.cache_clear()  # type: ignore[attr-defined]
-    deps_module.get_settings = (  # type: ignore[assignment]
-        _get_settings_override
-    )
+    deps_module.get_settings = _get_settings_override  # type: ignore[assignment]
 
     # override DB dependency to use the test session
     async def _get_db_override() -> AsyncSession:
@@ -141,18 +137,14 @@ def app(test_settings, TestSessionLocal, test_engine):
 
     # Ensure all modules reuse the test engine/session factory instead of a
     # global one
-    db_module.SessionLocal = (  # type: ignore[assignment]
-        TestSessionLocal
-    )
+    db_module.SessionLocal = TestSessionLocal  # type: ignore[assignment]
     db_module.engine = test_engine  # type: ignore[assignment]
     schema_utils.async_engine = test_engine  # type: ignore[assignment]
 
     # Services that spin up their own sessions (e.g. background tasks)
     from backend.app.services import bulk_image_exports, export_jobs
 
-    bulk_image_exports.SessionLocal = (  # type: ignore[assignment]
-        TestSessionLocal
-    )
+    bulk_image_exports.SessionLocal = TestSessionLocal  # type: ignore[assignment]
     export_jobs.SessionLocal = TestSessionLocal  # type: ignore[assignment]
 
     db_module.get_db = _get_db_override  # type: ignore[assignment]
@@ -182,7 +174,5 @@ def app(test_settings, TestSessionLocal, test_engine):
 @pytest_asyncio.fixture
 async def client(app):
     transport = ASGITransport(app=app)
-    async with AsyncClient(
-        transport=transport, base_url="http://testserver"
-    ) as ac:
+    async with AsyncClient(transport=transport, base_url="http://testserver") as ac:
         yield ac

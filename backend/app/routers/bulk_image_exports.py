@@ -60,10 +60,8 @@ async def estimate_bulk_image_export(
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    total_files, total_bytes = (
-        await bulk_image_exports.estimate_bulk_image_export(
-            db, current_user.id
-        )
+    total_files, total_bytes = await bulk_image_exports.estimate_bulk_image_export(
+        db, current_user.id
     )
     if total_files == 0:
         raise HTTPException(
@@ -102,13 +100,9 @@ async def start_bulk_image_export(
     db.add(job)
     await db.commit()
     await db.refresh(job)
-    background_tasks.add_task(
-        bulk_image_exports.process_bulk_image_export, job.id
-    )
+    background_tasks.add_task(bulk_image_exports.process_bulk_image_export, job.id)
     background_tasks.add_task(bulk_image_exports.cleanup_bulk_image_exports)
-    logger.info(
-        "start_bulk_image_export: job=%s assets=%d", job.id, len(asset_ids)
-    )
+    logger.info("start_bulk_image_export: job=%s assets=%d", job.id, len(asset_ids))
     return _serialize_job(job)
 
 
@@ -127,9 +121,7 @@ async def get_bulk_image_export(
         )
     ).scalar_one_or_none()
     if not job:
-        raise HTTPException(
-            status_code=404, detail="Bulk image export not found"
-        )
+        raise HTTPException(status_code=404, detail="Bulk image export not found")
     return _serialize_job(job)
 
 
@@ -148,22 +140,16 @@ async def download_bulk_image_export(
         )
     ).scalar_one_or_none()
     if not job:
-        raise HTTPException(
-            status_code=404, detail="Bulk image export not found"
-        )
+        raise HTTPException(status_code=404, detail="Bulk image export not found")
     if job.status != models.ExportJobStatus.COMPLETED:
         raise HTTPException(status_code=409, detail="Export is not ready")
     if not job.artifact_path:
-        raise HTTPException(
-            status_code=410, detail="Export artifact unavailable"
-        )
+        raise HTTPException(status_code=410, detail="Export artifact unavailable")
     storage = PosixStorage.from_env()
     try:
         path = storage.path_from_key(job.artifact_path)
     except ValueError:
-        raise HTTPException(
-            status_code=410, detail="Export artifact unavailable"
-        )
+        raise HTTPException(status_code=410, detail="Export artifact unavailable")
     if not path.is_file():
         raise HTTPException(status_code=410, detail="Export artifact missing")
     filename = job.artifact_filename or f"arciva-images-{job.id.hex[:8]}.zip"

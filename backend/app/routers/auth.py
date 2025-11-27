@@ -58,9 +58,7 @@ async def login(
         await db.execute(select(models.User).where(models.User.email == email))
     ).scalar_one_or_none()
     if not user or not verify_password(body.password, user.password_hash):
-        raise HTTPException(
-            status_code=401, detail="Invalid email or password"
-        )
+        raise HTTPException(status_code=401, detail="Invalid email or password")
     session_token, expires_at = await create_session(db, user)
     await db.commit()
     set_session_cookie(response, session_token, expires_at=expires_at)

@@ -31,9 +31,7 @@ def setup_logging(
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
-    file_handler = RotatingFileHandler(
-        log_file, maxBytes=5_000_000, backupCount=5
-    )
+    file_handler = RotatingFileHandler(log_file, maxBytes=5_000_000, backupCount=5)
     file_handler.setFormatter(formatter)
     file_handler.setLevel(level)
 
@@ -52,9 +50,7 @@ def setup_logging(
     ):
         root_logger.addHandler(file_handler)
 
-    if not any(
-        isinstance(h, logging.StreamHandler) for h in root_logger.handlers
-    ):
+    if not any(isinstance(h, logging.StreamHandler) for h in root_logger.handlers):
         root_logger.addHandler(console_handler)
 
     # Optionally raise level for our application namespace without touching

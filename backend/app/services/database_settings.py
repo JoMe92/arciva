@@ -83,8 +83,7 @@ def _check_disk_space(directory: Path) -> Tuple[bool, str | None]:
     if stats.free < _MIN_FREE_BYTES:
         return (
             False,
-            "Not enough free space on the selected volume "
-            "(need at least 512 MB).",
+            "Not enough free space on the selected volume " "(need at least 512 MB).",
         )
     return True, None
 
@@ -105,14 +104,12 @@ def validate_database_path(
     if directory == Path("/"):
         return (
             DatabasePathStatus.INVALID,
-            "System folders cannot host the database. "
-            "Choose a custom directory.",
+            "System folders cannot host the database. " "Choose a custom directory.",
         )
     if _is_protected(directory):
         return (
             DatabasePathStatus.INVALID,
-            "System folders cannot host the database. "
-            "Choose a custom directory.",
+            "System folders cannot host the database. " "Choose a custom directory.",
         )
     if ensure_writable:
         try:
@@ -130,9 +127,7 @@ def validate_database_path(
     if not ok:
         return DatabasePathStatus.NOT_WRITABLE, message
     try:
-        test_fd, test_path = tempfile.mkstemp(
-            prefix="arciva-db-check", dir=directory
-        )
+        test_fd, test_path = tempfile.mkstemp(prefix="arciva-db-check", dir=directory)
         os.close(test_fd)
         os.unlink(test_path)
     except OSError as exc:

@@ -161,16 +161,12 @@ def read_exif(
                 metadata = entry
                 if taken_at is None:
                     taken_at = (
-                        _parse_exif_datetime(
-                            entry.get("EXIF:DateTimeOriginal")
-                        )
+                        _parse_exif_datetime(entry.get("EXIF:DateTimeOriginal"))
                         or _parse_exif_datetime(entry.get("EXIF:CreateDate"))
                         or _parse_exif_datetime(
                             entry.get("MakerNotes:DateTimeOriginal")
                         )
-                        or _parse_exif_datetime(
-                            entry.get("QuickTime:CreateDate")
-                        )
+                        or _parse_exif_datetime(entry.get("QuickTime:CreateDate"))
                         or _parse_exif_datetime(entry.get("XMP:CreateDate"))
                         or _parse_exif_datetime(entry.get("IPTC:DateCreated"))
                     )
@@ -265,9 +261,7 @@ def compute_pixel_hash(
         with Image.open(source) as im:
             im = ImageOps.exif_transpose(im).convert("RGB")
             im = ImageOps.fit(im, (256, 256), resampling.LANCZOS)
-            gray = im.convert("L").resize(
-                (hash_size, hash_size), resampling.LANCZOS
-            )
+            gray = im.convert("L").resize((hash_size, hash_size), resampling.LANCZOS)
             pixels = list(gray.getdata())
     finally:
         if buffer is not None:

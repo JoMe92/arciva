@@ -51,9 +51,7 @@ async def get_image_hub_settings(
         {"metadata_inheritance": schemas.MetadataInheritanceMode.ASK.value},
     )
     mode = _coerce_mode(
-        record.get("metadata_inheritance")
-        if isinstance(record, dict)
-        else None
+        record.get("metadata_inheritance") if isinstance(record, dict) else None
     )
     return schemas.ImageHubSettings(metadata_inheritance=mode)
 
@@ -92,9 +90,7 @@ async def set_database_path(
     return result
 
 
-def _build_photo_store_response(
-    state, *, enabled: bool
-) -> schemas.PhotoStoreSettings:
+def _build_photo_store_response(state, *, enabled: bool) -> schemas.PhotoStoreSettings:
     entries = make_location_payload(state)
     warning_active = any(item["status"] != "available" for item in entries)
     locations = [schemas.PhotoStoreLocation(**item) for item in entries]
@@ -110,9 +106,7 @@ def _build_photo_store_response(
 @router.get("/photo-store", response_model=schemas.PhotoStoreSettings)
 async def get_photo_store_settings_api() -> schemas.PhotoStoreSettings:
     settings = get_settings()
-    enabled = bool(
-        getattr(settings, "experimental_photo_store_enabled", False)
-    )
+    enabled = bool(getattr(settings, "experimental_photo_store_enabled", False))
     if not enabled:
         return schemas.PhotoStoreSettings(
             enabled=False,
@@ -124,20 +118,14 @@ async def get_photo_store_settings_api() -> schemas.PhotoStoreSettings:
     return _build_photo_store_response(state, enabled=enabled)
 
 
-@router.post(
-    "/photo-store/validate", response_model=schemas.PhotoStoreValidationResult
-)
+@router.post("/photo-store/validate", response_model=schemas.PhotoStoreValidationResult)
 async def validate_photo_store_path(
     body: schemas.PhotoStoreValidationRequest,
 ) -> schemas.PhotoStoreValidationResult:
     settings = get_settings()
-    enabled = bool(
-        getattr(settings, "experimental_photo_store_enabled", False)
-    )
+    enabled = bool(getattr(settings, "experimental_photo_store_enabled", False))
     if not enabled:
-        raise HTTPException(
-            404, "Experimental photo store settings are disabled."
-        )
+        raise HTTPException(404, "Experimental photo store settings are disabled.")
     valid, message = validate_candidate_path(body.path)
     normalized = normalize_photo_store_path(body.path)
     if valid and normalized:
@@ -165,17 +153,11 @@ async def apply_photo_store_change(
     body: schemas.PhotoStoreApplyRequest, db: AsyncSession = Depends(get_db)
 ) -> schemas.PhotoStoreSettings:
     settings = get_settings()
-    enabled = bool(
-        getattr(settings, "experimental_photo_store_enabled", False)
-    )
+    enabled = bool(getattr(settings, "experimental_photo_store_enabled", False))
     if not enabled:
-        raise HTTPException(
-            404, "Experimental photo store settings are disabled."
-        )
+        raise HTTPException(404, "Experimental photo store settings are disabled.")
     if not body.acknowledge:
-        raise HTTPException(
-            400, "Acknowledgement required before applying changes."
-        )
+        raise HTTPException(400, "Acknowledgement required before applying changes.")
     valid, message = validate_candidate_path(body.path)
     normalized = normalize_photo_store_path(body.path)
     if not valid or not normalized:
@@ -185,9 +167,7 @@ async def apply_photo_store_change(
     if load_existing:
         db_file = normalized / "arciva.db"
         if not db_file.exists():
-            raise HTTPException(
-                400, "arciva.db not found in the selected folder."
-            )
+            raise HTTPException(400, "arciva.db not found in the selected folder.")
     next_state = update_state(state, normalized, body.mode)
     apply_state_to_settings(settings, next_state)
     db_candidate = normalized / "arciva.db"

@@ -84,9 +84,7 @@ async def create_session(
     active_settings = settings or get_settings()
     token = secrets.token_urlsafe(32)
     token_hash = _hash_token(token)
-    expires_at = datetime.now(timezone.utc) + timedelta(
-        seconds=SESSION_TTL_SECONDS
-    )
+    expires_at = datetime.now(timezone.utc) + timedelta(seconds=SESSION_TTL_SECONDS)
     record = models.UserSession(
         user_id=user.id,
         token_hash=token_hash,
@@ -139,14 +137,10 @@ async def _load_session(
     settings: Settings,
 ) -> SessionContext | None:
     try:
-        payload = _signer(settings).unsign(
-            signed_value, max_age=SESSION_TTL_SECONDS
-        )
+        payload = _signer(settings).unsign(signed_value, max_age=SESSION_TTL_SECONDS)
     except (BadSignature, SignatureExpired):
         return None
-    decoded = (
-        payload.decode("utf-8") if isinstance(payload, bytes) else str(payload)
-    )
+    decoded = payload.decode("utf-8") if isinstance(payload, bytes) else str(payload)
     parsed = _deserialize_session_payload(decoded)
     if not parsed:
         return None

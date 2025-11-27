@@ -33,9 +33,7 @@ class SPAStaticFiles(StaticFiles):
         }:
             return response
 
-        headers = {
-            k.decode().lower(): v.decode() for k, v in scope.get("headers", [])
-        }
+        headers = {k.decode().lower(): v.decode() for k, v in scope.get("headers", [])}
         accept_header = headers.get("accept", "")
         wants_html = "text/html" in accept_header or not accept_header
         if not wants_html:
@@ -110,9 +108,7 @@ def create_app() -> FastAPI:
     async def health():
         return {"ok": True}
 
-    frontend_dist = Path(
-        os.environ.get("FRONTEND_DIST_DIR", "/app/frontend_dist")
-    )
+    frontend_dist = Path(os.environ.get("FRONTEND_DIST_DIR", "/app/frontend_dist"))
     if frontend_dist.exists():
         startup_logger.info("Serving frontend from %s", frontend_dist)
         app.mount(

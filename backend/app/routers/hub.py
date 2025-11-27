@@ -126,9 +126,7 @@ async def list_hub_assets(
     date_summary: dict[str, int] = {}
 
     for asset, link, project, metadata in rows:
-        info = assets_map.setdefault(
-            asset.id, {"asset": asset, "projects": []}
-        )
+        info = assets_map.setdefault(asset.id, {"asset": asset, "projects": []})
         info["projects"].append((project, link, metadata))
 
         summary = project_summary.setdefault(
@@ -141,10 +139,7 @@ async def list_hub_assets(
             summary["last_linked"] = link.added_at
 
         date_ref = (
-            asset.taken_at
-            or asset.created_at
-            or link.added_at
-            or datetime.utcnow()
+            asset.taken_at or asset.created_at or link.added_at or datetime.utcnow()
         )
         date_key = date_ref.date().isoformat()
         date_summary[date_key] = date_summary.get(date_key, 0) + 1

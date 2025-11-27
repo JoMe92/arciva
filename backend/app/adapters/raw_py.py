@@ -18,9 +18,7 @@ from PIL import Image
 
 try:  # pragma: no cover - import guarded for environments without rawpy
     import rawpy
-except (
-    ImportError
-):  # pragma: no cover - handled gracefully by the service layer
+except ImportError:  # pragma: no cover - handled gracefully by the service layer
     rawpy = None  # type: ignore[assignment]
 
 
@@ -139,9 +137,7 @@ class RawPyAdapter:
                 raw_width = self._to_int(getattr(sizes, "raw_width", None))
                 raw_height = self._to_int(getattr(sizes, "raw_height", None))
                 flip = self._to_int(getattr(sizes, "flip", None))
-                color_desc = self._decode_bytes(
-                    getattr(raw, "color_desc", b"")
-                )
+                color_desc = self._decode_bytes(getattr(raw, "color_desc", b""))
                 raw_type = self._to_int(getattr(raw, "raw_type", None))
                 thumbnail = self._extract_thumbnail(raw)
                 preview_jpeg: Optional[bytes] = None
@@ -151,8 +147,8 @@ class RawPyAdapter:
                     thumbnail is not None and thumbnail.format != "jpeg"
                 )
                 if needs_render:
-                    preview_jpeg, preview_width, preview_height = (
-                        self._render_preview(raw)
+                    preview_jpeg, preview_width, preview_height = self._render_preview(
+                        raw
                     )
         except (
             rawpy.LibRawError

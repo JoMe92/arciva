@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Normalize media paths in the SQLite database to be relative to APP_MEDIA_ROOT."""
+"""
+Normalize media paths in the SQLite database to be relative to APP_MEDIA_ROOT.
+"""
 
 from __future__ import annotations
 
@@ -34,7 +36,10 @@ def _parse_args() -> argparse.Namespace:
         "--prefix",
         dest="legacy_prefix",
         default=None,
-        help="Optional legacy absolute prefix to strip when present (defaults to media root).",
+        help=(
+            "Optional legacy absolute prefix to strip when present "
+            "(defaults to media root)."
+        ),
     )
     return parser.parse_args()
 
@@ -48,7 +53,9 @@ def _require_path(value: str | None, description: str) -> Path:
     return path
 
 
-def _relative_key(root: Path, absolute: str, legacy_prefix: Path | None) -> str | None:
+def _relative_key(
+    root: Path, absolute: str, legacy_prefix: Path | None
+) -> str | None:
     raw = absolute.strip()
     if not raw:
         return None
@@ -81,7 +88,9 @@ def _update_table(
     dry_run: bool,
 ) -> int:
     cursor = conn.cursor()
-    cursor.execute(f"SELECT rowid, {column} FROM {table} WHERE {column} IS NOT NULL")
+    cursor.execute(
+        f"SELECT rowid, {column} FROM {table} WHERE {column} IS NOT NULL"
+    )
     rows = cursor.fetchall()
     updated = 0
     for rowid, value in rows:
@@ -94,7 +103,8 @@ def _update_table(
             print(f"[dry-run] {table} row {rowid}: {value!r} -> {key!r}")
         else:
             cursor.execute(
-                f"UPDATE {table} SET {column} = ? WHERE rowid = ?", (key, rowid)
+                f"UPDATE {table} SET {column} = ? WHERE rowid = ?",
+                (key, rowid),
             )
         updated += 1
     return updated
@@ -105,17 +115,29 @@ def main() -> None:
     db_path = _require_path(args.db_path, "Database path")
     media_root = _require_path(args.media_root, "Media root")
     legacy_prefix = (
-        Path(args.legacy_prefix).expanduser().resolve() if args.legacy_prefix else None
+        Path(args.legacy_prefix).expanduser().resolve()
+        if args.legacy_prefix
+        else None
     )
 
     conn = sqlite3.connect(db_path)
     try:
         total = 0
         total += _update_table(
-            conn, "assets", "storage_uri", media_root, legacy_prefix, args.dry_run
+            conn,
+            "assets",
+            "storage_uri",
+            media_root,
+            legacy_prefix,
+            args.dry_run,
         )
         total += _update_table(
-            conn, "derivatives", "storage_key", media_root, legacy_prefix, args.dry_run
+            conn,
+            "derivatives",
+            "storage_key",
+            media_root,
+            legacy_prefix,
+            args.dry_run,
         )
         total += _update_table(
             conn,

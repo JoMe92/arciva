@@ -13,7 +13,12 @@ import copy
 
 logger = logging.getLogger("arciva.photo_store")
 
-PHOTO_SUBDIRS: tuple[str, ...] = ("uploads", "originals", "derivatives", "exports")
+PHOTO_SUBDIRS: tuple[str, ...] = (
+    "uploads",
+    "originals",
+    "derivatives",
+    "exports",
+)
 CONFIG_DIR = Path.home() / "Arciva"
 CONFIG_FILE = CONFIG_DIR / "photo_store_state.json"
 
@@ -72,7 +77,9 @@ def _read_state_file(default_root: Path) -> PhotoStoreState:
             if isinstance(raw_locations, list) and raw_locations:
                 locations: list[StoredLocation] = []
                 for entry in raw_locations:
-                    path_value = entry.get("path") if isinstance(entry, dict) else None
+                    path_value = (
+                        entry.get("path") if isinstance(entry, dict) else None
+                    )
                     normalized = (
                         _normalize_path(path_value)
                         if isinstance(path_value, str)
@@ -103,7 +110,8 @@ def _read_state_file(default_root: Path) -> PhotoStoreState:
                     )
                 last_option = (
                     data.get("last_option")
-                    if data.get("last_option") in {"move", "fresh", "add", "load"}
+                    if data.get("last_option")
+                    in {"move", "fresh", "add", "load"}
                     else None
                 )
                 updated_at = (
@@ -118,7 +126,9 @@ def _read_state_file(default_root: Path) -> PhotoStoreState:
                         updated_at=updated_at,
                     )
         except json.JSONDecodeError:
-            logger.warning("photo_store_settings: invalid JSON in %s", CONFIG_FILE)
+            logger.warning(
+                "photo_store_settings: invalid JSON in %s", CONFIG_FILE
+            )
     created_at = _now_iso()
     default_location = StoredLocation(
         id=str(uuid.uuid4()),
@@ -247,7 +257,9 @@ def update_state(
         )
         next_state.locations = [new_location]
     elif mode in ("fresh", "load"):
-        logger.info("photo_store_settings: preparing %s path at %s", mode, normalized)
+        logger.info(
+            "photo_store_settings: preparing %s path at %s", mode, normalized
+        )
         ensure_photo_store_dirs(normalized)
         new_location = StoredLocation(
             id=str(uuid.uuid4()),
@@ -257,7 +269,9 @@ def update_state(
         )
         next_state.locations = [new_location]
     else:
-        logger.info("photo_store_settings: adding secondary path %s", normalized)
+        logger.info(
+            "photo_store_settings: adding secondary path %s", normalized
+        )
         ensure_photo_store_dirs(normalized)
         new_location = StoredLocation(
             id=str(uuid.uuid4()),
@@ -306,11 +320,17 @@ def apply_state_to_settings(settings, state: PhotoStoreState) -> None:
     settings.fs_originals_dir = str(primary_path / "originals")
     settings.fs_derivatives_dir = str(primary_path / "derivatives")
     settings.fs_exports_dir = str(primary_path / "exports")
-    setattr(settings, "photo_store_locations", [asdict(loc) for loc in state.locations])
+    setattr(
+        settings,
+        "photo_store_locations",
+        [asdict(loc) for loc in state.locations],
+    )
     setattr(settings, "photo_store_state", asdict(state))
 
 
-def make_location_payload(state: PhotoStoreState) -> list[dict[str, str | None]]:
+def make_location_payload(
+    state: PhotoStoreState,
+) -> list[dict[str, str | None]]:
     entries: list[dict[str, str | None]] = []
     for loc in state.locations:
         path = Path(loc.path)

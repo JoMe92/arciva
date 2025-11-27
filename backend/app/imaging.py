@@ -137,7 +137,12 @@ def read_exif(
     except Exception:  # pragma: no cover - best effort
         warnings.append("EXIF_PIL_LOAD_FAILED")
 
-    cmd: Sequence[str] = _get_exiftool_cmd() + ["-json", "-G", "-n", str(path)]
+    cmd: Sequence[str] = _get_exiftool_cmd() + [
+        "-json",
+        "-G",
+        "-n",
+        str(path),
+    ]
     try:
         proc = subprocess.run(
             cmd,
@@ -150,17 +155,22 @@ def read_exif(
         if isinstance(parsed, list) and parsed:
             entry = parsed[0]
             if isinstance(entry, dict):
-                # Remove the absolute path to avoid leaking server filesystem details
+                # Remove the absolute path to avoid leaking server filesystem
+                # details
                 entry.pop("SourceFile", None)
                 metadata = entry
                 if taken_at is None:
                     taken_at = (
-                        _parse_exif_datetime(entry.get("EXIF:DateTimeOriginal"))
+                        _parse_exif_datetime(
+                            entry.get("EXIF:DateTimeOriginal")
+                        )
                         or _parse_exif_datetime(entry.get("EXIF:CreateDate"))
                         or _parse_exif_datetime(
                             entry.get("MakerNotes:DateTimeOriginal")
                         )
-                        or _parse_exif_datetime(entry.get("QuickTime:CreateDate"))
+                        or _parse_exif_datetime(
+                            entry.get("QuickTime:CreateDate")
+                        )
                         or _parse_exif_datetime(entry.get("XMP:CreateDate"))
                         or _parse_exif_datetime(entry.get("IPTC:DateCreated"))
                     )
@@ -228,7 +238,10 @@ def make_thumb(
 
 
 def compute_pixel_hash(
-    path: Optional[Path], *, image_bytes: Optional[bytes] = None, hash_size: int = 8
+    path: Optional[Path],
+    *,
+    image_bytes: Optional[bytes] = None,
+    hash_size: int = 8,
 ) -> str:
     """
     Compute a deterministic perceptual hash for the provided image input.
@@ -252,7 +265,9 @@ def compute_pixel_hash(
         with Image.open(source) as im:
             im = ImageOps.exif_transpose(im).convert("RGB")
             im = ImageOps.fit(im, (256, 256), resampling.LANCZOS)
-            gray = im.convert("L").resize((hash_size, hash_size), resampling.LANCZOS)
+            gray = im.convert("L").resize(
+                (hash_size, hash_size), resampling.LANCZOS
+            )
             pixels = list(gray.getdata())
     finally:
         if buffer is not None:

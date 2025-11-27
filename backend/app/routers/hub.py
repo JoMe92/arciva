@@ -18,7 +18,9 @@ logger = logging.getLogger("arciva.image_hub")
 router = APIRouter(prefix="/v1/image-hub", tags=["image-hub"])
 
 
-def _color_label_to_schema(value: models.ColorLabel | str | None) -> schemas.ColorLabel:
+def _color_label_to_schema(
+    value: models.ColorLabel | str | None,
+) -> schemas.ColorLabel:
     if isinstance(value, models.ColorLabel):
         return schemas.ColorLabel(value.value)
     if isinstance(value, str):
@@ -75,10 +77,19 @@ async def list_hub_assets(
     rows = (
         await db.execute(
             select(
-                models.Asset, models.ProjectAsset, models.Project, models.MetadataState
+                models.Asset,
+                models.ProjectAsset,
+                models.Project,
+                models.MetadataState,
             )
-            .join(models.ProjectAsset, models.ProjectAsset.asset_id == models.Asset.id)
-            .join(models.Project, models.Project.id == models.ProjectAsset.project_id)
+            .join(
+                models.ProjectAsset,
+                models.ProjectAsset.asset_id == models.Asset.id,
+            )
+            .join(
+                models.Project,
+                models.Project.id == models.ProjectAsset.project_id,
+            )
             .outerjoin(
                 models.MetadataState,
                 models.MetadataState.link_id == models.ProjectAsset.id,
@@ -115,7 +126,9 @@ async def list_hub_assets(
     date_summary: dict[str, int] = {}
 
     for asset, link, project, metadata in rows:
-        info = assets_map.setdefault(asset.id, {"asset": asset, "projects": []})
+        info = assets_map.setdefault(
+            asset.id, {"asset": asset, "projects": []}
+        )
         info["projects"].append((project, link, metadata))
 
         summary = project_summary.setdefault(
@@ -128,7 +141,10 @@ async def list_hub_assets(
             summary["last_linked"] = link.added_at
 
         date_ref = (
-            asset.taken_at or asset.created_at or link.added_at or datetime.utcnow()
+            asset.taken_at
+            or asset.created_at
+            or link.added_at
+            or datetime.utcnow()
         )
         date_key = date_ref.date().isoformat()
         date_summary[date_key] = date_summary.get(date_key, 0) + 1
@@ -139,7 +155,8 @@ async def list_hub_assets(
     ordered_assets: list[schemas.HubAsset] = []
     order_map = {aid: idx for idx, aid in enumerate(asset_ids)}
     for asset_id, payload in sorted(
-        assets_map.items(), key=lambda item: order_map.get(item[0], len(order_map))
+        assets_map.items(),
+        key=lambda item: order_map.get(item[0], len(order_map)),
     ):
         asset: models.Asset = payload["asset"]
         proj_entries = []

@@ -15,7 +15,9 @@ from ..storage import PosixStorage
 logger = logging.getLogger("arciva.annotations")
 
 
-def _resolve_asset_path(asset: models.Asset, storage: PosixStorage) -> Path | None:
+def _resolve_asset_path(
+    asset: models.Asset, storage: PosixStorage
+) -> Path | None:
     if asset.storage_uri:
         try:
             path = storage.path_from_key(asset.storage_uri)
@@ -128,12 +130,17 @@ def _write_with_exiftool(
         logger.warning("annotations: exiftool missing path=%s", path)
         return False
     except CalledProcessError as exc:  # pragma: no cover - best effort logging
-        logger.warning("annotations: exiftool failed path=%s error=%s", path, exc)
+        logger.warning(
+            "annotations: exiftool failed path=%s error=%s", path, exc
+        )
         return False
 
 
 def _write_sidecar(
-    path: Path, state: models.MetadataState, *, explicit_path: Path | None = None
+    path: Path,
+    state: models.MetadataState,
+    *,
+    explicit_path: Path | None = None,
 ) -> None:
     target = explicit_path or _sidecar_path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -151,7 +158,9 @@ def _write_annotations_sync(
         wrote = _write_with_exiftool(path, state, sidecar=None)
         if wrote:
             return
-        logger.info("annotations: falling back to sidecar for asset=%s", asset.id)
+        logger.info(
+            "annotations: falling back to sidecar for asset=%s", asset.id
+        )
         _write_sidecar(path, state, explicit_path=sidecar_target)
         return
 
@@ -175,9 +184,13 @@ async def write_annotations_for_assets(
         processed.add(asset.id)
         path = _resolve_asset_path(asset, storage)
         if not path:
-            logger.warning("annotations: missing source path for asset=%s", asset.id)
+            logger.warning(
+                "annotations: missing source path for asset=%s", asset.id
+            )
             continue
-        tasks.append(asyncio.to_thread(_write_annotations_sync, path, asset, state))
+        tasks.append(
+            asyncio.to_thread(_write_annotations_sync, path, asset, state)
+        )
 
     if tasks:
         await asyncio.gather(*tasks, return_exceptions=True)

@@ -11,7 +11,10 @@ from backend.app.adapters.raw_py import (
     RawPyReadResult,
     RawPyThumbnail,
 )
-from backend.app.services.raw_reader import RawReaderProcessingError, RawReaderService
+from backend.app.services.raw_reader import (
+    RawReaderProcessingError,
+    RawReaderService,
+)
 
 
 @dataclass

@@ -49,14 +49,17 @@ def _build_statements(existing: Iterable[str]) -> list[str]:
     statements: list[str] = []
     if "is_preview" not in present:
         statements.append(
-            "ALTER TABLE project_assets ADD COLUMN IF NOT EXISTS is_preview BOOLEAN NOT NULL DEFAULT FALSE"
+            "ALTER TABLE project_assets ADD COLUMN IF NOT EXISTS "
+            "is_preview BOOLEAN NOT NULL DEFAULT FALSE"
         )
     if "preview_order" not in present:
         statements.append(
-            "ALTER TABLE project_assets ADD COLUMN IF NOT EXISTS preview_order INTEGER"
+            "ALTER TABLE project_assets ADD COLUMN IF NOT EXISTS "
+            "preview_order INTEGER"
         )
         statements.append(
-            "UPDATE project_assets SET preview_order = 0 WHERE is_preview = TRUE AND preview_order IS NULL"
+            "UPDATE project_assets SET preview_order = 0 "
+            "WHERE is_preview = TRUE AND preview_order IS NULL"
         )
     return statements
 
@@ -90,7 +93,9 @@ async def ensure_preview_columns(_: AsyncSession | None = None) -> None:
                             SELECT column_name
                             FROM information_schema.columns
                             WHERE table_name = 'project_assets'
-                              AND column_name IN ('is_preview', 'preview_order')
+                              AND column_name IN (
+                                'is_preview', 'preview_order'
+                              )
                             """
                         )
                     )
@@ -101,7 +106,9 @@ async def ensure_preview_columns(_: AsyncSession | None = None) -> None:
                     logger.info("ensure_preview_columns: applying %s", stmt)
                     await conn.execute(text(stmt))
         except SQLAlchemyError:
-            logger.exception("ensure_preview_columns: failed to apply schema patch")
+            logger.exception(
+                "ensure_preview_columns: failed to apply schema patch"
+            )
             raise
 
         _preview_columns_ready = True
@@ -124,8 +131,12 @@ async def ensure_asset_metadata_column(_: AsyncSession | None = None) -> None:
             async with async_engine.begin() as conn:
                 column_present = False
                 if conn.dialect.name == "sqlite":
-                    pragma = await conn.execute(text("PRAGMA table_info('assets')"))
-                    column_present = any(row[1] == "metadata_json" for row in pragma)
+                    pragma = await conn.execute(
+                        text("PRAGMA table_info('assets')")
+                    )
+                    column_present = any(
+                        row[1] == "metadata_json" for row in pragma
+                    )
                 else:
                     result = await conn.execute(
                         text(
@@ -141,11 +152,15 @@ async def ensure_asset_metadata_column(_: AsyncSession | None = None) -> None:
 
                 if not column_present:
                     stmt = (
-                        "ALTER TABLE assets ADD COLUMN IF NOT EXISTS metadata_json JSON"
+                        "ALTER TABLE assets ADD COLUMN IF NOT EXISTS "
+                        "metadata_json JSON"
                         if conn.dialect.name == "sqlite"
-                        else "ALTER TABLE assets ADD COLUMN IF NOT EXISTS metadata_json JSONB"
+                        else "ALTER TABLE assets ADD COLUMN IF NOT EXISTS "
+                        "metadata_json JSONB"
                     )
-                    logger.info("ensure_asset_metadata_column: applying %s", stmt)
+                    logger.info(
+                        "ensure_asset_metadata_column: applying %s", stmt
+                    )
                     await conn.execute(text(stmt))
         except SQLAlchemyError:
             logger.exception(

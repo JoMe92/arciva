@@ -18,7 +18,9 @@ async def test_bulk_image_export_requires_assets(client, TestSessionLocal):
 
     response = await client.post("/v1/bulk-image-exports")
     assert response.status_code == 400
-    assert response.json()["detail"] == "No project images available to export."
+    assert (
+        response.json()["detail"] == "No project images available to export."
+    )
 
 
 @pytest.mark.asyncio
@@ -32,7 +34,11 @@ async def test_bulk_image_export_flow(client, TestSessionLocal):
         await session.execute(delete(models.Asset))
         await session.commit()
 
-    project_payload = {"title": "Bulk Export", "client": "ACME", "note": "all images"}
+    project_payload = {
+        "title": "Bulk Export",
+        "client": "ACME",
+        "note": "all images",
+    }
     project_res = await client.post("/v1/projects", json=project_payload)
     assert project_res.status_code == 201
     project_id = project_res.json()["id"]
@@ -58,7 +64,7 @@ async def test_bulk_image_export_flow(client, TestSessionLocal):
             models.ProjectAsset(
                 user_id=uuid.UUID("12345678-1234-5678-1234-567812345678"),
                 project_id=uuid.UUID(project_id),
-                asset_id=asset.id
+                asset_id=asset.id,
             )
         )
         await session.commit()
@@ -68,7 +74,10 @@ async def test_bulk_image_export_flow(client, TestSessionLocal):
     estimate_payload = estimate_res.json()
     assert estimate_payload["total_files"] == 1
     assert estimate_payload["total_bytes"] == 10
-    assert estimate_payload["folder_template"] == bulk_image_exports.FOLDER_TEMPLATE
+    assert (
+        estimate_payload["folder_template"]
+        == bulk_image_exports.FOLDER_TEMPLATE
+    )
 
     start_res = await client.post("/v1/bulk-image-exports")
     assert start_res.status_code == 201
@@ -87,7 +96,9 @@ async def test_bulk_image_export_flow(client, TestSessionLocal):
     assert status_payload["processed_files"] == 1
     assert status_payload["download_url"] is not None
 
-    download_res = await client.get(f"/v1/bulk-image-exports/{job_id}/download")
+    download_res = await client.get(
+        f"/v1/bulk-image-exports/{job_id}/download"
+    )
     assert download_res.status_code == 200
     with zipfile.ZipFile(io.BytesIO(download_res.content)) as zf:
         names = zf.namelist()

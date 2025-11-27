@@ -32,7 +32,7 @@ async def _seed_asset(
     link = models.ProjectAsset(
         user_id=uuid.UUID("12345678-1234-5678-1234-567812345678"),
         project_id=project_id,
-        asset_id=asset.id
+        asset_id=asset.id,
     )
     session.add(link)
     await session.flush()
@@ -49,8 +49,12 @@ async def test_pair_detection_and_listing(client, TestSessionLocal):
     proj_id = uuid.UUID(r.json()["id"])
 
     async with TestSessionLocal() as session:
-        jpeg_id = await _seed_asset(session, proj_id, "DSCF0001.JPG", "image/jpeg")
-        raw_id = await _seed_asset(session, proj_id, "DSCF0001.RAF", "image/x-raf")
+        jpeg_id = await _seed_asset(
+            session, proj_id, "DSCF0001.JPG", "image/jpeg"
+        )
+        raw_id = await _seed_asset(
+            session, proj_id, "DSCF0001.RAF", "image/x-raf"
+        )
 
     r = await client.get(f"/v1/projects/{proj_id}/assets")
     assert r.status_code == 200
@@ -76,8 +80,12 @@ async def test_interactions_mirror_pair(client, TestSessionLocal):
     proj_id = uuid.UUID(r.json()["id"])
 
     async with TestSessionLocal() as session:
-        jpeg_id = await _seed_asset(session, proj_id, "FILE0002.JPG", "image/jpeg")
-        raw_id = await _seed_asset(session, proj_id, "FILE0002.RAF", "image/x-raf")
+        jpeg_id = await _seed_asset(
+            session, proj_id, "FILE0002.JPG", "image/jpeg"
+        )
+        raw_id = await _seed_asset(
+            session, proj_id, "FILE0002.RAF", "image/x-raf"
+        )
 
     body = {
         "asset_ids": [str(jpeg_id)],

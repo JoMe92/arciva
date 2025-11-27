@@ -9,7 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .. import models
 
 
-def _coerce_color_label(value: models.ColorLabel | str | None) -> models.ColorLabel:
+def _coerce_color_label(
+    value: models.ColorLabel | str | None,
+) -> models.ColorLabel:
     if isinstance(value, models.ColorLabel):
         return value
     if isinstance(value, str):
@@ -31,7 +33,9 @@ async def get_state_for_link(
 ) -> models.MetadataState | None:
     return (
         await db.execute(
-            select(models.MetadataState).where(models.MetadataState.link_id == link_id)
+            select(models.MetadataState).where(
+                models.MetadataState.link_id == link_id
+            )
         )
     ).scalar_one_or_none()
 
@@ -47,12 +51,18 @@ async def ensure_state_for_link(
     if existing:
         return existing
 
-    color_label = _coerce_color_label(template.color_label if template else None)
+    color_label = _coerce_color_label(
+        template.color_label if template else None
+    )
     rating = _clamp_rating(getattr(template, "rating", None))
     picked = bool(getattr(template, "picked", False)) if template else False
-    rejected = bool(getattr(template, "rejected", False)) if template else False
+    rejected = (
+        bool(getattr(template, "rejected", False)) if template else False
+    )
     edits = getattr(template, "edits", None) if template else None
-    inherit_source = source_project_id or getattr(template, "source_project_id", None)
+    inherit_source = source_project_id or getattr(
+        template, "source_project_id", None
+    )
 
     state = models.MetadataState(
         link_id=link.id,

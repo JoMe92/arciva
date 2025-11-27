@@ -31,15 +31,16 @@ from .db import Base
 # Custom UUID type that works with both PostgreSQL and SQLite
 class GUID(TypeDecorator):
     """Platform-independent GUID type.
-    
+
     Uses PostgreSQL's UUID type when available, otherwise uses
     CHAR(32) storing as stringified hex values.
     """
+
     impl = String
     cache_ok = True
 
     def load_dialect_impl(self, dialect):
-        if dialect.name == 'postgresql':
+        if dialect.name == "postgresql":
             return dialect.type_descriptor(UUID(as_uuid=True))
         else:
             return dialect.type_descriptor(String(32))
@@ -47,7 +48,7 @@ class GUID(TypeDecorator):
     def process_bind_param(self, value, dialect):
         if value is None:
             return value
-        elif dialect.name == 'postgresql':
+        elif dialect.name == "postgresql":
             return value
         else:
             if not isinstance(value, uuid.UUID):
@@ -63,7 +64,6 @@ class GUID(TypeDecorator):
                 return uuid.UUID(value)
             else:
                 return value
-
 
 
 class AssetStatus(str, enum.Enum):
@@ -100,7 +100,9 @@ class UserSession(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    token_hash: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+    token_hash: Mapped[str] = mapped_column(
+        String(128), nullable=False, unique=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -189,16 +191,22 @@ class Asset(Base):
         DateTime(timezone=True), nullable=True
     )
     last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    metadata_warnings: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    metadata_warnings: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True
+    )
     metadata_json: Mapped[Optional[dict[str, Any]]] = mapped_column(
         JSON().with_variant(JSONB, "postgresql"),
         nullable=True,
     )
-    pixel_format: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    pixel_format: Mapped[Optional[str]] = mapped_column(
+        String(32), nullable=True
+    )
     pixel_hash: Mapped[Optional[str]] = mapped_column(
         String(64), nullable=True, unique=False
     )
-    reference_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    reference_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -229,13 +237,19 @@ class ProjectAssetPair(Base):
 
     __table_args__ = (
         UniqueConstraint(
-            "project_id", "basename", name="uq_project_asset_pairs_project_basename"
+            "project_id",
+            "basename",
+            name="uq_project_asset_pairs_project_basename",
         ),
         UniqueConstraint(
-            "project_id", "jpeg_asset_id", name="uq_project_asset_pairs_project_jpeg"
+            "project_id",
+            "jpeg_asset_id",
+            name="uq_project_asset_pairs_project_jpeg",
         ),
         UniqueConstraint(
-            "project_id", "raw_asset_id", name="uq_project_asset_pairs_project_raw"
+            "project_id",
+            "raw_asset_id",
+            name="uq_project_asset_pairs_project_raw",
         ),
     )
 
@@ -264,9 +278,12 @@ class ProjectAsset(Base):
     is_preview: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=text("false")
     )
-    preview_order: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    preview_order: Mapped[Optional[int]] = mapped_column(
+        Integer, nullable=True
+    )
     pair_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        ForeignKey("project_asset_pairs.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("project_asset_pairs.id", ondelete="SET NULL"),
+        nullable=True,
     )
 
     __table_args__ = (
@@ -286,7 +303,9 @@ class Derivative(Base):
     format: Mapped[str] = mapped_column(String(16))  # e.g., "jpg"
     width: Mapped[int] = mapped_column(Integer)
     height: Mapped[int] = mapped_column(Integer)
-    storage_key: Mapped[str] = mapped_column(Text)  # Relative path under APP_MEDIA_ROOT
+    storage_key: Mapped[str] = mapped_column(
+        Text
+    )  # Relative path under APP_MEDIA_ROOT
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -374,18 +393,28 @@ class ExportJob(Base):
             ExportJobStatus,
             name="exportjobstatus",
             native_enum=False,
-            values_callable=lambda enum_cls: [entry.value for entry in enum_cls],
+            values_callable=lambda enum_cls: [
+                entry.value for entry in enum_cls
+            ],
             validate_strings=True,
         ),
         nullable=False,
         default=ExportJobStatus.QUEUED,
     )
     progress: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    total_photos: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    exported_files: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    total_photos: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0
+    )
+    exported_files: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0
+    )
     artifact_path: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    artifact_filename: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    artifact_size: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    artifact_filename: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True
+    )
+    artifact_size: Mapped[Optional[int]] = mapped_column(
+        BigInteger, nullable=True
+    )
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -419,18 +448,28 @@ class BulkImageExport(Base):
             ExportJobStatus,
             name="exportjobstatus",
             native_enum=False,
-            values_callable=lambda enum_cls: [entry.value for entry in enum_cls],
+            values_callable=lambda enum_cls: [
+                entry.value for entry in enum_cls
+            ],
             validate_strings=True,
         ),
         nullable=False,
         default=ExportJobStatus.QUEUED,
     )
     progress: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    processed_files: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    total_files: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    processed_files: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0
+    )
+    total_files: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0
+    )
     artifact_path: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    artifact_filename: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    artifact_size: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    artifact_filename: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True
+    )
+    artifact_size: Mapped[Optional[int]] = mapped_column(
+        BigInteger, nullable=True
+    )
     date_basis: Mapped[str] = mapped_column(
         String(32), nullable=False, default="capture-date"
     )

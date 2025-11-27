@@ -82,7 +82,10 @@ def _render_image(
             im.save(dest_path, format=target_format, **save_kwargs)
     except Exception as exc:  # pragma: no cover - fallback to raw copy
         logger.warning(
-            "Falling back to byte copy for %s -> %s (%s)", source_path, dest_path, exc
+            "Falling back to byte copy for %s -> %s (%s)",
+            source_path,
+            dest_path,
+            exc,
         )
         shutil.copy2(source_path, dest_path)
 
@@ -119,7 +122,9 @@ def _build_contact_sheet(
         except Exception as exc:  # pragma: no cover - best effort
             logger.warning("contact sheet: failed to load %s (%s)", path, exc)
         filename = path.name
-        draw.text((x, y + thumb_size + 8), filename[:64], fill="#1F1E1B", font=font)
+        draw.text(
+            (x, y + thumb_size + 8), filename[:64], fill="#1F1E1B", font=font
+        )
 
     dest_path.parent.mkdir(parents=True, exist_ok=True)
     if fmt == schemas.ExportContactSheetFormat.PDF:
@@ -130,12 +135,17 @@ def _build_contact_sheet(
 
 
 async def _load_assets_for_job(
-    db: AsyncSession, job: models.ExportJob, settings: schemas.ExportJobSettings
+    db: AsyncSession,
+    job: models.ExportJob,
+    settings: schemas.ExportJobSettings,
 ) -> tuple[dict[UUID, models.Asset], list[UUID]]:
     photo_ids = [UUID(value) for value in job.photo_ids]
     wanted_ids: set[UUID] = set(photo_ids)
     raw_to_jpeg: dict[UUID, UUID] = {}
-    if settings.raw_handling == schemas.ExportRawStrategy.DEVELOPED and photo_ids:
+    if (
+        settings.raw_handling == schemas.ExportRawStrategy.DEVELOPED
+        and photo_ids
+    ):
         pair_rows = (
             (
                 await db.execute(
@@ -157,7 +167,8 @@ async def _load_assets_for_job(
             await db.execute(
                 select(models.Asset)
                 .join(
-                    models.ProjectAsset, models.ProjectAsset.asset_id == models.Asset.id
+                    models.ProjectAsset,
+                    models.ProjectAsset.asset_id == models.Asset.id,
                 )
                 .where(
                     models.ProjectAsset.project_id == job.project_id,
@@ -172,11 +183,17 @@ async def _load_assets_for_job(
     )
     asset_map: dict[UUID, models.Asset] = {asset.id: asset for asset in rows}
 
-    missing = [asset_id for asset_id in wanted_ids if asset_id not in asset_map]
+    missing = [
+        asset_id for asset_id in wanted_ids if asset_id not in asset_map
+    ]
     if missing:
-        raise RuntimeError(f"Missing assets for export job {job.id}: {missing}")
+        raise RuntimeError(
+            f"Missing assets for export job {job.id}: {missing}"
+        )
 
-    resolved_ids = [raw_to_jpeg.get(photo_id, photo_id) for photo_id in photo_ids]
+    resolved_ids = [
+        raw_to_jpeg.get(photo_id, photo_id) for photo_id in photo_ids
+    ]
     return asset_map, resolved_ids
 
 
@@ -204,13 +221,17 @@ async def process_export_job(job_id: UUID) -> None:
             if not project or project.user_id != job.user_id:
                 raise RuntimeError("Project not found for export job")
             settings = schemas.ExportJobSettings(**job.settings)
-            asset_map, resolved_ids = await _load_assets_for_job(db, job, settings)
+            asset_map, resolved_ids = await _load_assets_for_job(
+                db, job, settings
+            )
         except Exception as exc:
             job.status = models.ExportJobStatus.FAILED
             job.error_message = str(exc)
             job.finished_at = datetime.now(timezone.utc)
             await db.commit()
-            logger.exception("process_export_job: failed to initialise job=%s", job_id)
+            logger.exception(
+                "process_export_job: failed to initialise job=%s", job_id
+            )
             return
 
         job.status = models.ExportJobStatus.RUNNING
@@ -232,7 +253,9 @@ async def process_export_job(job_id: UUID) -> None:
             for index, asset_id in enumerate(resolved_ids, start=1):
                 asset = asset_map.get(asset_id)
                 if not asset or not asset.storage_uri:
-                    raise RuntimeError(f"Asset {asset_id} missing storage path")
+                    raise RuntimeError(
+                        f"Asset {asset_id} missing storage path"
+                    )
                 try:
                     source_path = storage.path_from_key(asset.storage_uri)
                 except ValueError as exc:
@@ -240,17 +263,24 @@ async def process_export_job(job_id: UUID) -> None:
                         f"Invalid storage key for asset {asset_id}: {exc}"
                     ) from exc
                 if not source_path.exists():
-                    raise RuntimeError(f"Asset source missing on disk: {source_path}")
+                    raise RuntimeError(
+                        f"Asset source missing on disk: {source_path}"
+                    )
 
                 base_name = (
-                    Path(asset.original_filename or str(asset.id)).stem or asset.id.hex
+                    Path(asset.original_filename or str(asset.id)).stem
+                    or asset.id.hex
                 )
                 safe_base = _slugify(base_name)
                 dest_name = _generate_file_name(
-                    safe_base, _output_extension(settings.output_format), used_names
+                    safe_base,
+                    _output_extension(settings.output_format),
+                    used_names,
                 )
                 dest_path = files_dir / dest_name
-                await asyncio.to_thread(_render_image, source_path, dest_path, settings)
+                await asyncio.to_thread(
+                    _render_image, source_path, dest_path, settings
+                )
                 exported_paths.append(dest_path)
 
                 job.exported_files = index
@@ -258,8 +288,12 @@ async def process_export_job(job_id: UUID) -> None:
                 await db.commit()
 
             if settings.contact_sheet_enabled:
-                sheet_ext = _contact_sheet_extension(settings.contact_sheet_format)
-                sheet_name = _generate_file_name("contact-sheet", sheet_ext, used_names)
+                sheet_ext = _contact_sheet_extension(
+                    settings.contact_sheet_format
+                )
+                sheet_name = _generate_file_name(
+                    "contact-sheet", sheet_ext, used_names
+                )
                 sheet_path = files_dir / sheet_name
                 await asyncio.to_thread(
                     _build_contact_sheet,
@@ -304,7 +338,9 @@ async def process_export_job(job_id: UUID) -> None:
 
 def _make_zip_archive(source_dir: Path, archive_path: Path) -> None:
     archive_path.parent.mkdir(parents=True, exist_ok=True)
-    with zipfile.ZipFile(archive_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+    with zipfile.ZipFile(
+        archive_path, "w", compression=zipfile.ZIP_DEFLATED
+    ) as zf:
         for path in source_dir.rglob("*"):
             if path.is_file():
                 zf.write(path, path.relative_to(source_dir))
@@ -340,7 +376,8 @@ async def cleanup_export_jobs() -> None:
                 except ValueError:
                     path = None
                     logger.warning(
-                        "cleanup_export_jobs: invalid artifact path job=%s", job.id
+                        "cleanup_export_jobs: invalid artifact path job=%s",
+                        job.id,
                     )
             if path and path.exists():
                 try:
@@ -353,7 +390,9 @@ async def cleanup_export_jobs() -> None:
                         shutil.rmtree(parent, ignore_errors=True)
                 except Exception as exc:  # pragma: no cover - best effort
                     logger.warning(
-                        "cleanup_export_jobs: failed to remove %s (%s)", path, exc
+                        "cleanup_export_jobs: failed to remove %s (%s)",
+                        path,
+                        exc,
                     )
             job.artifact_path = None
             job.artifact_filename = None
@@ -362,4 +401,6 @@ async def cleanup_export_jobs() -> None:
             removed.append(job.id)
         if removed:
             await db.commit()
-            logger.info("cleanup_export_jobs: removed %d expired jobs", len(removed))
+            logger.info(
+                "cleanup_export_jobs: removed %d expired jobs", len(removed)
+            )

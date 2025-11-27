@@ -8,7 +8,11 @@ from pathlib import Path as _P
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from sqlalchemy.ext.asyncio import (
+    create_async_engine,
+    async_sessionmaker,
+    AsyncSession,
+)
 
 # Ensure repository root is on sys.path so 'backend' package resolves
 _REPO_ROOT = str(_P(__file__).resolve().parents[2])
@@ -93,7 +97,9 @@ async def test_engine(test_settings):
 
 @pytest.fixture(scope="session")
 def TestSessionLocal(test_engine):
-    return async_sessionmaker(test_engine, expire_on_commit=False, class_=AsyncSession)
+    return async_sessionmaker(
+        test_engine, expire_on_commit=False, class_=AsyncSession
+    )
 
 
 @pytest_asyncio.fixture(scope="session", autouse=True)
@@ -124,22 +130,29 @@ def app(test_settings, TestSessionLocal, test_engine):
         return test_settings
 
     deps_module.get_settings.cache_clear()  # type: ignore[attr-defined]
-    deps_module.get_settings = _get_settings_override  # type: ignore[assignment]
+    deps_module.get_settings = (  # type: ignore[assignment]
+        _get_settings_override
+    )
 
     # override DB dependency to use the test session
     async def _get_db_override() -> AsyncSession:
         async with TestSessionLocal() as session:
             yield session
 
-    # Ensure all modules reuse the test engine/session factory instead of a global one
-    db_module.SessionLocal = TestSessionLocal  # type: ignore[assignment]
+    # Ensure all modules reuse the test engine/session factory instead of a
+    # global one
+    db_module.SessionLocal = (  # type: ignore[assignment]
+        TestSessionLocal
+    )
     db_module.engine = test_engine  # type: ignore[assignment]
     schema_utils.async_engine = test_engine  # type: ignore[assignment]
 
     # Services that spin up their own sessions (e.g. background tasks)
     from backend.app.services import bulk_image_exports, export_jobs
 
-    bulk_image_exports.SessionLocal = TestSessionLocal  # type: ignore[assignment]
+    bulk_image_exports.SessionLocal = (  # type: ignore[assignment]
+        TestSessionLocal
+    )
     export_jobs.SessionLocal = TestSessionLocal  # type: ignore[assignment]
 
     db_module.get_db = _get_db_override  # type: ignore[assignment]
@@ -169,5 +182,7 @@ def app(test_settings, TestSessionLocal, test_engine):
 @pytest_asyncio.fixture
 async def client(app):
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://testserver") as ac:
+    async with AsyncClient(
+        transport=transport, base_url="http://testserver"
+    ) as ac:
         yield ac

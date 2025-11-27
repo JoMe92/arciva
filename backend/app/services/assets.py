@@ -47,7 +47,9 @@ async def collect_derivatives(
     rows = (
         (
             await db.execute(
-                select(models.Derivative).where(models.Derivative.asset_id == asset.id)
+                select(models.Derivative).where(
+                    models.Derivative.asset_id == asset.id
+                )
             )
         )
         .scalars()
@@ -73,7 +75,9 @@ def basename_from_filename(name: str | None) -> str | None:
     return stem.strip() or None
 
 
-def color_label_to_schema(value: models.ColorLabel | str | None) -> schemas.ColorLabel:
+def color_label_to_schema(
+    value: models.ColorLabel | str | None,
+) -> schemas.ColorLabel:
     if isinstance(value, models.ColorLabel):
         return schemas.ColorLabel(value.value)
     if isinstance(value, str):
@@ -97,7 +101,9 @@ def serialize_asset_item(
     paired_asset_id: UUID | None = None
     paired_asset_type: schemas.ImgType | None = None
     basename = (
-        pair.basename if pair else basename_from_filename(asset.original_filename)
+        pair.basename
+        if pair
+        else basename_from_filename(asset.original_filename)
     )
     stack_primary_id = pair.raw_asset_id if pair else asset.id
     if pair:
@@ -110,11 +116,15 @@ def serialize_asset_item(
             paired_asset_id = pair.jpeg_asset_id
             paired_asset_type = schemas.ImgType.JPEG
     rating = int(metadata.rating) if metadata else 0
-    color_label = color_label_to_schema(metadata.color_label if metadata else None)
+    color_label = color_label_to_schema(
+        metadata.color_label if metadata else None
+    )
     picked = bool(metadata.picked) if metadata else False
     rejected = bool(metadata.rejected) if metadata else False
     metadata_state_id = metadata.id if metadata else None
-    metadata_source_project_id = metadata.source_project_id if metadata else None
+    metadata_source_project_id = (
+        metadata.source_project_id if metadata else None
+    )
 
     return schemas.AssetListItem(
         id=asset.id,
@@ -163,13 +173,17 @@ async def load_asset_items(
             models.ProjectAssetPair,
             models.MetadataState,
         )
-        .join(models.ProjectAsset, models.ProjectAsset.asset_id == models.Asset.id)
+        .join(
+            models.ProjectAsset,
+            models.ProjectAsset.asset_id == models.Asset.id,
+        )
         .outerjoin(
             models.ProjectAssetPair,
             models.ProjectAssetPair.id == models.ProjectAsset.pair_id,
         )
         .outerjoin(
-            models.MetadataState, models.MetadataState.link_id == models.ProjectAsset.id
+            models.MetadataState,
+            models.MetadataState.link_id == models.ProjectAsset.id,
         )
         .where(
             models.ProjectAsset.project_id == project_id,
@@ -226,7 +240,9 @@ async def asset_detail(
     p_url = preview_url(asset, storage)
     derivatives = await collect_derivatives(asset, db)
     rating = int(metadata.rating) if metadata else 0
-    color_label = color_label_to_schema(metadata.color_label if metadata else None)
+    color_label = color_label_to_schema(
+        metadata.color_label if metadata else None
+    )
     picked = bool(metadata.picked) if metadata else False
     rejected = bool(metadata.rejected) if metadata else False
 
@@ -315,7 +331,9 @@ def write_metadata_cache(
         serialized = json.dumps(payload, ensure_ascii=False)
         path.write_text(serialized, encoding="utf-8")
     except Exception:
-        logger.warning("metadata_cache_write_failed asset=%s", asset.id, exc_info=True)
+        logger.warning(
+            "metadata_cache_write_failed asset=%s", asset.id, exc_info=True
+        )
 
 
 async def ensure_asset_metadata_populated(
@@ -351,7 +369,9 @@ async def ensure_asset_metadata_populated(
             changed = True
         cached_warnings = cache_payload.get("warnings")
         if isinstance(cached_warnings, list) and not asset.metadata_warnings:
-            asset.metadata_warnings = "\n".join(str(w) for w in cached_warnings if w)
+            asset.metadata_warnings = "\n".join(
+                str(w) for w in cached_warnings if w
+            )
             changed = True
     if changed:
         await db.commit()
@@ -364,7 +384,9 @@ async def ensure_asset_metadata_populated(
                 asset,
                 {
                     "metadata": asset.metadata_json,
-                    "taken_at": asset.taken_at.isoformat() if asset.taken_at else None,
+                    "taken_at": (
+                        asset.taken_at.isoformat() if asset.taken_at else None
+                    ),
                     "width": asset.width,
                     "height": asset.height,
                     "warnings": warnings_from_text(asset.metadata_warnings),
@@ -403,12 +425,13 @@ async def ensure_asset_metadata_populated(
         return
 
     try:
-        taken_at, (width, height), metadata, warnings = await asyncio.to_thread(
-            read_exif, source_path
+        taken_at, (width, height), metadata, warnings = (
+            await asyncio.to_thread(read_exif, source_path)
         )
     except Exception:
         logger.exception(
-            "ensure_asset_metadata_populated: read_exif failed asset=%s", asset.id
+            "ensure_asset_metadata_populated: read_exif failed asset=%s",
+            asset.id,
         )
         return
 
@@ -432,7 +455,9 @@ async def ensure_asset_metadata_populated(
 
     if metadata:
         existing = [
-            w for w in existing if w not in {"EXIFTOOL_NOT_INSTALLED", "EXIF_ERROR"}
+            w
+            for w in existing
+            if w not in {"EXIFTOOL_NOT_INSTALLED", "EXIF_ERROR"}
         ]
 
     combined = list(existing)
@@ -453,7 +478,9 @@ async def ensure_asset_metadata_populated(
             asset,
             {
                 "metadata": asset.metadata_json,
-                "taken_at": asset.taken_at.isoformat() if asset.taken_at else None,
+                "taken_at": (
+                    asset.taken_at.isoformat() if asset.taken_at else None
+                ),
                 "width": asset.width,
                 "height": asset.height,
                 "warnings": combined,

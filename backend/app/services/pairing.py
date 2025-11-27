@@ -36,12 +36,16 @@ async def sync_project_pairs(db: AsyncSession, project_id: UUID) -> None:
     rows = (
         await db.execute(
             select(models.ProjectAsset, models.Asset)
-            .join(models.Asset, models.Asset.id == models.ProjectAsset.asset_id)
+            .join(
+                models.Asset, models.Asset.id == models.ProjectAsset.asset_id
+            )
             .where(models.ProjectAsset.project_id == project_id)
         )
     ).all()
 
-    buckets: Dict[str, Dict[str, List[Tuple[models.ProjectAsset, models.Asset]]]] = {}
+    buckets: Dict[
+        str, Dict[str, List[Tuple[models.ProjectAsset, models.Asset]]]
+    ] = {}
     display_names: Dict[str, str] = {}
 
     for link, asset in rows:
@@ -70,7 +74,8 @@ async def sync_project_pairs(db: AsyncSession, project_id: UUID) -> None:
             targets[key] = (jpeg_items[0], raw_items[0])
         elif len(jpeg_items) > 1 or len(raw_items) > 1:
             logger.warning(
-                "pairing: skipped basename=%s project=%s jpeg_count=%s raw_count=%s",
+                "pairing: skipped basename=%s project=%s jpeg_count=%s "
+                "raw_count=%s",
                 display_names.get(key, key),
                 project_id,
                 len(jpeg_items),
@@ -122,7 +127,10 @@ async def sync_project_pairs(db: AsyncSession, project_id: UUID) -> None:
     seen_pair_ids: set[UUID] = set()
     changed = False
 
-    for key, ((jpeg_link, jpeg_asset), (raw_link, raw_asset)) in targets.items():
+    for key, (
+        (jpeg_link, jpeg_asset),
+        (raw_link, raw_asset),
+    ) in targets.items():
         pair = (
             existing_by_key.get(key)
             or existing_by_asset.get(jpeg_asset.id)
@@ -131,7 +139,8 @@ async def sync_project_pairs(db: AsyncSession, project_id: UUID) -> None:
         if pair and key not in existing_by_key:
             existing_by_key[key] = pair
         basename = display_names.get(
-            key, jpeg_asset.original_filename or raw_asset.original_filename or key
+            key,
+            jpeg_asset.original_filename or raw_asset.original_filename or key,
         )
         if pair is None:
             pair = models.ProjectAssetPair(

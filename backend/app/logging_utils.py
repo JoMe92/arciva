@@ -9,7 +9,9 @@ _configured = False
 
 
 def setup_logging(
-    log_dir: str, level: int = logging.INFO, module_log_level: Optional[int] = None
+    log_dir: str,
+    level: int = logging.INFO,
+    module_log_level: Optional[int] = None,
 ) -> None:
     """
     Configure root logger with a rotating file handler that writes to the
@@ -29,7 +31,9 @@ def setup_logging(
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
-    file_handler = RotatingFileHandler(log_file, maxBytes=5_000_000, backupCount=5)
+    file_handler = RotatingFileHandler(
+        log_file, maxBytes=5_000_000, backupCount=5
+    )
     file_handler.setFormatter(formatter)
     file_handler.setLevel(level)
 
@@ -48,7 +52,9 @@ def setup_logging(
     ):
         root_logger.addHandler(file_handler)
 
-    if not any(isinstance(h, logging.StreamHandler) for h in root_logger.handlers):
+    if not any(
+        isinstance(h, logging.StreamHandler) for h in root_logger.handlers
+    ):
         root_logger.addHandler(console_handler)
 
     # Optionally raise level for our application namespace without touching
@@ -56,7 +62,8 @@ def setup_logging(
     if module_log_level is not None:
         logging.getLogger("arciva").setLevel(module_log_level)
 
-    # Capture uvicorn access logs as well so HTTP status codes appear in the file.
+    # Capture uvicorn access logs as well so HTTP status codes appear in the
+    # file.
     for name in ("uvicorn", "uvicorn.access", "uvicorn.error"):
         logging.getLogger(name).addHandler(file_handler)
         logging.getLogger(name).addHandler(console_handler)

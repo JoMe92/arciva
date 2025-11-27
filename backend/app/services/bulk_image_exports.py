@@ -20,7 +20,8 @@ from ..storage import PosixStorage
 
 logger = logging.getLogger("arciva.bulk_image_exports")
 
-# Images are grouped by capture date (`Asset.taken_at`) and fall back to import timestamp when missing.
+# Images are grouped by capture date (`Asset.taken_at`) and fall back to import
+# timestamp when missing.
 DATE_BASIS_LABEL = "capture-date"
 FOLDER_TEMPLATE = "year/month/day"
 ARCHIVE_PREFIX = "arciva-images"
@@ -40,7 +41,9 @@ def _bulk_export_conditions(user_id: UUID):
     )
 
 
-async def collect_bulk_export_asset_ids(db: AsyncSession, user_id: UUID) -> list[UUID]:
+async def collect_bulk_export_asset_ids(
+    db: AsyncSession, user_id: UUID
+) -> list[UUID]:
     rows = (
         (
             await db.execute(
@@ -223,11 +226,16 @@ async def process_bulk_image_export(job_id: UUID) -> None:
 
         try:
             with zipfile.ZipFile(
-                archive_path, "w", compression=zipfile.ZIP_DEFLATED, allowZip64=True
+                archive_path,
+                "w",
+                compression=zipfile.ZIP_DEFLATED,
+                allowZip64=True,
             ) as zf:
                 async for asset in _iter_assets(db, asset_ids, job.user_id):
                     if not asset.storage_uri:
-                        raise RuntimeError(f"Asset {asset.id} missing storage path")
+                        raise RuntimeError(
+                            f"Asset {asset.id} missing storage path"
+                        )
                     try:
                         source_path = storage.path_from_key(asset.storage_uri)
                     except ValueError as exc:
@@ -235,7 +243,9 @@ async def process_bulk_image_export(job_id: UUID) -> None:
                             f"Invalid storage key for asset {asset.id}: {exc}"
                         ) from exc
                     if not source_path.exists():
-                        raise RuntimeError(f"Asset source missing: {source_path}")
+                        raise RuntimeError(
+                            f"Asset source missing: {source_path}"
+                        )
                     member_path = _build_member_path(asset, used_paths)
                     await asyncio.to_thread(
                         zf.write, str(source_path), str(member_path)
@@ -264,10 +274,14 @@ async def process_bulk_image_export(job_id: UUID) -> None:
             )
             await db.commit()
             logger.info(
-                "process_bulk_image_export: job=%s finished count=%d", job.id, processed
+                "process_bulk_image_export: job=%s finished count=%d",
+                job.id,
+                processed,
             )
         except Exception as exc:  # pragma: no cover - best effort
-            logger.exception("process_bulk_image_export: job=%s failed", job.id)
+            logger.exception(
+                "process_bulk_image_export: job=%s failed", job.id
+            )
             job.status = models.ExportJobStatus.FAILED
             job.error_message = str(exc)
             job.finished_at = datetime.now(timezone.utc)
@@ -305,7 +319,8 @@ async def cleanup_bulk_image_exports() -> None:
                 except ValueError:
                     path = None
                     logger.warning(
-                        "cleanup_bulk_image_exports: invalid artifact path job=%s",
+                        "cleanup_bulk_image_exports: invalid artifact path "
+                        "job=%s",
                         job.id,
                     )
             if path and path.exists():
@@ -331,5 +346,6 @@ async def cleanup_bulk_image_exports() -> None:
         if cleaned:
             await db.commit()
             logger.info(
-                "cleanup_bulk_image_exports: removed %d expired jobs", len(cleaned)
+                "cleanup_bulk_image_exports: removed %d expired jobs",
+                len(cleaned),
             )

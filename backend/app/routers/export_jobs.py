@@ -63,7 +63,9 @@ async def start_export_job(
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    await ensure_project_access(db, project_id=body.project_id, user_id=current_user.id)
+    await ensure_project_access(
+        db, project_id=body.project_id, user_id=current_user.id
+    )
     photo_ids = list(dict.fromkeys(body.photo_ids))
     rows = (
         (
@@ -120,7 +122,9 @@ async def list_export_jobs(
         .limit(200)
     )
     if project_id:
-        await ensure_project_access(db, project_id=project_id, user_id=current_user.id)
+        await ensure_project_access(
+            db, project_id=project_id, user_id=current_user.id
+        )
         stmt = stmt.where(models.ExportJob.project_id == project_id)
     rows = (await db.execute(stmt)).scalars().all()
     return [_serialize_job(job) for job in rows]
@@ -164,12 +168,16 @@ async def download_export_job(
     if job.status != models.ExportJobStatus.COMPLETED:
         raise HTTPException(status_code=409, detail="Export job not completed")
     if not job.artifact_path:
-        raise HTTPException(status_code=410, detail="Export artifact unavailable")
+        raise HTTPException(
+            status_code=410, detail="Export artifact unavailable"
+        )
     storage = PosixStorage.from_env()
     try:
         path = storage.path_from_key(job.artifact_path)
     except ValueError:
-        raise HTTPException(status_code=410, detail="Export artifact unavailable")
+        raise HTTPException(
+            status_code=410, detail="Export artifact unavailable"
+        )
     if not path.is_file():
         raise HTTPException(status_code=410, detail="Export artifact missing")
     filename = job.artifact_filename or f"arciva-export-{job.id.hex[:8]}.zip"

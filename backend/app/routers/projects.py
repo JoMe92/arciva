@@ -38,7 +38,9 @@ async def _load_preview_map(
     rows = (
         await db.execute(
             select(models.ProjectAsset, models.Asset)
-            .join(models.Asset, models.Asset.id == models.ProjectAsset.asset_id)
+            .join(
+                models.Asset, models.Asset.id == models.ProjectAsset.asset_id
+            )
             .where(
                 models.ProjectAsset.project_id.in_(project_ids),
                 models.ProjectAsset.user_id == user_id,
@@ -65,7 +67,13 @@ async def _load_preview_map(
         )
         project_id = project_asset.project_id
         preview_map.setdefault(project_id, []).append(
-            (order, asset.id, _thumb_url(asset, storage), asset.width, asset.height)
+            (
+                order,
+                asset.id,
+                _thumb_url(asset, storage),
+                asset.width,
+                asset.height,
+            )
         )
         seen_assets.setdefault(project_id, set()).add(asset.id)
 
@@ -74,15 +82,21 @@ async def _load_preview_map(
         for pid, entries in preview_map.items()
     }
     slots_remaining: dict[UUID, int] = {
-        pid: MAX_PREVIEW_IMAGES - len(preview_map.get(pid, [])) for pid in project_ids
+        pid: MAX_PREVIEW_IMAGES - len(preview_map.get(pid, []))
+        for pid in project_ids
     }
-    fallback_targets = [pid for pid in project_ids if slots_remaining.get(pid, 0) > 0]
+    fallback_targets = [
+        pid for pid in project_ids if slots_remaining.get(pid, 0) > 0
+    ]
 
     if fallback_targets:
         fallback_rows = (
             await db.execute(
                 select(models.ProjectAsset, models.Asset, models.MetadataState)
-                .join(models.Asset, models.Asset.id == models.ProjectAsset.asset_id)
+                .join(
+                    models.Asset,
+                    models.Asset.id == models.ProjectAsset.asset_id,
+                )
                 .join(
                     models.MetadataState,
                     models.MetadataState.link_id == models.ProjectAsset.id,
@@ -134,7 +148,9 @@ async def _load_preview_map(
                 width=width,
                 height=height,
             )
-            for index, (_, asset_id, thumb_url, width, height) in enumerate(entries)
+            for index, (_, asset_id, thumb_url, width, height) in enumerate(
+                entries
+            )
         ]
 
     return normalized_map
@@ -195,7 +211,9 @@ async def list_projects(
         await db.execute(
             select(
                 models.Project,
-                func.count(models.ProjectAsset.project_id).label("asset_count"),
+                func.count(models.ProjectAsset.project_id).label(
+                    "asset_count"
+                ),
             )
             .outerjoin(
                 models.ProjectAsset,
@@ -211,7 +229,9 @@ async def list_projects(
     ).all()
 
     project_ids = [proj.id for proj, _ in rows]
-    preview_map = await _load_preview_map(db, project_ids, user_id=current_user.id)
+    preview_map = await _load_preview_map(
+        db, project_ids, user_id=current_user.id
+    )
 
     response = [
         schemas.ProjectOut(
@@ -262,7 +282,9 @@ async def get_project(
         )
     ).scalar_one()
 
-    preview_map = await _load_preview_map(db, [proj.id], user_id=current_user.id)
+    preview_map = await _load_preview_map(
+        db, [proj.id], user_id=current_user.id
+    )
 
     result = schemas.ProjectOut(
         id=proj.id,
@@ -332,7 +354,9 @@ async def update_project(
         )
     ).scalar_one()
 
-    preview_map = await _load_preview_map(db, [proj.id], user_id=current_user.id)
+    preview_map = await _load_preview_map(
+        db, [proj.id], user_id=current_user.id
+    )
 
     result = schemas.ProjectOut(
         id=proj.id,
@@ -357,7 +381,9 @@ async def delete_project(
     current_user: models.User = Depends(get_current_user),
 ):
     logger.info(
-        "delete_project: id=%s delete_assets=%s", project_id, body.delete_assets
+        "delete_project: id=%s delete_assets=%s",
+        project_id,
+        body.delete_assets,
     )
     proj = (
         await db.execute(
@@ -374,7 +400,8 @@ async def delete_project(
     confirmed = body.confirm_title.strip()
     if confirmed != proj.title.strip():
         logger.warning(
-            "delete_project: id=%s confirmation mismatch provided=%r expected=%r",
+            "delete_project: id=%s confirmation mismatch provided=%r "
+            "expected=%r",
             project_id,
             confirmed,
             proj.title,
@@ -427,7 +454,9 @@ async def delete_project(
                 .group_by(models.ProjectAsset.asset_id)
             )
         ).all()
-        remaining_counts = {asset_id: int(count) for asset_id, count in other_rows}
+        remaining_counts = {
+            asset_id: int(count) for asset_id, count in other_rows
+        }
 
     await db.delete(proj)
     await db.flush()
@@ -464,7 +493,8 @@ async def delete_project(
     await db.commit()
 
     logger.info(
-        "delete_project: id=%s success removed_assets=%s remaining_assets=%s",
+        "delete_project: id=%s success removed_assets=%s "
+        "remaining_assets=%s",
         project_id,
         removed_assets,
         len(assets) - removed_assets,

@@ -18,8 +18,12 @@ class Settings(BaseSettings):
     app_env: str = "dev"
     secret_key: str = "changeme"
 
-    # Default to both localhost and loopback since browsers treat them as different origins.
-    allowed_origins: List[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
+    # Default to both localhost and loopback since browsers treat them as
+    # different origins.
+    allowed_origins: List[str] = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ]
 
     # Database configuration (PostgreSQL via DATABASE_URL or SQLite fallback)
     app_db_path: str = "/data/db/app.db"
@@ -109,7 +113,9 @@ def _validate_db_path(raw: str) -> Path:
         _fail_config("APP_DB_PATH is required when DATABASE_URL is not set.")
     path = _normalize_path(raw, name="APP_DB_PATH")
     if path.suffix.lower() != ".db":
-        _fail_config(f"APP_DB_PATH must point to a .db file (got {path.name}).")
+        _fail_config(
+            f"APP_DB_PATH must point to a .db file (got {path.name})."
+        )
     _check_directory_access(path.parent, description="database directory")
     try:
         with open(path, "ab"):
@@ -173,7 +179,8 @@ def get_settings() -> Settings:
             pass
         else:
             _fail_config(
-                "APP_DB_PATH must not be located inside APP_MEDIA_ROOT; choose a separate directory."
+                "APP_DB_PATH must not be located inside APP_MEDIA_ROOT; "
+                "choose a separate directory."
             )
         s.app_db_path = str(db_path)
         s.database_url = f"sqlite+aiosqlite:///{db_path}"
@@ -197,7 +204,9 @@ def get_settings() -> Settings:
     s.logs_dir = str(logs_path)
     if s.app_env.lower() == "dev" and s.allow_lan_frontend_origins:
         lan_ips = _detect_local_ipv4_addresses()
-        extra_origins = [f"http://{ip}:{s.dev_frontend_port}" for ip in lan_ips if ip]
+        extra_origins = [
+            f"http://{ip}:{s.dev_frontend_port}" for ip in lan_ips if ip
+        ]
         for origin in extra_origins:
             if origin not in s.allowed_origins:
                 s.allowed_origins.append(origin)
@@ -206,5 +215,7 @@ def get_settings() -> Settings:
                 "Added LAN origins: %s",
                 ", ".join(extra_origins),
             )
-    _config_logger.info("Allowed origins: %s", ", ".join(s.allowed_origins) or "<none>")
+    _config_logger.info(
+        "Allowed origins: %s", ", ".join(s.allowed_origins) or "<none>"
+    )
     return s

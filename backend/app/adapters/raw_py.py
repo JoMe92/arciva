@@ -1,10 +1,10 @@
 """
 Adapters for interacting with the ``rawpy`` library.
 
-This module isolates direct ``rawpy`` usage behind a thin layer so higher level
-services can remain testable without importing the heavy dependency.  The
-adapter exposes lightweight data classes describing RAW file characteristics and
-embedded thumbnails.
+This module isolates direct ``rawpy`` usage behind a thin layer so higher
+level services can remain testable without importing the heavy dependency.
+The adapter exposes lightweight data classes describing RAW file
+characteristics and embedded thumbnails.
 """
 
 from __future__ import annotations
@@ -18,7 +18,9 @@ from PIL import Image
 
 try:  # pragma: no cover - import guarded for environments without rawpy
     import rawpy
-except ImportError:  # pragma: no cover - handled gracefully by the service layer
+except (
+    ImportError
+):  # pragma: no cover - handled gracefully by the service layer
     rawpy = None  # type: ignore[assignment]
 
 
@@ -76,7 +78,8 @@ class RawPyReadResult:
     thumbnail : Optional[RawPyThumbnail]
         Embedded thumbnail details when available.
     preview_jpeg : Optional[bytes]
-        JPEG bytes rendered from the RAW image when no embedded thumbnail exists.
+        JPEG bytes rendered from the RAW image when no embedded thumbnail
+        exists.
     preview_width : Optional[int]
         Width derived from the rendered preview.
     preview_height : Optional[int]
@@ -136,7 +139,9 @@ class RawPyAdapter:
                 raw_width = self._to_int(getattr(sizes, "raw_width", None))
                 raw_height = self._to_int(getattr(sizes, "raw_height", None))
                 flip = self._to_int(getattr(sizes, "flip", None))
-                color_desc = self._decode_bytes(getattr(raw, "color_desc", b""))
+                color_desc = self._decode_bytes(
+                    getattr(raw, "color_desc", b"")
+                )
                 raw_type = self._to_int(getattr(raw, "raw_type", None))
                 thumbnail = self._extract_thumbnail(raw)
                 preview_jpeg: Optional[bytes] = None
@@ -146,8 +151,8 @@ class RawPyAdapter:
                     thumbnail is not None and thumbnail.format != "jpeg"
                 )
                 if needs_render:
-                    preview_jpeg, preview_width, preview_height = self._render_preview(
-                        raw
+                    preview_jpeg, preview_width, preview_height = (
+                        self._render_preview(raw)
                     )
         except (
             rawpy.LibRawError
@@ -251,7 +256,8 @@ class RawPyAdapter:
         self, raw: Any
     ) -> tuple[Optional[bytes], Optional[int], Optional[int]]:
         """
-        Render a JPEG preview by post-processing the RAW when no thumbnail exists.
+        Render a JPEG preview by post-processing the RAW when no thumbnail
+        exists.
 
         Parameters
         ----------

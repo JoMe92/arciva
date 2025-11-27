@@ -24,7 +24,9 @@ class _FakeRedisSettings:
         return cls()
 
 
-sys.modules.setdefault("arq", types.SimpleNamespace(create_pool=_fake_create_pool))
+sys.modules.setdefault(
+    "arq", types.SimpleNamespace(create_pool=_fake_create_pool)
+)
 sys.modules.setdefault(
     "arq.connections", types.SimpleNamespace(RedisSettings=_FakeRedisSettings)
 )
@@ -105,7 +107,9 @@ async def test_update_stack_pairs_toggle(client):
 
 
 @pytest.mark.asyncio
-async def test_projects_list_includes_picked_previews(client, TestSessionLocal):
+async def test_projects_list_includes_picked_previews(
+    client, TestSessionLocal
+):
     from backend.app import models
     from backend.app.storage import PosixStorage
 

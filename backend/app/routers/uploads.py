@@ -53,7 +53,9 @@ async def upload_init(
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    await ensure_project_access(db, project_id=project_id, user_id=current_user.id)
+    await ensure_project_access(
+        db, project_id=project_id, user_id=current_user.id
+    )
 
     asset_format = detect_asset_format(body.filename, body.mime)
     asset = models.Asset(
@@ -161,7 +163,9 @@ async def upload_file(
         storage.remove_temp(asset_id)
         session["temp_removed"] = True
         logger.info(
-            "upload_file: dedupe hit asset=%s existing=%s", asset_id, duplicate.id
+            "upload_file: dedupe hit asset=%s existing=%s",
+            asset_id,
+            duplicate.id,
         )
         return {"ok": True, "bytes": total, "sha256": sha, "duplicate": True}
 
@@ -188,7 +192,12 @@ async def upload_file(
                 asset_id,
                 duplicate.id,
             )
-            return {"ok": True, "bytes": total, "sha256": sha, "duplicate": True}
+            return {
+                "ok": True,
+                "bytes": total,
+                "sha256": sha,
+                "duplicate": True,
+            }
         raise
 
     logger.info(
@@ -214,7 +223,9 @@ async def upload_complete(
         raise HTTPException(400, "no upload in progress")
 
     asset = (
-        await db.execute(select(models.Asset).where(models.Asset.id == body.asset_id))
+        await db.execute(
+            select(models.Asset).where(models.Asset.id == body.asset_id)
+        )
     ).scalar_one_or_none()
     if not asset:
         raise HTTPException(404, "asset not found")
@@ -248,7 +259,10 @@ async def upload_complete(
             asset.id,
             existing.id,
         )
-        return {"status": models.AssetStatus.DUPLICATE.value, "asset_id": existing.id}
+        return {
+            "status": models.AssetStatus.DUPLICATE.value,
+            "asset_id": existing.id,
+        }
 
     now = datetime.now(timezone.utc)
     logger.info(

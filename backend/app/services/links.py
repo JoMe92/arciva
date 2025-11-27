@@ -36,6 +36,9 @@ async def link_asset_to_project(
     db.add(link)
     await db.flush()
     await ensure_state_for_link(
-        db, link, template=metadata_template, source_project_id=source_project_id
+        db,
+        link,
+        template=metadata_template,
+        source_project_id=source_project_id,
     )
     return link, True

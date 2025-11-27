@@ -10,9 +10,6 @@ on:
         description: "Version to publish (e.g. 0.1.0)"
         required: true
 
-env:
-  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/arciva
-
 jobs:
   publish:
     runs-on: ubuntu-latest
@@ -48,6 +45,8 @@ jobs:
             echo "Version is required" >&2
             exit 1
           fi
+          OWNER="${GITHUB_REPOSITORY_OWNER,,}"
+          echo "IMAGE_NAME=ghcr.io/${OWNER}/arciva" >> "$GITHUB_ENV"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Build and push image

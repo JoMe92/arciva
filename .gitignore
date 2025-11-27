@@ -90,3 +90,5 @@ backend/logs/backend.log.1
 backend/logs/backend.log.2
 backend/logs/backend.log.1
 backend/logs/backend.log.2
+.secrets
+.secrets_classic

@@ -28,7 +28,9 @@ export function toPlaceholderRatio(input: string): PlaceholderRatio {
   return (ratios.find((r) => r === input) ?? '1x1') as PlaceholderRatio
 }
 
-export function placeholderRatioForAspect(aspect: 'portrait' | 'landscape' | 'square'): PlaceholderRatio {
+export function placeholderRatioForAspect(
+  aspect: 'portrait' | 'landscape' | 'square'
+): PlaceholderRatio {
   if (aspect === 'portrait') return '3x4'
   if (aspect === 'landscape') return '16x9'
   return '1x1'

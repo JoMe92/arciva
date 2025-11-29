@@ -14,7 +14,10 @@ async def test_ensure_base_schema_creates_tables(tmp_path):
         await ensure_base_schema(engine)
         async with engine.begin() as conn:
             result = await conn.execute(
-                text("SELECT name FROM sqlite_master WHERE type='table' AND name='projects'")
+                text(
+                    "SELECT name FROM sqlite_master "
+                    "WHERE type='table' AND name='projects'"
+                )
             )
             assert result.first() is not None
     finally:

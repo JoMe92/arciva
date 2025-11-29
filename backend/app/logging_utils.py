@@ -8,7 +8,11 @@ from typing import Optional
 _configured = False
 
 
-def setup_logging(log_dir: str, level: int = logging.INFO, module_log_level: Optional[int] = None) -> None:
+def setup_logging(
+    log_dir: str,
+    level: int = logging.INFO,
+    module_log_level: Optional[int] = None,
+) -> None:
     """
     Configure root logger with a rotating file handler that writes to the
     provided directory. Subsequent calls are no-ops to avoid duplicating
@@ -40,7 +44,8 @@ def setup_logging(log_dir: str, level: int = logging.INFO, module_log_level: Opt
 
     # Avoid attaching duplicate handlers if uvicorn reloads the process.
     if not any(
-        isinstance(h, RotatingFileHandler) and getattr(h, "baseFilename", None) == str(log_file)
+        isinstance(h, RotatingFileHandler)
+        and getattr(h, "baseFilename", None) == str(log_file)
         for h in root_logger.handlers
     ):
         root_logger.addHandler(file_handler)
@@ -53,7 +58,8 @@ def setup_logging(log_dir: str, level: int = logging.INFO, module_log_level: Opt
     if module_log_level is not None:
         logging.getLogger("arciva").setLevel(module_log_level)
 
-    # Capture uvicorn access logs as well so HTTP status codes appear in the file.
+    # Capture uvicorn access logs as well so HTTP status codes appear in the
+    # file.
     for name in ("uvicorn", "uvicorn.access", "uvicorn.error"):
         logging.getLogger(name).addHandler(file_handler)
         logging.getLogger(name).addHandler(console_handler)

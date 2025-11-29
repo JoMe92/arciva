@@ -31,3 +31,132 @@ export type Photo = {
   isStacked?: boolean
   metadataSourceProjectId?: string | null
 }
+
+export type DateTreeDayNode = {
+  id: string
+  label: string
+  count: number
+  year: string
+  month: string
+  day: string
+  parentYearId: string
+  parentMonthId: string
+}
+
+export type DateTreeMonthNode = {
+  id: string
+  label: string
+  count: number
+  year: string
+  month: string
+  parentYearId: string
+  days: DateTreeDayNode[]
+}
+
+export type DateTreeYearNode = {
+  id: string
+  label: string
+  count: number
+  year: string
+  months: DateTreeMonthNode[]
+}
+
+export type GridSelectOptions = {
+  shiftKey?: boolean
+  metaKey?: boolean
+  ctrlKey?: boolean
+}
+
+export const CURRENT_CONFIG_SOURCE_ID = 'current-config' as const
+export type MetadataSourceId = typeof CURRENT_CONFIG_SOURCE_ID | string
+
+export type InspectorViewportRect = {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+export type InspectorPreviewPanCommand = {
+  x: number
+  y: number
+  token: number
+}
+
+export type WorkspaceFilterControls = {
+  minStars: 0 | 1 | 2 | 3 | 4 | 5
+  setMinStars: (value: 0 | 1 | 2 | 3 | 4 | 5) => void
+  filterColor: 'Any' | ColorTag
+  setFilterColor: (value: 'Any' | ColorTag) => void
+  showJPEG: boolean
+  setShowJPEG: (value: boolean) => void
+  showRAW: boolean
+  setShowRAW: (value: boolean) => void
+  onlyPicked: boolean
+  setOnlyPicked: (value: boolean) => void
+  hideRejected: boolean
+  setHideRejected: (value: boolean) => void
+  dateFilterActive: boolean
+  selectedDayLabel: string | null
+  clearDateFilter: () => void
+}
+
+export type MobileWorkspacePanel = 'project' | 'photos' | 'details'
+
+export type UsedProjectLink = {
+  id: string
+  name: string
+  lastUpdatedLabel: string
+  previewImageUrl: string | null
+  isCurrentProject: boolean
+}
+
+export type InspectorField = {
+  label: string
+  value: string
+}
+
+export type KeyMetadataSections = {
+  general: InspectorField[]
+  capture: InspectorField[]
+}
+
+export type MetadataSummary = {
+  rating: number
+  colorLabel: ColorTag
+  pickRejectLabel: string
+  picked: boolean
+  rejected: boolean
+  hasEdits: boolean
+}
+
+export type InspectorPreviewData = {
+  src: string | null
+  thumbSrc: string | null
+  alt: string
+  placeholderRatio: PlaceholderRatio
+}
+
+export type MetadataEntry = {
+  key: string
+  normalizedKey: string
+  label: string
+  value: unknown
+}
+
+export type MetadataCategory = 'camera' | 'lens' | 'exposure' | 'gps' | 'software' | 'custom'
+
+export type MetadataGroup = {
+  id: MetadataCategory
+  label: string
+  entries: MetadataEntry[]
+}
+
+export type ProjectOverviewData = {
+  title: string
+  description: string
+  client: string
+  tags: string[]
+  assetCount: number
+  createdAt: string | null
+}

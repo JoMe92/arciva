@@ -46,7 +46,9 @@ type BulkImageExportJobRecord = {
 const BULK_EXPORT_ENDPOINT = '/v1/bulk-image-exports'
 const POLL_INTERVAL_MS = 1500
 
-export async function getBulkExportEstimate(options: BulkImageExportOptions = {}): Promise<BulkImageExportEstimate> {
+export async function getBulkExportEstimate(
+  options: BulkImageExportOptions = {}
+): Promise<BulkImageExportEstimate> {
   const res = await fetch(requireBase(`${BULK_EXPORT_ENDPOINT}/estimate`), {
     credentials: 'include',
     signal: options.signal,
@@ -68,7 +70,9 @@ export async function getBulkExportEstimate(options: BulkImageExportOptions = {}
   }
 }
 
-export async function exportAllProjectImages(options: BulkImageExportOptions = {}): Promise<BulkImageExportResult> {
+export async function exportAllProjectImages(
+  options: BulkImageExportOptions = {}
+): Promise<BulkImageExportResult> {
   const res = await fetch(requireBase(BULK_EXPORT_ENDPOINT), {
     method: 'POST',
     credentials: 'include',
@@ -94,7 +98,11 @@ export async function exportAllProjectImages(options: BulkImageExportOptions = {
   }
 }
 
-async function waitForBulkExport(jobId: string, total: number, options: BulkImageExportOptions): Promise<BulkImageExportJobRecord> {
+async function waitForBulkExport(
+  jobId: string,
+  total: number,
+  options: BulkImageExportOptions
+): Promise<BulkImageExportJobRecord> {
   let job = await fetchBulkExport(jobId, options.signal)
   options.onProgress?.({
     completed: job.processed_files ?? 0,
@@ -114,7 +122,10 @@ async function waitForBulkExport(jobId: string, total: number, options: BulkImag
   return job
 }
 
-async function fetchBulkExport(jobId: string, signal?: AbortSignal): Promise<BulkImageExportJobRecord> {
+async function fetchBulkExport(
+  jobId: string,
+  signal?: AbortSignal
+): Promise<BulkImageExportJobRecord> {
   const res = await fetch(requireBase(`${BULK_EXPORT_ENDPOINT}/${jobId}`), {
     credentials: 'include',
     signal,
@@ -125,7 +136,10 @@ async function fetchBulkExport(jobId: string, signal?: AbortSignal): Promise<Bul
   return (await res.json()) as BulkImageExportJobRecord
 }
 
-async function downloadBulkExport(job: BulkImageExportJobRecord, options: BulkImageExportOptions): Promise<Blob> {
+async function downloadBulkExport(
+  job: BulkImageExportJobRecord,
+  options: BulkImageExportOptions
+): Promise<Blob> {
   const downloadPath = job.download_url ?? `${BULK_EXPORT_ENDPOINT}/${job.id}/download`
   const downloadUrl = withBase(downloadPath)
   if (!downloadUrl) {

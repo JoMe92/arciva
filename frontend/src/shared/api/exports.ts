@@ -52,7 +52,10 @@ type ExportJobRecord = {
 const EXPORT_JOBS_ENDPOINT = '/v1/export-jobs'
 const POLL_INTERVAL_MS = 1200
 
-export async function exportSelectedPhotos(payload: ExportPhotosPayload, options: ExportPhotosOptions = {}): Promise<ExportPhotosResponse> {
+export async function exportSelectedPhotos(
+  payload: ExportPhotosPayload,
+  options: ExportPhotosOptions = {}
+): Promise<ExportPhotosResponse> {
   if (!payload.projectId) {
     throw new Error('Project id required for exports.')
   }
@@ -101,7 +104,11 @@ export async function exportSelectedPhotos(payload: ExportPhotosPayload, options
   }
 }
 
-async function waitForJobCompletion(jobId: string, total: number, options: ExportPhotosOptions): Promise<ExportJobRecord> {
+async function waitForJobCompletion(
+  jobId: string,
+  total: number,
+  options: ExportPhotosOptions
+): Promise<ExportJobRecord> {
   let job = await fetchJob(jobId, options.signal)
   options.onProgress?.({ completed: job.exported_files ?? 0, total })
   while (job.status === 'queued' || job.status === 'running') {

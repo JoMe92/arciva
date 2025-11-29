@@ -8,6 +8,7 @@ from .deps import get_settings
 
 logger = logging.getLogger("arciva.storage")
 
+
 @dataclass
 class PosixStorage:
     root: Path
@@ -33,15 +34,28 @@ class PosixStorage:
                 if not isinstance(path_value, str):
                     continue
                 extra_roots.append(Path(path_value) / "derivatives")
-        return cls(root, uploads, originals, derivatives, exports, _extra_derivative_roots=extra_roots)
+        return cls(
+            root,
+            uploads,
+            originals,
+            derivatives,
+            exports,
+            _extra_derivative_roots=extra_roots,
+        )
 
     def storage_key_for(self, path: Path) -> str:
-        """Return a POSIX-style relative key for a path under the media root."""
+        """
+        Return a POSIX-style relative key for a path under the media root.
+        """
         root_resolved = self.root.resolve()
         try:
-            relative = path.expanduser().resolve(strict=False).relative_to(root_resolved)
+            relative = (
+                path.expanduser().resolve(strict=False).relative_to(root_resolved)
+            )
         except ValueError as exc:
-            raise ValueError(f"Path {path} is outside of the media root {self.root}") from exc
+            raise ValueError(
+                f"Path {path} is outside of the media root {self.root}"
+            ) from exc
         return PurePosixPath(*relative.parts).as_posix()
 
     def path_from_key(self, storage_key: str | None) -> Path | None:
@@ -58,7 +72,10 @@ class PosixStorage:
             try:
                 candidate.relative_to(self.root.resolve())
             except ValueError:
-                logger.warning("path_from_key: legacy path outside media root %s", candidate)
+                logger.warning(
+                    "path_from_key: legacy path outside media root %s",
+                    candidate,
+                )
             return candidate
         posix_path = PurePosixPath(raw)
         if any(part == ".." for part in posix_path.parts):
@@ -73,7 +90,9 @@ class PosixStorage:
         try:
             resolved.relative_to(self.root.resolve())
         except ValueError as exc:
-            raise ValueError(f"Resolved storage key escapes media root: {storage_key!r}") from exc
+            raise ValueError(
+                f"Resolved storage key escapes media root: {storage_key!r}"
+            ) from exc
         return resolved
 
     def temp_path_for(self, asset_id: str) -> Path:
@@ -117,7 +136,11 @@ class PosixStorage:
         try:
             path = self.path_from_key(storage_key)
         except ValueError as exc:
-            logger.warning("remove_original: invalid storage key %s (%s)", storage_key, exc)
+            logger.warning(
+                "remove_original: invalid storage key %s (%s)",
+                storage_key,
+                exc,
+            )
             return
         if path is None:
             return

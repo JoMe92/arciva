@@ -5,6 +5,15 @@ import tempfile
 import sys
 from pathlib import Path as _P
 
+import pytest
+import pytest_asyncio
+from httpx import AsyncClient, ASGITransport
+from sqlalchemy.ext.asyncio import (
+    create_async_engine,
+    async_sessionmaker,
+    AsyncSession,
+)
+
 # Ensure repository root is on sys.path so 'backend' package resolves
 _REPO_ROOT = str(_P(__file__).resolve().parents[2])
 if _REPO_ROOT not in sys.path:
@@ -14,11 +23,6 @@ _DEFAULT_DB_PATH = Path(tempfile.gettempdir()) / "film_cabinet_test.db"
 _DEFAULT_MEDIA_ROOT = Path(tempfile.gettempdir()) / "film_cabinet_test_media"
 os.environ.setdefault("APP_DB_PATH", str(_DEFAULT_DB_PATH))
 os.environ.setdefault("APP_MEDIA_ROOT", str(_DEFAULT_MEDIA_ROOT))
-
-import pytest
-import pytest_asyncio
-from httpx import AsyncClient, ASGITransport
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 
 """Pytest fixtures for backend tests with isolated settings and DB."""
 
@@ -76,10 +80,13 @@ def test_settings(temp_fs_root):
 
 @pytest_asyncio.fixture(scope="session")
 async def test_engine(test_settings):
-    engine = create_async_engine(test_settings.database_url, echo=False, pool_pre_ping=True)
+    engine = create_async_engine(
+        test_settings.database_url, echo=False, pool_pre_ping=True
+    )
     # create schema (ensure models are imported so metadata is populated)
     from backend.app.db import Base
     import backend.app.models  # noqa: F401
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     try:
@@ -93,11 +100,28 @@ def TestSessionLocal(test_engine):
     return async_sessionmaker(test_engine, expire_on_commit=False, class_=AsyncSession)
 
 
+@pytest_asyncio.fixture(scope="session", autouse=True)
+async def mock_user(TestSessionLocal):
+    import uuid
+    from backend.app import models
+
+    async with TestSessionLocal() as session:
+        user_id = uuid.UUID("12345678-1234-5678-1234-567812345678")
+        user = await session.get(models.User, user_id)
+        if not user:
+            user = models.User(
+                id=user_id, email="test@example.com", password_hash="mock"
+            )
+            session.add(user)
+            await session.commit()
+
+
 @pytest.fixture(scope="session")
-def app(test_settings, TestSessionLocal):
+def app(test_settings, TestSessionLocal, test_engine):
     # Monkeypatch get_settings and get_db before creating the app
     from backend.app import deps as deps_module
     from backend.app import db as db_module
+    from backend.app import schema_utils
 
     # override settings cache by replacing function to return our object
     def _get_settings_override():
@@ -111,10 +135,38 @@ def app(test_settings, TestSessionLocal):
         async with TestSessionLocal() as session:
             yield session
 
+    # Ensure all modules reuse the test engine/session factory instead of a
+    # global one
+    db_module.SessionLocal = TestSessionLocal  # type: ignore[assignment]
+    db_module.engine = test_engine  # type: ignore[assignment]
+    schema_utils.async_engine = test_engine  # type: ignore[assignment]
+
+    # Services that spin up their own sessions (e.g. background tasks)
+    from backend.app.services import bulk_image_exports, export_jobs
+
+    bulk_image_exports.SessionLocal = TestSessionLocal  # type: ignore[assignment]
+    export_jobs.SessionLocal = TestSessionLocal  # type: ignore[assignment]
+
     db_module.get_db = _get_db_override  # type: ignore[assignment]
+
+    # override get_current_user
+    from backend.app import security
+    from backend.app import models
+    import uuid
+
+    async def _get_current_user_override():
+        # Return the same user created by mock_user fixture
+        return models.User(
+            id=uuid.UUID("12345678-1234-5678-1234-567812345678"),
+            email="test@example.com",
+            password_hash="mock",
+        )
+
+    security.get_current_user = _get_current_user_override
 
     # Import here after overrides so modules see test settings
     from backend.app.main import create_app
+
     application = create_app()
     return application
 

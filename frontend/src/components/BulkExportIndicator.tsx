@@ -15,7 +15,10 @@ const BulkExportIndicator: React.FC = () => {
 
   if (phase === 'idle') return null
 
-  const percent = progress.total > 0 ? Math.min(100, Math.round((progress.completed / progress.total) * 100)) : null
+  const percent =
+    progress.total > 0
+      ? Math.min(100, Math.round((progress.completed / progress.total) * 100))
+      : null
   const containerClasses =
     'fixed top-4 right-4 z-[90] w-72 rounded-2xl border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-4 shadow-lg'
 
@@ -23,7 +26,9 @@ const BulkExportIndicator: React.FC = () => {
     return (
       <div className={containerClasses}>
         <p className="text-sm font-semibold text-[var(--text,#1F1E1B)]">Preparing estimate…</p>
-        <p className="text-xs text-[var(--text-muted,#6B645B)]">Counting images and calculating archive size.</p>
+        <p className="text-xs text-[var(--text-muted,#6B645B)]">
+          Counting images and calculating archive size.
+        </p>
       </div>
     )
   }
@@ -32,11 +37,21 @@ const BulkExportIndicator: React.FC = () => {
     return (
       <div className={containerClasses}>
         <p className="text-sm font-semibold text-[var(--text,#1F1E1B)]">Preparing image archive…</p>
-        <p className="text-xs text-[var(--text-muted,#6B645B)]">Packaging {progressText(progress.completed, progress.total)}</p>
+        <p className="text-xs text-[var(--text-muted,#6B645B)]">
+          Packaging {progressText(progress.completed, progress.total)}
+        </p>
         {estimate ? (
-          <p className="text-xs text-[var(--text-muted,#6B645B)]">Estimated size: {estimate.totalFiles} images (~{formatBytes(estimate.totalBytes)}).</p>
+          <p className="text-xs text-[var(--text-muted,#6B645B)]">
+            Estimated size: {estimate.totalFiles} images (~{formatBytes(estimate.totalBytes)}).
+          </p>
         ) : null}
-        <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-[var(--border,#E1D3B9)]" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent ?? undefined}>
+        <div
+          className="mt-2 h-2 w-full overflow-hidden rounded-full bg-[var(--border,#E1D3B9)]"
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={percent ?? undefined}
+        >
           <div
             className="h-full rounded-full bg-[var(--primary,#A56A4A)] transition-[width]"
             style={{ width: percent !== null ? `${percent}%` : '30%' }}
@@ -57,7 +72,9 @@ const BulkExportIndicator: React.FC = () => {
     return (
       <div className={containerClasses}>
         <p className="text-sm font-semibold text-red-700">Export failed</p>
-        <p className="text-xs text-[var(--text-muted,#6B645B)]">{error ?? 'Unable to export images.'}</p>
+        <p className="text-xs text-[var(--text-muted,#6B645B)]">
+          {error ?? 'Unable to export images.'}
+        </p>
         <button
           type="button"
           onClick={dismissExport}
@@ -72,9 +89,13 @@ const BulkExportIndicator: React.FC = () => {
   return (
     <div className={containerClasses}>
       <p className="text-sm font-semibold text-[var(--text,#1F1E1B)]">Image archive ready</p>
-      <p className="text-xs text-[var(--text-muted,#6B645B)]">{result?.totalFiles ?? progress.completed} images packaged.</p>
+      <p className="text-xs text-[var(--text-muted,#6B645B)]">
+        {result?.totalFiles ?? progress.completed} images packaged.
+      </p>
       {estimate ? (
-        <p className="text-xs text-[var(--text-muted,#6B645B)]">Estimated size: ~{formatBytes(estimate.totalBytes)}.</p>
+        <p className="text-xs text-[var(--text-muted,#6B645B)]">
+          Estimated size: ~{formatBytes(estimate.totalBytes)}.
+        </p>
       ) : null}
       <div className="mt-3 flex gap-2">
         <button

@@ -25,7 +25,9 @@ class _FakeRedisSettings:
 
 
 sys.modules.setdefault("arq", types.SimpleNamespace(create_pool=_fake_create_pool))
-sys.modules.setdefault("arq.connections", types.SimpleNamespace(RedisSettings=_FakeRedisSettings))
+sys.modules.setdefault(
+    "arq.connections", types.SimpleNamespace(RedisSettings=_FakeRedisSettings)
+)
 
 
 @pytest.mark.asyncio
@@ -89,7 +91,9 @@ async def test_update_stack_pairs_toggle(client):
     assert r.status_code == 201
     proj_id = r.json()["id"]
 
-    r = await client.patch(f"/v1/projects/{proj_id}", json={"stack_pairs_enabled": True})
+    r = await client.patch(
+        f"/v1/projects/{proj_id}", json={"stack_pairs_enabled": True}
+    )
     assert r.status_code == 200
     updated = r.json()
     assert updated["stack_pairs_enabled"] is True
@@ -119,6 +123,7 @@ async def test_projects_list_includes_picked_previews(client, TestSessionLocal):
 
     async with TestSessionLocal() as session:
         asset = models.Asset(
+            user_id=uuid.UUID("12345678-1234-5678-1234-567812345678"),
             original_filename="picked.jpg",
             mime="image/jpeg",
             size_bytes=111,
@@ -131,7 +136,13 @@ async def test_projects_list_includes_picked_previews(client, TestSessionLocal):
         )
         session.add(asset)
         await session.flush()
-        link = models.ProjectAsset(project_id=uuid.UUID(proj_id), asset_id=asset.id, is_preview=False, preview_order=None)
+        link = models.ProjectAsset(
+            user_id=uuid.UUID("12345678-1234-5678-1234-567812345678"),
+            project_id=uuid.UUID(proj_id),
+            asset_id=asset.id,
+            is_preview=False,
+            preview_order=None,
+        )
         session.add(link)
         await session.flush()
         session.add(models.MetadataState(link_id=link.id, picked=True))
@@ -151,6 +162,7 @@ async def test_projects_list_includes_picked_previews(client, TestSessionLocal):
     assert detail["preview_images"]
     assert detail["preview_images"][0]["asset_id"] == asset_id
 
+
 @pytest.mark.asyncio
 async def test_delete_project_requires_confirmation(client):
     payload = {"title": "Delete Me", "client": "ACME", "note": "test note"}
@@ -158,7 +170,11 @@ async def test_delete_project_requires_confirmation(client):
     assert r.status_code == 201
     proj_id = r.json()["id"]
 
-    r = await client.request("DELETE", f"/v1/projects/{proj_id}", json={"confirm_title": "wrong name", "delete_assets": False})
+    r = await client.request(
+        "DELETE",
+        f"/v1/projects/{proj_id}",
+        json={"confirm_title": "wrong name", "delete_assets": False},
+    )
     assert r.status_code == 400
 
     # project still exists
@@ -186,6 +202,7 @@ async def test_delete_project_keep_assets(client, TestSessionLocal):
 
     async with TestSessionLocal() as session:
         asset = models.Asset(
+            user_id=uuid.UUID("12345678-1234-5678-1234-567812345678"),
             original_filename="keep.jpg",
             mime="image/jpeg",
             size_bytes=123,
@@ -196,7 +213,13 @@ async def test_delete_project_keep_assets(client, TestSessionLocal):
         )
         session.add(asset)
         await session.flush()
-        link = models.ProjectAsset(project_id=uuid.UUID(proj_id), asset_id=asset.id, is_preview=True, preview_order=0)
+        link = models.ProjectAsset(
+            user_id=uuid.UUID("12345678-1234-5678-1234-567812345678"),
+            project_id=uuid.UUID(proj_id),
+            asset_id=asset.id,
+            is_preview=True,
+            preview_order=0,
+        )
         session.add(link)
         await session.flush()
         session.add(models.MetadataState(link_id=link.id))
@@ -215,7 +238,9 @@ async def test_delete_project_keep_assets(client, TestSessionLocal):
     assert r.status_code == 404
 
     async with TestSessionLocal() as session:
-        result = await session.execute(select(models.Asset).where(models.Asset.id == asset_id))
+        result = await session.execute(
+            select(models.Asset).where(models.Asset.id == asset_id)
+        )
         asset_row = result.scalar_one_or_none()
         assert asset_row is not None
         assert asset_row.reference_count == 0
@@ -245,6 +270,7 @@ async def test_delete_project_remove_assets(client, TestSessionLocal):
 
     async with TestSessionLocal() as session:
         asset = models.Asset(
+            user_id=uuid.UUID("12345678-1234-5678-1234-567812345678"),
             original_filename="remove.jpg",
             mime="image/jpeg",
             size_bytes=321,
@@ -255,7 +281,13 @@ async def test_delete_project_remove_assets(client, TestSessionLocal):
         )
         session.add(asset)
         await session.flush()
-        link = models.ProjectAsset(project_id=uuid.UUID(proj_id), asset_id=asset.id, is_preview=False, preview_order=None)
+        link = models.ProjectAsset(
+            user_id=uuid.UUID("12345678-1234-5678-1234-567812345678"),
+            project_id=uuid.UUID(proj_id),
+            asset_id=asset.id,
+            is_preview=False,
+            preview_order=None,
+        )
         session.add(link)
         await session.flush()
         session.add(models.MetadataState(link_id=link.id))
@@ -270,7 +302,9 @@ async def test_delete_project_remove_assets(client, TestSessionLocal):
     assert r.status_code == 204
 
     async with TestSessionLocal() as session:
-        result = await session.execute(select(models.Asset).where(models.Asset.id == asset_id))
+        result = await session.execute(
+            select(models.Asset).where(models.Asset.id == asset_id)
+        )
         assert result.scalar_one_or_none() is None
 
     assert not original_path.exists()

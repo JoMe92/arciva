@@ -1,10 +1,10 @@
-import React from 'react';
-import StoneTrailIcon from './StoneTrailIcon';
+import React from 'react'
+import StoneTrailIcon from './StoneTrailIcon'
 
 export interface StateHintProps {
-  message: string;
-  actionLabel?: string;
-  onAction?: () => void;
+  message: string
+  actionLabel?: string
+  onAction?: () => void
 }
 
 /**
@@ -19,12 +19,15 @@ const StateHint: React.FC<StateHintProps> = ({ message, actionLabel, onAction })
       <StoneTrailIcon />
       <div className="flex-1 text-[var(--text,#1F1E1B)]">{message}</div>
       {actionLabel && (
-        <button onClick={onAction} className="h-8 rounded-full border border-[var(--border,#E1D3B9)] px-3 text-[12px]">
+        <button
+          onClick={onAction}
+          className="h-8 rounded-full border border-[var(--border,#E1D3B9)] px-3 text-[12px]"
+        >
           {actionLabel}
         </button>
       )}
     </div>
-  );
-};
+  )
+}
 
-export default StateHint;
+export default StateHint

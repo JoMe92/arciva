@@ -56,7 +56,13 @@ async def sync_project_pairs(db: AsyncSession, project_id: UUID) -> None:
         bucket[kind].append((link, asset))
         display_names.setdefault(key, base)
 
-    targets: Dict[str, Tuple[Tuple[models.ProjectAsset, models.Asset], Tuple[models.ProjectAsset, models.Asset]]] = {}
+    targets: Dict[
+        str,
+        Tuple[
+            Tuple[models.ProjectAsset, models.Asset],
+            Tuple[models.ProjectAsset, models.Asset],
+        ],
+    ] = {}
     for key, bucket in buckets.items():
         jpeg_items = bucket["jpeg"]
         raw_items = bucket["raw"]
@@ -64,7 +70,7 @@ async def sync_project_pairs(db: AsyncSession, project_id: UUID) -> None:
             targets[key] = (jpeg_items[0], raw_items[0])
         elif len(jpeg_items) > 1 or len(raw_items) > 1:
             logger.warning(
-                "pairing: skipped basename=%s project=%s jpeg_count=%s raw_count=%s",
+                "pairing: skipped basename=%s project=%s jpeg_count=%s " "raw_count=%s",
                 display_names.get(key, key),
                 project_id,
                 len(jpeg_items),
@@ -74,10 +80,16 @@ async def sync_project_pairs(db: AsyncSession, project_id: UUID) -> None:
     if not targets:
         # Clear stale pair references if necessary.
         existing_pairs = (
-            await db.execute(
-                select(models.ProjectAssetPair).where(models.ProjectAssetPair.project_id == project_id)
+            (
+                await db.execute(
+                    select(models.ProjectAssetPair).where(
+                        models.ProjectAssetPair.project_id == project_id
+                    )
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         if not existing_pairs:
             return
         for pair in existing_pairs:
@@ -90,10 +102,16 @@ async def sync_project_pairs(db: AsyncSession, project_id: UUID) -> None:
         return
 
     existing_pairs = (
-        await db.execute(
-            select(models.ProjectAssetPair).where(models.ProjectAssetPair.project_id == project_id)
+        (
+            await db.execute(
+                select(models.ProjectAssetPair).where(
+                    models.ProjectAssetPair.project_id == project_id
+                )
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     existing_by_key = {pair.basename.lower(): pair for pair in existing_pairs}
     existing_by_asset: Dict[UUID, models.ProjectAssetPair] = {}
     for pair in existing_pairs:
@@ -104,11 +122,21 @@ async def sync_project_pairs(db: AsyncSession, project_id: UUID) -> None:
     seen_pair_ids: set[UUID] = set()
     changed = False
 
-    for key, ((jpeg_link, jpeg_asset), (raw_link, raw_asset)) in targets.items():
-        pair = existing_by_key.get(key) or existing_by_asset.get(jpeg_asset.id) or existing_by_asset.get(raw_asset.id)
+    for key, (
+        (jpeg_link, jpeg_asset),
+        (raw_link, raw_asset),
+    ) in targets.items():
+        pair = (
+            existing_by_key.get(key)
+            or existing_by_asset.get(jpeg_asset.id)
+            or existing_by_asset.get(raw_asset.id)
+        )
         if pair and key not in existing_by_key:
             existing_by_key[key] = pair
-        basename = display_names.get(key, jpeg_asset.original_filename or raw_asset.original_filename or key)
+        basename = display_names.get(
+            key,
+            jpeg_asset.original_filename or raw_asset.original_filename or key,
+        )
         if pair is None:
             pair = models.ProjectAssetPair(
                 project_id=project_id,

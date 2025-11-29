@@ -26,34 +26,47 @@ const clampWizardStep = (value: number): WizardStep => {
 const STEP_META: Record<WizardStep, { title: string; caption: string }> = {
   1: {
     title: 'Choose new image storage path',
-    caption: 'Select a folder on your local machine to store the PhotoStore (Uploads, Original, Export, etc.).',
+    caption:
+      'Select a folder on your local machine to store the PhotoStore (Uploads, Original, Export, etc.).',
   },
   2: {
     title: 'How should existing data be handled?',
-    caption: 'Pick whether to create a fresh PhotoStore or load an existing one from the selected folder.',
+    caption:
+      'Pick whether to create a fresh PhotoStore or load an existing one from the selected folder.',
   },
   3: {
     title: 'Summary & confirmation',
-    caption: 'Review the changes, read the experimental disclaimer, and acknowledge before applying.',
+    caption:
+      'Review the changes, read the experimental disclaimer, and acknowledge before applying.',
   },
 }
 
-const MODE_DESCRIPTIONS: Record<ExperimentalStorageMode, { label: string; description: string; note?: string }> = {
+const MODE_DESCRIPTIONS: Record<
+  ExperimentalStorageMode,
+  { label: string; description: string; note?: string }
+> = {
   fresh: {
     label: 'Start fresh with an empty PhotoStore',
-    description: 'Creates a brand-new database at the selected path. Previous projects disappear from the app (files stay on disk for manual recovery).',
+    description:
+      'Creates a brand-new database at the selected path. Previous projects disappear from the app (files stay on disk for manual recovery).',
     note: '⚠ Experimental: use when you want to completely reset storage for local testing.',
   },
   load: {
     label: 'Load existing PhotoStore from this folder',
-    description: 'Reuses the arciva.db file already present in the folder and keeps all existing projects/images.',
+    description:
+      'Reuses the arciva.db file already present in the folder and keeps all existing projects/images.',
     note: 'Requires the folder to contain an arciva.db created by this app.',
   },
 }
 
 const DEFAULT_MODE: ExperimentalStorageMode = 'fresh'
 
-const ExperimentalImageStorageWizard: React.FC<ExperimentalImageStorageWizardProps> = ({ open, onClose, currentSettings, onSuccess }) => {
+const ExperimentalImageStorageWizard: React.FC<ExperimentalImageStorageWizardProps> = ({
+  open,
+  onClose,
+  currentSettings,
+  onSuccess,
+}) => {
   const [step, setStep] = useState<WizardStep>(1)
   const [selectedPath, setSelectedPath] = useState('')
   const [manualInput, setManualInput] = useState('')
@@ -125,7 +138,12 @@ const ExperimentalImageStorageWizard: React.FC<ExperimentalImageStorageWizardPro
     setValidationError(null)
   }, [manualInput])
 
-  const canProceed = step === 1 ? Boolean(validation?.valid && !validationPending) : step === 2 ? Boolean(mode) : false
+  const canProceed =
+    step === 1
+      ? Boolean(validation?.valid && !validationPending)
+      : step === 2
+        ? Boolean(mode)
+        : false
   const canApply = step === 3 ? acknowledged && !applyPending : false
 
   const proceedToNext = useCallback(() => {
@@ -152,7 +170,8 @@ const ExperimentalImageStorageWizard: React.FC<ExperimentalImageStorageWizardPro
       setLogs((prev) => [...prev, 'Experimental image storage settings updated successfully.'])
       onSuccess('Experimental image storage settings updated successfully.')
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to apply experimental changes.'
+      const message =
+        error instanceof Error ? error.message : 'Unable to apply experimental changes.'
       setApplyError(message)
       setLogs((prev) => [...prev, `Failed to apply changes: ${message}`])
     } finally {
@@ -165,7 +184,9 @@ const ExperimentalImageStorageWizard: React.FC<ExperimentalImageStorageWizardPro
   const renderStepNavigation = () => {
     return (
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-[var(--surface-subtle,#FBF7EF)] px-4 py-2 text-[12px] text-[var(--text-muted,#6B645B)]">
-        <span>Step {step} of 3 · {STEP_META[step].title}</span>
+        <span>
+          Step {step} of 3 · {STEP_META[step].title}
+        </span>
         <span className="text-[11px] text-red-600">Experimental use only</span>
       </div>
     )
@@ -176,12 +197,17 @@ const ExperimentalImageStorageWizard: React.FC<ExperimentalImageStorageWizardPro
       return (
         <div className="space-y-4">
           <p className="text-[12px] text-[var(--text-muted,#6B645B)]">{STEP_META[1].caption}</p>
-          <label className="text-[12px] font-semibold text-[var(--text,#1F1E1B)]">New image storage path (local)</label>
+          <label className="text-[12px] font-semibold text-[var(--text,#1F1E1B)]">
+            New image storage path (local)
+          </label>
           <p className="text-[12px] text-[var(--text-muted,#6B645B)]">
-            Enter the folder that should host the PhotoStore (Uploads, Original, Export, etc.). Only choose local or directly mounted drives for this experimental feature.
+            Enter the folder that should host the PhotoStore (Uploads, Original, Export, etc.). Only
+            choose local or directly mounted drives for this experimental feature.
           </p>
           <div className="space-y-2 rounded-2xl bg-[var(--surface-subtle,#FBF7EF)] px-3 py-3">
-            <label className="text-[12px] font-medium text-[var(--text,#1F1E1B)]">Folder path</label>
+            <label className="text-[12px] font-medium text-[var(--text,#1F1E1B)]">
+              Folder path
+            </label>
             <input
               type="text"
               value={manualInput}
@@ -197,10 +223,15 @@ const ExperimentalImageStorageWizard: React.FC<ExperimentalImageStorageWizardPro
               Use this path
             </button>
           </div>
-          {validationPending ? <p className="text-[12px] text-[var(--text-muted,#6B645B)]">Validating path…</p> : null}
+          {validationPending ? (
+            <p className="text-[12px] text-[var(--text-muted,#6B645B)]">Validating path…</p>
+          ) : null}
           {validation ? (
             <p className={`text-[12px] ${validation.valid ? 'text-emerald-600' : 'text-red-600'}`}>
-              {validation.valid ? 'Path looks good.' : validation.message ?? 'Selected folder is not writable. Please choose another path.'}
+              {validation.valid
+                ? 'Path looks good.'
+                : (validation.message ??
+                  'Selected folder is not writable. Please choose another path.')}
             </p>
           ) : null}
           {validationError ? <p className="text-[12px] text-red-600">{validationError}</p> : null}
@@ -226,10 +257,16 @@ const ExperimentalImageStorageWizard: React.FC<ExperimentalImageStorageWizardPro
                     onChange={() => setMode(option)}
                   />
                   <div>
-                    <p className="text-[13px] font-semibold text-[var(--text,#1F1E1B)]">{MODE_DESCRIPTIONS[option].label}</p>
-                    <p className="text-[12px] text-[var(--text-muted,#6B645B)]">{MODE_DESCRIPTIONS[option].description}</p>
+                    <p className="text-[13px] font-semibold text-[var(--text,#1F1E1B)]">
+                      {MODE_DESCRIPTIONS[option].label}
+                    </p>
+                    <p className="text-[12px] text-[var(--text-muted,#6B645B)]">
+                      {MODE_DESCRIPTIONS[option].description}
+                    </p>
                     {MODE_DESCRIPTIONS[option].note ? (
-                      <p className={`mt-2 rounded-2xl border px-3 py-2 text-[11px] ${option === 'fresh' ? 'border-red-200 bg-red-50 text-red-700' : 'border-emerald-200 bg-emerald-50 text-emerald-800'}`}>
+                      <p
+                        className={`mt-2 rounded-2xl border px-3 py-2 text-[11px] ${option === 'fresh' ? 'border-red-200 bg-red-50 text-red-700' : 'border-emerald-200 bg-emerald-50 text-emerald-800'}`}
+                      >
                         {MODE_DESCRIPTIONS[option].note}
                       </p>
                     ) : null}
@@ -247,19 +284,25 @@ const ExperimentalImageStorageWizard: React.FC<ExperimentalImageStorageWizardPro
           <p className="text-[13px] font-semibold text-[var(--text,#1F1E1B)]">Summary</p>
           <dl className="mt-2 space-y-1 text-[12px] text-[var(--text,#1F1E1B)]">
             <div className="flex flex-col gap-0.5">
-              <dt className="text-[11px] uppercase tracking-wide text-[var(--text-muted,#6B645B)]">Current image storage path (old)</dt>
+              <dt className="text-[11px] uppercase tracking-wide text-[var(--text-muted,#6B645B)]">
+                Current image storage path (old)
+              </dt>
               <dd className="font-mono text-[12px]" title={currentPrimaryPath}>
                 {currentPrimaryPath}
               </dd>
             </div>
             <div className="flex flex-col gap-0.5">
-              <dt className="text-[11px] uppercase tracking-wide text-[var(--text-muted,#6B645B)]">New image storage path</dt>
+              <dt className="text-[11px] uppercase tracking-wide text-[var(--text-muted,#6B645B)]">
+                New image storage path
+              </dt>
               <dd className="font-mono text-[12px]" title={selectedPath}>
                 {selectedPath}
               </dd>
             </div>
             <div className="flex flex-col gap-0.5">
-              <dt className="text-[11px] uppercase tracking-wide text-[var(--text-muted,#6B645B)]">Selected option</dt>
+              <dt className="text-[11px] uppercase tracking-wide text-[var(--text-muted,#6B645B)]">
+                Selected option
+              </dt>
               <dd className="text-[12px]">{MODE_DESCRIPTIONS[mode].label} (experimental)</dd>
             </div>
           </dl>
@@ -270,10 +313,18 @@ const ExperimentalImageStorageWizard: React.FC<ExperimentalImageStorageWizardPro
             : '⚠ Loading an existing PhotoStore will keep any projects already stored in arciva.db inside the selected folder.'}
         </div>
         <label className="flex items-center gap-2 text-[13px] text-[var(--text,#1F1E1B)]">
-          <input type="checkbox" checked={acknowledged} onChange={(event) => setAcknowledged(event.target.checked)} />
+          <input
+            type="checkbox"
+            checked={acknowledged}
+            onChange={(event) => setAcknowledged(event.target.checked)}
+          />
           I understand that this is an experimental developer feature and that behavior may change.
         </label>
-        {applyError ? <div className="rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-700">{applyError}</div> : null}
+        {applyError ? (
+          <div className="rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-700">
+            {applyError}
+          </div>
+        ) : null}
         {logs.length ? (
           <div className="space-y-1 rounded-2xl bg-[var(--surface-subtle,#FBF7EF)] px-3 py-2 text-[11px] text-[var(--text-muted,#6B645B)]">
             {logs.map((entry, index) => (
@@ -292,7 +343,12 @@ const ExperimentalImageStorageWizard: React.FC<ExperimentalImageStorageWizardPro
       onClose={onClose}
       footerRight={
         <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
-          <button type="button" onClick={onClose} disabled={applyPending} className="h-9 rounded-full border border-[var(--border,#E1D3B9)] px-4 text-[13px]">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={applyPending}
+            className="h-9 rounded-full border border-[var(--border,#E1D3B9)] px-4 text-[13px]"
+          >
             Cancel
           </button>
           {step > 1 ? (

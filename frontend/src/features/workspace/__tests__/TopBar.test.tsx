@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import { vi } from 'vitest'
-import { TopBar, type WorkspaceFilterControls } from '../components'
+import { TopBar } from '../components/TopBar'
+import { type WorkspaceFilterControls } from '../types'
 import { ThemeProvider } from '../../../shared/theme'
 
 const createFilterControls = (): WorkspaceFilterControls => ({
@@ -60,16 +61,16 @@ describe('TopBar layout', () => {
     const { rerender } = render(
       <ThemeProvider>
         <TopBar {...baseProps} view="grid" />
-      </ThemeProvider>,
+      </ThemeProvider>
     )
     const sizeControl = screen.getByTestId('top-bar-size-control')
     expect(sizeControl).toHaveStyle({ width: '200px' })
 
     rerender(
-        <ThemeProvider>
-          <TopBar {...baseProps} view="detail" />
-        </ThemeProvider>,
-      )
+      <ThemeProvider>
+        <TopBar {...baseProps} view="detail" />
+      </ThemeProvider>
+    )
     expect(sizeControl).toHaveStyle({ width: '200px' })
     expect(sizeControl).toHaveTextContent('Unavailable in detail view')
   })

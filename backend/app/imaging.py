@@ -100,7 +100,14 @@ def _get_exiftool_cmd() -> list[str]:
     return list(_EXIFTOOL_CMD)
 
 
-def read_exif(path: Path) -> tuple[Optional[datetime], Tuple[Optional[int], Optional[int]], Optional[dict[str, Any]], list[str]]:
+def read_exif(
+    path: Path,
+) -> tuple[
+    Optional[datetime],
+    Tuple[Optional[int], Optional[int]],
+    Optional[dict[str, Any]],
+    list[str],
+]:
     """Read EXIF metadata for the asset.
 
     Returns (taken_at, (width, height), metadata_json, warnings).
@@ -121,14 +128,21 @@ def read_exif(path: Path) -> tuple[Optional[datetime], Tuple[Optional[int], Opti
             if taken_at is None:
                 try:
                     exif = im.getexif()
-                    dt = exif.get(36867) or exif.get(306)  # DateTimeOriginal or DateTime
+                    dt = exif.get(36867) or exif.get(
+                        306
+                    )  # DateTimeOriginal or DateTime
                     taken_at = _parse_exif_datetime(dt)
                 except Exception:  # pragma: no cover - best effort
                     warnings.append("EXIF_PIL_PARSE_FAILED")
     except Exception:  # pragma: no cover - best effort
         warnings.append("EXIF_PIL_LOAD_FAILED")
 
-    cmd: Sequence[str] = _get_exiftool_cmd() + ["-json", "-G", "-n", str(path)]
+    cmd: Sequence[str] = _get_exiftool_cmd() + [
+        "-json",
+        "-G",
+        "-n",
+        str(path),
+    ]
     try:
         proc = subprocess.run(
             cmd,
@@ -141,14 +155,17 @@ def read_exif(path: Path) -> tuple[Optional[datetime], Tuple[Optional[int], Opti
         if isinstance(parsed, list) and parsed:
             entry = parsed[0]
             if isinstance(entry, dict):
-                # Remove the absolute path to avoid leaking server filesystem details
+                # Remove the absolute path to avoid leaking server filesystem
+                # details
                 entry.pop("SourceFile", None)
                 metadata = entry
                 if taken_at is None:
                     taken_at = (
                         _parse_exif_datetime(entry.get("EXIF:DateTimeOriginal"))
                         or _parse_exif_datetime(entry.get("EXIF:CreateDate"))
-                        or _parse_exif_datetime(entry.get("MakerNotes:DateTimeOriginal"))
+                        or _parse_exif_datetime(
+                            entry.get("MakerNotes:DateTimeOriginal")
+                        )
                         or _parse_exif_datetime(entry.get("QuickTime:CreateDate"))
                         or _parse_exif_datetime(entry.get("XMP:CreateDate"))
                         or _parse_exif_datetime(entry.get("IPTC:DateCreated"))
@@ -165,7 +182,9 @@ def read_exif(path: Path) -> tuple[Optional[datetime], Tuple[Optional[int], Opti
     return taken_at, (width, height), metadata, warnings
 
 
-def make_thumb(path: Optional[Path], size: int, *, image_bytes: Optional[bytes] = None) -> tuple[bytes, tuple[int, int]]:
+def make_thumb(
+    path: Optional[Path], size: int, *, image_bytes: Optional[bytes] = None
+) -> tuple[bytes, tuple[int, int]]:
     """
     Generate a JPEG thumbnail from a file path or in-memory image bytes.
 
@@ -193,12 +212,16 @@ def make_thumb(path: Optional[Path], size: int, *, image_bytes: Optional[bytes] 
     if image_bytes is None and path is None:
         raise ValueError("Either 'path' or 'image_bytes' must be provided")
 
-    buffer: Optional[BytesIO] = BytesIO(image_bytes) if image_bytes is not None else None
+    buffer: Optional[BytesIO] = (
+        BytesIO(image_bytes) if image_bytes is not None else None
+    )
     source = buffer if buffer is not None else path
 
     try:
         with Image.open(source) as im:
-            im = ImageOps.exif_transpose(im).convert("RGB")  # normalize orientation & color
+            im = ImageOps.exif_transpose(im).convert(
+                "RGB"
+            )  # normalize orientation & color
             im.thumbnail((size, size))
 
             with BytesIO() as buf:
@@ -210,7 +233,12 @@ def make_thumb(path: Optional[Path], size: int, *, image_bytes: Optional[bytes] 
             buffer.close()
 
 
-def compute_pixel_hash(path: Optional[Path], *, image_bytes: Optional[bytes] = None, hash_size: int = 8) -> str:
+def compute_pixel_hash(
+    path: Optional[Path],
+    *,
+    image_bytes: Optional[bytes] = None,
+    hash_size: int = 8,
+) -> str:
     """
     Compute a deterministic perceptual hash for the provided image input.
 
@@ -222,7 +250,9 @@ def compute_pixel_hash(path: Optional[Path], *, image_bytes: Optional[bytes] = N
     if path is None and image_bytes is None:
         raise ValueError("Either 'path' or 'image_bytes' must be provided")
 
-    buffer: Optional[BytesIO] = BytesIO(image_bytes) if image_bytes is not None else None
+    buffer: Optional[BytesIO] = (
+        BytesIO(image_bytes) if image_bytes is not None else None
+    )
     source = buffer if buffer is not None else path
     resampling = getattr(Image, "Resampling", Image)
 

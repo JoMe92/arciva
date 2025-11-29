@@ -6,8 +6,15 @@ from typing import Optional
 
 import pytest
 
-from backend.app.adapters.raw_py import RawPyAdapterError, RawPyReadResult, RawPyThumbnail
-from backend.app.services.raw_reader import RawReaderProcessingError, RawReaderService
+from backend.app.adapters.raw_py import (
+    RawPyAdapterError,
+    RawPyReadResult,
+    RawPyThumbnail,
+)
+from backend.app.services.raw_reader import (
+    RawReaderProcessingError,
+    RawReaderService,
+)
 
 
 @dataclass
@@ -88,7 +95,9 @@ def test_raw_reader_service_handles_adapter_error(tmp_path: Path) -> None:
     assert result.metadata["rawpy_error"] == "boom"
 
 
-def test_raw_reader_uses_rendered_preview_when_thumbnail_missing(tmp_path: Path) -> None:
+def test_raw_reader_uses_rendered_preview_when_thumbnail_missing(
+    tmp_path: Path,
+) -> None:
     adapter = _StubAdapter(
         RawPyReadResult(
             width=None,
@@ -119,11 +128,15 @@ def test_raw_reader_uses_rendered_preview_when_thumbnail_missing(tmp_path: Path)
 
 class _FailingThumbnailService(RawReaderService):
     @staticmethod
-    def _normalise_thumbnail(thumbnail: RawPyThumbnail) -> tuple[bytes, Optional[int], Optional[int]]:  # type: ignore[override]
+    def _normalise_thumbnail(
+        thumbnail: RawPyThumbnail,
+    ) -> tuple[bytes, Optional[int], Optional[int]]:  # type: ignore[override]
         raise RawReaderProcessingError("fail")
 
 
-def test_raw_reader_falls_back_to_rendered_preview_on_conversion_error(tmp_path: Path) -> None:
+def test_raw_reader_falls_back_to_rendered_preview_on_conversion_error(
+    tmp_path: Path,
+) -> None:
     preview = _bitmap_thumbnail()
     adapter = _StubAdapter(
         RawPyReadResult(

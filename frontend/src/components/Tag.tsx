@@ -1,9 +1,9 @@
-import React from 'react';
+import React from 'react'
 
 export interface TagProps {
-  label: string;
-  selected?: boolean;
-  onClick?: () => void;
+  label: string
+  selected?: boolean
+  onClick?: () => void
 }
 
 /**
@@ -23,7 +23,7 @@ const Tag: React.FC<TagProps> = ({ label, selected, onClick }) => {
     >
       {label}
     </button>
-  );
-};
+  )
+}
 
-export default Tag;
+export default Tag

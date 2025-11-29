@@ -19,10 +19,12 @@ _asset_metadata_lock = asyncio.Lock()
 _base_schema_ready = False
 _base_schema_lock = asyncio.Lock()
 
+
 async def _create_base_schema(engine: AsyncEngine) -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     logger.info("ensure_base_schema: base schema ready on %s", engine.url)
+
 
 async def ensure_base_schema(engine: AsyncEngine | None = None) -> None:
     """
@@ -46,10 +48,19 @@ def _build_statements(existing: Iterable[str]) -> list[str]:
     present = set(existing)
     statements: list[str] = []
     if "is_preview" not in present:
-        statements.append("ALTER TABLE project_assets ADD COLUMN IF NOT EXISTS is_preview BOOLEAN NOT NULL DEFAULT FALSE")
+        statements.append(
+            "ALTER TABLE project_assets ADD COLUMN IF NOT EXISTS "
+            "is_preview BOOLEAN NOT NULL DEFAULT FALSE"
+        )
     if "preview_order" not in present:
-        statements.append("ALTER TABLE project_assets ADD COLUMN IF NOT EXISTS preview_order INTEGER")
-        statements.append("UPDATE project_assets SET preview_order = 0 WHERE is_preview = TRUE AND preview_order IS NULL")
+        statements.append(
+            "ALTER TABLE project_assets ADD COLUMN IF NOT EXISTS "
+            "preview_order INTEGER"
+        )
+        statements.append(
+            "UPDATE project_assets SET preview_order = 0 "
+            "WHERE is_preview = TRUE AND preview_order IS NULL"
+        )
     return statements
 
 
@@ -71,7 +82,9 @@ async def ensure_preview_columns(_: AsyncSession | None = None) -> None:
         try:
             async with async_engine.begin() as conn:
                 if conn.dialect.name == "sqlite":
-                    pragma = await conn.execute(text("PRAGMA table_info('project_assets')"))
+                    pragma = await conn.execute(
+                        text("PRAGMA table_info('project_assets')")
+                    )
                     existing = (row[1] for row in pragma)
                 else:
                     result = await conn.execute(
@@ -80,7 +93,9 @@ async def ensure_preview_columns(_: AsyncSession | None = None) -> None:
                             SELECT column_name
                             FROM information_schema.columns
                             WHERE table_name = 'project_assets'
-                              AND column_name IN ('is_preview', 'preview_order')
+                              AND column_name IN (
+                                'is_preview', 'preview_order'
+                              )
                             """
                         )
                     )
@@ -131,14 +146,18 @@ async def ensure_asset_metadata_column(_: AsyncSession | None = None) -> None:
 
                 if not column_present:
                     stmt = (
-                        "ALTER TABLE assets ADD COLUMN IF NOT EXISTS metadata_json JSON"
+                        "ALTER TABLE assets ADD COLUMN IF NOT EXISTS "
+                        "metadata_json JSON"
                         if conn.dialect.name == "sqlite"
-                        else "ALTER TABLE assets ADD COLUMN IF NOT EXISTS metadata_json JSONB"
+                        else "ALTER TABLE assets ADD COLUMN IF NOT EXISTS "
+                        "metadata_json JSONB"
                     )
                     logger.info("ensure_asset_metadata_column: applying %s", stmt)
                     await conn.execute(text(stmt))
         except SQLAlchemyError:
-            logger.exception("ensure_asset_metadata_column: failed to apply schema patch")
+            logger.exception(
+                "ensure_asset_metadata_column: failed to apply schema patch"
+            )
             raise
 
         _asset_metadata_ready = True

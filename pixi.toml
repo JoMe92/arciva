@@ -1,5 +1,5 @@
 [workspace]
-name = "FilmCabinetFrontend"
+name = "arciva"
 version = "0.1.0"
 description = "FastAPI backend + Vite frontend dev environment"
 channels = ["conda-forge"]
@@ -11,13 +11,15 @@ pip = "*"
 nodejs = "20.*"
 pnpm = "9.*"
 exiftool = "*"
+act = ">=0.2.82,<0.3"
+ruff = ">=0.14.6,<0.15"
 
 [pypi-dependencies]
 fastapi = ">=0.103"
 uvicorn = ">=0.23"
 sqlalchemy = ">=2.0"
 aiosqlite = ">=0.19"
-pydantic = ">=2.0"
+pydantic = { version = ">=2.0", extras = ["email"] }
 pydantic-settings = ">=2.0"
 httpx = ">=0.24"
 pytest = ">=7.0"
@@ -26,9 +28,14 @@ arq = ">=0.25"
 pillow = ">=10.0"
 asyncpg = ">=0.29"
 rawpy = ">=0.25"
-email-validator = ">=2.1"
 argon2-cffi = ">=23.1"
 itsdangerous = ">=2.1"
+opentelemetry-api = "*"
+opentelemetry-sdk = "*"
+opentelemetry-exporter-otlp = "*"
+opentelemetry-instrumentation-fastapi = "*"
+opentelemetry-instrumentation-sqlalchemy = "*"
+opentelemetry-instrumentation-logging = "*"
 
 [tasks.frontend-install]
 cmd = "pnpm --dir frontend install"

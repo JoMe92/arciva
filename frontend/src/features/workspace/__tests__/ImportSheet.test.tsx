@@ -3,7 +3,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ImportSheet } from '../ProjectWorkspace'
 import { vi } from 'vitest'
 
-function createFile(name: string, opts: { type?: string; size?: number; relativePath?: string } = {}): File {
+function createFile(
+  name: string,
+  opts: { type?: string; size?: number; relativePath?: string } = {}
+): File {
   const { type = 'image/jpeg', size = 1024, relativePath } = opts
   const file = new File([new ArrayBuffer(size)], name, { type })
   if (relativePath !== undefined) {
@@ -55,7 +58,7 @@ describe('ImportSheet local selection queue feedback', () => {
         observe() {}
         unobserve() {}
         disconnect() {}
-      },
+      }
     )
     globalThis.URL.createObjectURL = vi.fn(() => 'blob://test/' + Math.random())
     globalThis.URL.revokeObjectURL = vi.fn()
@@ -87,7 +90,7 @@ describe('ImportSheet local selection queue feedback', () => {
           folderMode="custom"
           customFolder="Test Folder"
         />
-      </QueryClientProvider>,
+      </QueryClientProvider>
     )
     return { ...utils, onClose, onImport, onProgressSnapshot }
   }
@@ -116,7 +119,7 @@ describe('ImportSheet local selection queue feedback', () => {
     const folderInput = inputs[1] as HTMLInputElement
 
     const folderFiles = Array.from({ length: 64 }, (_, idx) =>
-      createFile(`nested-${idx + 1}.jpg`, { relativePath: `folder/nested-${idx + 1}.jpg` }),
+      createFile(`nested-${idx + 1}.jpg`, { relativePath: `folder/nested-${idx + 1}.jpg` })
     )
     const folderFileList = setFiles(folderInput, folderFiles)
     fireEvent.change(folderInput, { target: { files: folderFileList } })

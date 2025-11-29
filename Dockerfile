@@ -1,11 +1,13 @@
 # syntax=docker/dockerfile:1.7
 
 FROM node:20-bookworm-slim AS frontend-builder
-WORKDIR /frontend
-COPY frontend/package*.json ./
-RUN npm ci
-COPY frontend .
-RUN npm run build
+WORKDIR /workspace
+RUN corepack enable
+COPY pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY frontend/package.json frontend/
+RUN pnpm install --frozen-lockfile --filter ./frontend
+COPY frontend ./frontend
+RUN pnpm --filter ./frontend build
 
 FROM python:3.11-slim AS runtime
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -14,14 +16,14 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        build-essential \
-        libraw-dev \
-        libjpeg-dev \
-        libpng-dev \
-        libtiff5-dev \
-        libglib2.0-0 \
-        libgl1 \
-        exiftool \
+    build-essential \
+    libraw-dev \
+    libjpeg-dev \
+    libpng-dev \
+    libtiff5-dev \
+    libglib2.0-0 \
+    libgl1 \
+    exiftool \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -30,7 +32,7 @@ COPY backend/requirements.txt ./backend/requirements.txt
 RUN pip install --no-cache-dir -r backend/requirements.txt
 
 COPY backend ./backend
-COPY --from=frontend-builder /frontend/dist /app/frontend_dist
+COPY --from=frontend-builder /workspace/frontend/dist /app/frontend_dist
 COPY docker/entrypoint.sh /usr/local/bin/arciva-entrypoint.sh
 RUN chmod +x /usr/local/bin/arciva-entrypoint.sh \
     && mkdir -p /data/db /data/media /data/logs

@@ -65,7 +65,10 @@ export function StoneTrailLogo({
         <StoneTrailIcon size={size} title={`${title} logo`} />
       </span>
       {showLabel ? (
-        <span className="stone-trail-logo__label flex flex-col gap-0.5 text-[15px] tracking-tight leading-tight" aria-hidden>
+        <span
+          className="stone-trail-logo__label flex flex-col gap-0.5 text-[15px] tracking-tight leading-tight"
+          aria-hidden
+        >
           <span className="font-semibold">{title}</span>
           {slogan ? (
             <span className="stone-trail-logo__slogan text-[10px] font-normal uppercase tracking-[0.2em] leading-tight text-[var(--text-muted,#6B645B)]">

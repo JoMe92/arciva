@@ -36,7 +36,11 @@ async function parseJsonSafe<T>(res: Response): Promise<T | null> {
   }
 }
 
-function extractErrorMessage(status: number, payload: Record<string, unknown> | null, fallback: string): string {
+function extractErrorMessage(
+  status: number,
+  payload: Record<string, unknown> | null,
+  fallback: string
+): string {
   if (payload) {
     if (typeof payload.message === 'string' && payload.message.trim()) return payload.message
     if (typeof payload.detail === 'string' && payload.detail.trim()) return payload.detail
@@ -45,7 +49,10 @@ function extractErrorMessage(status: number, payload: Record<string, unknown> | 
   return `${fallback} (status ${status})`
 }
 
-export async function initUpload(projectId: string, payload: InitUploadPayload): Promise<InitUploadResponse> {
+export async function initUpload(
+  projectId: string,
+  payload: InitUploadPayload
+): Promise<InitUploadResponse> {
   const res = await fetch(requireBase(`/v1/projects/${projectId}/uploads/init`), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -74,7 +81,7 @@ export function putUpload(
   assetId: string,
   file: Blob,
   token: string,
-  onProgress?: (event: ProgressEvent<EventTarget>) => void,
+  onProgress?: (event: ProgressEvent<EventTarget>) => void
 ): Promise<PutUploadResponse> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest()
@@ -118,7 +125,7 @@ export function putUpload(
 export async function completeUpload(
   assetId: string,
   token: string,
-  options: CompleteUploadOptions,
+  options: CompleteUploadOptions
 ): Promise<CompleteUploadResponse> {
   const res = await fetch(requireBase('/v1/uploads/complete'), {
     method: 'POST',

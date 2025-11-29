@@ -70,13 +70,17 @@ const ProjectGridSkeleton: React.FC = () => (
   <div className="space-y-14">
     {skeletonRows.map((row) => (
       <div key={row.id} className={row.offsetTop ?? ''}>
-        <div className={`grid ${row.cols === 4 ? 'grid-cols-4' : 'grid-cols-3'} ${row.gapX} gap-y-10 items-start`}>
+        <div
+          className={`grid ${row.cols === 4 ? 'grid-cols-4' : 'grid-cols-3'} ${row.gapX} gap-y-10 items-start`}
+        >
           {row.items.map((item) => (
             <div
               key={item.id}
               className={`${spanClass(item.span)} rounded-xl border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] shadow-sm`}
             >
-              <div className={`relative ${aspectClass(item.aspect)} w-full overflow-hidden bg-[var(--placeholder-bg-beige,#F3EBDD)]`}>
+              <div
+                className={`relative ${aspectClass(item.aspect)} w-full overflow-hidden bg-[var(--placeholder-bg-beige,#F3EBDD)]`}
+              >
                 <RawPlaceholder
                   ratio={placeholderRatioForAspect(item.aspect)}
                   title="Loading project preview"

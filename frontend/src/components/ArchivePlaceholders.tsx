@@ -20,11 +20,16 @@ const ArchivePlaceholders: React.FC = () => {
         {ghosts.map((g) => {
           const ratio = placeholderRatioForAspect(g.aspect)
           return (
-            <div key={g.id} className="rounded-xl overflow-hidden bg-[var(--surface,#FFFFFF)] opacity-80">
+            <div
+              key={g.id}
+              className="rounded-xl overflow-hidden bg-[var(--surface,#FFFFFF)] opacity-80"
+            >
               <div className={`relative ${aspectClass(g.aspect)} w-full`}>
                 <RawPlaceholder ratio={ratio} className="absolute inset-0" title={g.label} />
               </div>
-              <div className="px-3 pt-2 pb-3 text-[11px] uppercase text-[var(--text-muted,#6B645B)]">Archive</div>
+              <div className="px-3 pt-2 pb-3 text-[11px] uppercase text-[var(--text-muted,#6B645B)]">
+                Archive
+              </div>
             </div>
           )
         })}

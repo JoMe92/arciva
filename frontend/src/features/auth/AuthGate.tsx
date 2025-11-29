@@ -33,7 +33,7 @@ export const AuthGate: React.FC = () => {
         setSubmitting(false)
       }
     },
-    [email, login, mode, password, signup, submitting],
+    [email, login, mode, password, signup, submitting]
   )
 
   const switchMode = useCallback(() => {
@@ -54,7 +54,11 @@ export const AuthGate: React.FC = () => {
       <div className="auth-visual-veil" aria-hidden />
       <div className="relative flex min-h-screen flex-col">
         <div className="mx-auto w-full max-w-7xl px-6 pt-8 sm:px-8 lg:px-10">
-          <StoneTrailLogo title="Archiver" slogan="Archiver organize once, find forever." className="drop-shadow-sm" />
+          <StoneTrailLogo
+            title="Archiver"
+            slogan="Archiver organize once, find forever."
+            className="drop-shadow-sm"
+          />
         </div>
         <div className="mx-auto flex w-full max-w-6xl flex-1 items-center justify-center px-4 pb-12 pt-6 sm:pt-10 lg:pb-16">
           <form
@@ -64,7 +68,9 @@ export const AuthGate: React.FC = () => {
             <div className="mb-4">
               <h1 className="text-xl font-semibold tracking-tight">{heading}</h1>
               <p className="text-sm text-[var(--text-muted,#6B645B)]">
-                {mode === 'login' ? 'Access your Archiver library.' : 'Choose a strong password (8+ characters).'}
+                {mode === 'login'
+                  ? 'Access your Archiver library.'
+                  : 'Choose a strong password (8+ characters).'}
               </p>
             </div>
             <label className="mb-4 block text-sm font-medium text-[var(--text-muted,#6B645B)]">
@@ -91,7 +97,9 @@ export const AuthGate: React.FC = () => {
               />
             </label>
             {error ? (
-              <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
+              <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                {error}
+              </div>
             ) : null}
             <button
               type="submit"

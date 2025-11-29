@@ -18,7 +18,12 @@ import CreateModal from '../components/modals/CreateModal'
 import ProjectSettingsDialog from '../components/modals/ProjectSettingsDialog'
 import GeneralSettingsDialog from '../components/modals/GeneralSettingsDialog'
 import UserMenu from '../features/auth/UserMenu'
-import { createProject, deleteProject, listProjects, type ProjectApiResponse } from '../shared/api/projects'
+import {
+  createProject,
+  deleteProject,
+  listProjects,
+  type ProjectApiResponse,
+} from '../shared/api/projects'
 import { updateAssetPreview } from '../shared/api/assets'
 import DeleteModal from '../components/modals/DeleteModal'
 import ProjectSettingsButton from '../components/ProjectSettingsButton'
@@ -52,7 +57,15 @@ const AppBar: React.FC<{
   filtersOpen: boolean
   onToggleFilters: () => void
   filterCount: number
-}> = ({ onCreate, onToggleArchive, archiveMode, onOpenSettings, filtersOpen, onToggleFilters, filterCount }) => {
+}> = ({
+  onCreate,
+  onToggleArchive,
+  archiveMode,
+  onOpenSettings,
+  filtersOpen,
+  onToggleFilters,
+  filterCount,
+}) => {
   const { mode, toggle } = useTheme()
   const filterButtonActive = filtersOpen || filterCount > 0
 
@@ -61,14 +74,19 @@ const AppBar: React.FC<{
       <div className="mx-auto max-w-7xl px-4 py-2 flex items-center gap-3">
         <StoneTrailLogo className="shrink-0" mode={mode} onToggleTheme={toggle} />
         <div className="ml-auto flex items-center gap-2">
-          <button onClick={onToggleArchive} className="inline-flex h-8 items-center rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 text-[12px] hover:border-[var(--text-muted,#6B645B)]">
+          <button
+            onClick={onToggleArchive}
+            className="inline-flex h-8 items-center rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 text-[12px] hover:border-[var(--text-muted,#6B645B)]"
+          >
             {archiveMode ? 'Exit archive' : 'Enter archive'}
           </button>
           <button
             type="button"
             onClick={onToggleFilters}
             className={`inline-flex h-8 items-center rounded-full border px-3 text-[12px] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--stone-trail-brand-focus,#4A463F)] ${
-              filterButtonActive ? 'border-[var(--text,#1F1E1B)] text-[var(--text,#1F1E1B)]' : 'border-[var(--border,#E1D3B9)] text-[var(--text-muted,#6B645B)] hover:border-[var(--text-muted,#6B645B)]'
+              filterButtonActive
+                ? 'border-[var(--text,#1F1E1B)] text-[var(--text,#1F1E1B)]'
+                : 'border-[var(--border,#E1D3B9)] text-[var(--text-muted,#6B645B)] hover:border-[var(--text-muted,#6B645B)]'
             }`}
             aria-expanded={filtersOpen}
             aria-controls={FILTER_PANEL_ID}
@@ -76,11 +94,20 @@ const AppBar: React.FC<{
           >
             {filterCount ? `Filters (${filterCount})` : 'Filters'}
           </button>
-          <button onClick={onCreate} className="inline-flex h-8 items-center rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 text-[12px] hover:border-[var(--text-muted,#6B645B)]">
+          <button
+            onClick={onCreate}
+            className="inline-flex h-8 items-center rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 text-[12px] hover:border-[var(--text-muted,#6B645B)]"
+          >
             <span className="mr-1">＋</span> New project
-            <kbd className="ml-2 hidden lg:inline text-[10px] text-[var(--text-muted,#6B645B)]">⌘/Ctrl+N</kbd>
+            <kbd className="ml-2 hidden lg:inline text-[10px] text-[var(--text-muted,#6B645B)]">
+              ⌘/Ctrl+N
+            </kbd>
           </button>
-          <ProjectSettingsButton onClick={onOpenSettings} label="Open application settings" title="Application settings" />
+          <ProjectSettingsButton
+            onClick={onOpenSettings}
+            label="Open application settings"
+            title="Application settings"
+          />
           <UserMenu />
         </div>
       </div>
@@ -102,7 +129,21 @@ const FilterBar: React.FC<{
   setTags: (t: string[]) => void
   onClearFilters: () => void
   id?: string
-}> = ({ projects, q, setQ, client, setClient, year, setYear, month, setMonth, tags, setTags, onClearFilters, id }) => {
+}> = ({
+  projects,
+  q,
+  setQ,
+  client,
+  setClient,
+  year,
+  setYear,
+  month,
+  setMonth,
+  tags,
+  setTags,
+  onClearFilters,
+  id,
+}) => {
   const clients = useMemo(() => unique(projects.map((p) => p.client)), [projects])
   const allTags = useMemo(() => unique(projects.flatMap((p) => p.tags || [])), [projects])
   const years = useMemo(() => {
@@ -129,7 +170,7 @@ const FilterBar: React.FC<{
     (value: string) => {
       setTags(tags.includes(value) ? tags.filter((t) => t !== value) : [...tags, value])
     },
-    [setTags, tags],
+    [setTags, tags]
   )
   const closePicker = React.useCallback(() => setTagPickerOpen(false), [])
 
@@ -166,12 +207,13 @@ const FilterBar: React.FC<{
     setTagSearch('')
   }, [onClearFilters])
 
-  const monthLabel = month ? MONTHS[Number(month) - 1] ?? null : null
+  const monthLabel = month ? (MONTHS[Number(month) - 1] ?? null) : null
   const hasFilterSelections = Boolean(client || year || month || tags.length)
   const activePills: Array<{ label: string; onClear: () => void }> = []
   if (client) activePills.push({ label: `Client: ${client}`, onClear: () => setClient('') })
   if (year) activePills.push({ label: `Year: ${year}`, onClear: () => setYear('') })
-  if (month && monthLabel) activePills.push({ label: `Month: ${monthLabel}`, onClear: () => setMonth('') })
+  if (month && monthLabel)
+    activePills.push({ label: `Month: ${monthLabel}`, onClear: () => setMonth('') })
 
   return (
     <div
@@ -251,7 +293,9 @@ const FilterBar: React.FC<{
         </div>
 
         <div className="relative w-[160px]">
-          <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">Tags</span>
+          <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">
+            Tags
+          </span>
           <button
             type="button"
             ref={tagButtonRef}
@@ -261,7 +305,14 @@ const FilterBar: React.FC<{
             aria-expanded={tagPickerOpen}
           >
             <span className="flex items-center gap-2">
-              <svg width="14" height="14" viewBox="0 0 20 20" fill="none" aria-hidden className="text-[var(--text-muted,#6B645B)]">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 20 20"
+                fill="none"
+                aria-hidden
+                className="text-[var(--text-muted,#6B645B)]"
+              >
                 <path
                   d="M5 3h10a1 1 0 0 1 .94.66l2.5 7a1 1 0 0 1-.94 1.34H2.5a1 1 0 0 1-.95-1.31l2.5-7A1 1 0 0 1 5 3zm5 12.5a1.5 1.5 0 1 1-1.5 1.5A1.5 1.5 0 0 1 10 15.5z"
                   stroke="currentColor"
@@ -305,7 +356,9 @@ const FilterBar: React.FC<{
                     </label>
                   ))
                 ) : (
-                  <div className="px-1.5 py-2 text-[12px] text-[var(--text-muted,#6B645B)]">No tags found</div>
+                  <div className="px-1.5 py-2 text-[12px] text-[var(--text-muted,#6B645B)]">
+                    No tags found
+                  </div>
                 )}
               </div>
             </div>
@@ -315,7 +368,9 @@ const FilterBar: React.FC<{
 
       <div className="mt-4 flex flex-wrap items-start gap-4">
         <div className="flex-1 min-w-[240px] rounded-2xl border border-[var(--border,#E1D3B9)] bg-[var(--surface-subtle,#FBF7EF)] px-3 py-2">
-          <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">Selected tags</div>
+          <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">
+            Selected tags
+          </div>
           <div className="tag-strip flex w-full flex-nowrap gap-1.5">
             {tags.length ? (
               tags.map((tag) => (
@@ -330,7 +385,9 @@ const FilterBar: React.FC<{
                 </button>
               ))
             ) : (
-              <span className="inline-flex items-center text-[12px] text-[var(--text-muted,#6B645B)]">No tags selected</span>
+              <span className="inline-flex items-center text-[12px] text-[var(--text-muted,#6B645B)]">
+                No tags selected
+              </span>
             )}
           </div>
         </div>
@@ -350,7 +407,9 @@ const FilterBar: React.FC<{
                 </button>
               ))
             ) : (
-              <span className="text-[12px] text-[var(--text-muted,#6B645B)]">No additional filters</span>
+              <span className="text-[12px] text-[var(--text-muted,#6B645B)]">
+                No additional filters
+              </span>
             )}
           </div>
           <div>
@@ -397,7 +456,12 @@ const MobileTopBar: React.FC<{
   return (
     <div className="fixed inset-x-0 top-0 z-50 border-b border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]/95 backdrop-blur">
       <div className="px-4 py-3 flex items-center justify-between gap-3">
-        <StoneTrailLogo className="text-base" showLabel={false} mode={mode} onToggleTheme={toggle} />
+        <StoneTrailLogo
+          className="text-base"
+          showLabel={false}
+          mode={mode}
+          onToggleTheme={toggle}
+        />
         <div className="flex items-center gap-2">
           <UserMenu variant="compact" />
           <button
@@ -509,14 +573,25 @@ export default function ProjectIndex() {
   const [generalSettingsOpen, setGeneralSettingsOpen] = useState(false)
   const openGeneralSettings = useCallback(() => setGeneralSettingsOpen(true), [])
   const closeGeneralSettings = useCallback(() => setGeneralSettingsOpen(false), [])
-  const handleGeneralSettingsSave = useCallback((nextSettings: GeneralSettings) => {
-    setGeneralSettings(nextSettings)
-  }, [setGeneralSettings])
+  const handleGeneralSettingsSave = useCallback(
+    (nextSettings: GeneralSettings) => {
+      setGeneralSettings(nextSettings)
+    },
+    [setGeneralSettings]
+  )
   const isMobileLayout = useMobileLayout()
 
-  useEffect(() => { const t = setTimeout(() => setReady(true), 400); return () => clearTimeout(t) }, [])
+  useEffect(() => {
+    const t = setTimeout(() => setReady(true), 400)
+    return () => clearTimeout(t)
+  }, [])
 
-  const { data: apiProjects, isLoading: loadingProjects, isError: projectsError, error: projectsErrorObj } = useQuery<ProjectApiResponse[], Error>({
+  const {
+    data: apiProjects,
+    isLoading: loadingProjects,
+    isError: projectsError,
+    error: projectsErrorObj,
+  } = useQuery<ProjectApiResponse[], Error>({
     queryKey: ['projects'],
     queryFn: listProjects,
   })
@@ -529,7 +604,8 @@ export default function ProjectIndex() {
     return apiProjects.map((proj) => projectFromApi(proj))
   }, [apiProjects])
 
-  const includeDemoProjects = import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEMO_PROJECTS === 'true'
+  const includeDemoProjects =
+    import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEMO_PROJECTS === 'true'
 
   const baseProjects = useMemo(() => {
     const combined = includeDemoProjects ? [...dynamicProjects, ...PROJECTS] : [...dynamicProjects]
@@ -542,8 +618,15 @@ export default function ProjectIndex() {
   })
 
   const deleteMutation = useMutation({
-    mutationFn: ({ projectId, confirmTitle, deleteAssets }: { projectId: string; confirmTitle: string; deleteAssets: boolean }) =>
-      deleteProject(projectId, { confirmTitle, deleteAssets }),
+    mutationFn: ({
+      projectId,
+      confirmTitle,
+      deleteAssets,
+    }: {
+      projectId: string
+      confirmTitle: string
+      deleteAssets: boolean
+    }) => deleteProject(projectId, { confirmTitle, deleteAssets }),
     onSuccess: (_data, vars) => {
       setDeleteError(null)
       setDeleteTarget(null)
@@ -562,56 +645,66 @@ export default function ProjectIndex() {
     },
   })
 
-  const handleSelectPrimary = useCallback(async (projectId: string, assetId: string) => {
-    const project = baseProjects.find((p) => p.id === projectId)
-    if (!project) return
-    const previews = (project.previewImages ?? []).slice().sort((a, b) => a.order - b.order)
-    const index = previews.findIndex((img) => img.assetId === assetId)
-    if (index <= 0) return
+  const handleSelectPrimary = useCallback(
+    async (projectId: string, assetId: string) => {
+      const project = baseProjects.find((p) => p.id === projectId)
+      if (!project) return
+      const previews = (project.previewImages ?? []).slice().sort((a, b) => a.order - b.order)
+      const index = previews.findIndex((img) => img.assetId === assetId)
+      if (index <= 0) return
 
-    await previewMutation.mutateAsync({ projectId, assetId })
+      await previewMutation.mutateAsync({ projectId, assetId })
 
-    const reordered = previews.slice()
-    const [selected] = reordered.splice(index, 1)
-    reordered.unshift({ ...selected })
-    const normalized = reordered.map((img, order) => ({ ...img, order }))
-    const primaryUrl = normalized[0]?.url ?? null
+      const reordered = previews.slice()
+      const [selected] = reordered.splice(index, 1)
+      reordered.unshift({ ...selected })
+      const normalized = reordered.map((img, order) => ({ ...img, order }))
+      const primaryUrl = normalized[0]?.url ?? null
 
-    setLocalEdits((prev) => ({
-      ...prev,
-      [projectId]: {
-        ...(prev[projectId] || {}),
-        previewImages: normalized,
-        image: primaryUrl,
-      },
-    }))
+      setLocalEdits((prev) => ({
+        ...prev,
+        [projectId]: {
+          ...(prev[projectId] || {}),
+          previewImages: normalized,
+          image: primaryUrl,
+        },
+      }))
 
-    setEditProject((prev) => (prev && prev.id === projectId ? { ...prev, previewImages: normalized, image: primaryUrl } : prev))
+      setEditProject((prev) =>
+        prev && prev.id === projectId
+          ? { ...prev, previewImages: normalized, image: primaryUrl }
+          : prev
+      )
 
-    queryClient.setQueryData<ProjectApiResponse[] | undefined>(['projects'], (old) => {
-      if (!old) return old
-      const idx = old.findIndex((p) => p.id === projectId)
-      if (idx === -1) return old
-      const next = old.slice()
-      const existing = next[idx].preview_images ?? []
-      const srcIdx = existing.findIndex((img) => img.asset_id === assetId)
-      if (srcIdx > 0) {
-        const clone = existing.slice()
-        const [entry] = clone.splice(srcIdx, 1)
-        clone.unshift({ ...entry })
-        next[idx] = {
-          ...next[idx],
-          preview_images: clone.map((img, order) => ({ ...img, order })),
+      queryClient.setQueryData<ProjectApiResponse[] | undefined>(['projects'], (old) => {
+        if (!old) return old
+        const idx = old.findIndex((p) => p.id === projectId)
+        if (idx === -1) return old
+        const next = old.slice()
+        const existing = next[idx].preview_images ?? []
+        const srcIdx = existing.findIndex((img) => img.asset_id === assetId)
+        if (srcIdx > 0) {
+          const clone = existing.slice()
+          const [entry] = clone.splice(srcIdx, 1)
+          clone.unshift({ ...entry })
+          next[idx] = {
+            ...next[idx],
+            preview_images: clone.map((img, order) => ({ ...img, order })),
+          }
         }
-      }
-      return next
-    })
+        return next
+      })
 
-    queryClient.invalidateQueries({ queryKey: ['projects'] })
-  }, [baseProjects, previewMutation, queryClient, setLocalEdits])
+      queryClient.invalidateQueries({ queryKey: ['projects'] })
+    },
+    [baseProjects, previewMutation, queryClient, setLocalEdits]
+  )
 
   const allTags = useMemo(() => unique(baseProjects.flatMap((p) => p.tags || [])), [baseProjects])
-  const visible = useMemo(() => baseProjects.filter((p) => (archiveMode ? isArchived(p.id) : !isArchived(p.id))), [archiveMode, baseProjects, isArchived])
+  const visible = useMemo(
+    () => baseProjects.filter((p) => (archiveMode ? isArchived(p.id) : !isArchived(p.id))),
+    [archiveMode, baseProjects, isArchived]
+  )
   const filtered = useMemo(
     () =>
       visible.filter((p) => {
@@ -633,7 +726,7 @@ export default function ProjectIndex() {
         const matchesMonth = !month || (createdMonth !== null && createdMonth === month)
         return matchesSearch && matchesClient && matchesYear && matchesMonth && matchesTags
       }),
-    [client, month, q, tags, visible, year],
+    [client, month, q, tags, visible, year]
   )
 
   const closeCreateModal = useCallback(() => {
@@ -683,14 +776,23 @@ export default function ProjectIndex() {
   }
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'n') { e.preventDefault(); openCreateModal() } }
-    window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey)
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'n') {
+        e.preventDefault()
+        openCreateModal()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
   }, [openCreateModal])
 
-  const onOpen = useCallback((id: string) => {
-    update(id)
-    navigate(`/projects/${id}`)
-  }, [navigate, update])
+  const onOpen = useCallback(
+    (id: string) => {
+      update(id)
+      navigate(`/projects/${id}`)
+    },
+    [navigate, update]
+  )
   const onArchive = (id: string) => archive(id)
   const onUnarchive = (id: string) => unarchive(id)
 
@@ -700,7 +802,9 @@ export default function ProjectIndex() {
     setEditProject(p)
     setEditOpen(true)
   }, [])
-  const closeEditor = () => { setEditOpen(false) }
+  const closeEditor = () => {
+    setEditOpen(false)
+  }
 
   // Apply edits locally so the grid reflects changes immediately.
   // We optimistically update the React Query cache for 'projects'.
@@ -750,12 +854,18 @@ export default function ProjectIndex() {
     if (tags.length) count += tags.length
     return count
   }, [client, month, q, tags, year])
-  const handleToggleArchive = () => setArchiveMode(a => !a)
+  const handleToggleArchive = () => setArchiveMode((a) => !a)
   const hasAnyFilters = Boolean(q || client || year || month || tags.length)
   const toggleFilters = useCallback(() => {
     setFiltersOpen((open) => !open)
   }, [])
-  const clearFilters = () => { setQ(''); setClient(''); setYear(''); setMonth(''); setTags([]) }
+  const clearFilters = () => {
+    setQ('')
+    setClient('')
+    setYear('')
+    setMonth('')
+    setTags([])
+  }
 
   const handleRequestDelete = useCallback((project: Project) => {
     setDeleteTarget(project)
@@ -774,7 +884,7 @@ export default function ProjectIndex() {
       setDeleteError(null)
       deleteMutation.mutate({ projectId: deleteTarget.id, confirmTitle, deleteAssets })
     },
-    [deleteMutation, deleteTarget],
+    [deleteMutation, deleteTarget]
   )
 
   const showLoadingSkeleton = loadingProjects && !apiProjects
@@ -785,14 +895,24 @@ export default function ProjectIndex() {
   const stateBlocks = (
     <>
       {projectsError && (
-        <StateHint message={`Could not load projects from server: ${projectsErrorObj?.message ?? 'Unknown error'}`} />
+        <StateHint
+          message={`Could not load projects from server: ${projectsErrorObj?.message ?? 'Unknown error'}`}
+        />
       )}
       {createError && (
-        <StateHint message={`Project could not be created: ${createError}`} actionLabel="Try again" onAction={openCreateModal} />
+        <StateHint
+          message={`Project could not be created: ${createError}`}
+          actionLabel="Try again"
+          onAction={openCreateModal}
+        />
       )}
       {!loadingProjects && !filtered.length && (
         <StateHint
-          message={hasAnyFilters ? 'No projects match your current filters.' : 'No projects yet — create one to get started.'}
+          message={
+            hasAnyFilters
+              ? 'No projects match your current filters.'
+              : 'No projects yet — create one to get started.'
+          }
           actionLabel={hasAnyFilters ? 'Clear filters' : 'Create project'}
           onAction={hasAnyFilters ? clearFilters : openCreateModal}
         />
@@ -838,7 +958,9 @@ export default function ProjectIndex() {
       </div>
       <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-10">
         <header className="mb-4">
-          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-[var(--text,#1F1E1B)]">{headerTitle}</h1>
+          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-[var(--text,#1F1E1B)]">
+            {headerTitle}
+          </h1>
           <p className="text-sm text-[var(--text-muted,#6B645B)]">{headerCopy}</p>
         </header>
         {stateBlocks}
@@ -890,8 +1012,12 @@ export default function ProjectIndex() {
           </div>
         ) : null}
         <header className="mb-5">
-          <p className="text-[11px] uppercase tracking-[0.25em] text-[var(--text-muted,#6B645B)]">Arciva</p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-[var(--text,#1F1E1B)]">{headerTitle}</h1>
+          <p className="text-[11px] uppercase tracking-[0.25em] text-[var(--text-muted,#6B645B)]">
+            Arciva
+          </p>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-[var(--text,#1F1E1B)]">
+            {headerTitle}
+          </h1>
           <p className="mt-1 text-[13px] text-[var(--text-muted,#6B645B)]">{headerCopy}</p>
         </header>
         {stateBlocks}
@@ -928,7 +1054,10 @@ export default function ProjectIndex() {
         project={editProject}
         onClose={closeEditor}
         onSave={handleSave}
-        onOpen={(id) => { update(id); navigate(`/projects/${id}`) }}
+        onOpen={(id) => {
+          update(id)
+          navigate(`/projects/${id}`)
+        }}
         archived={editProject ? isArchived(editProject.id) : false}
         onArchive={onArchive}
         onUnarchive={onUnarchive}
@@ -950,7 +1079,12 @@ export default function ProjectIndex() {
         busy={deleteMutation.isPending}
         error={deleteError}
       />
-      <GeneralSettingsDialog open={generalSettingsOpen} settings={generalSettings} onClose={closeGeneralSettings} onSave={handleGeneralSettingsSave} />
+      <GeneralSettingsDialog
+        open={generalSettingsOpen}
+        settings={generalSettings}
+        onClose={closeGeneralSettings}
+        onSave={handleGeneralSettingsSave}
+      />
     </div>
   )
 }

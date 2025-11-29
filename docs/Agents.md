@@ -1,7 +1,7 @@
 # AGENTS.md
 
- This document provides recommended steps for the OpenAI Codex assistant when making changes 
- 
+ This document provides recommended steps for the OpenAI Codex assistant when making changes
+
 ## 🧠 Architectural Principles
 
 - **Decoupled Frontend and Backend**:
@@ -14,11 +14,12 @@
   - Write code that is modular and reusable across features.
 - **Environment Variables**:
   - All secrets and configurations must use `.env` files and never be hardcoded.
-- **Documentation**:
+- **Documentation**:b
   - Update or create documentation for any public API changes (backend) or UI workflows (frontend).
 
 ---
-### 🐍 Python 
+
+### 🐍 Python
 
 - **Language Features**:
   - Use **Python 3.10+** features such as structural pattern matching and modern typing syntax (`list[int]` instead of `List[int]`).
@@ -49,6 +50,7 @@
   - **Every function, method, and class must include a docstring using the NumPy Styleguide**:
     - Describe parameters, return types, exceptions, and purpose clearly.
     - Example:
+
       ```python
       def calculate_total(price: float, tax: float) -> float:
           """
@@ -68,6 +70,7 @@
           """
           return price * (1 + tax)
       ```
+
   - Docstrings are mandatory for:
     - All public functions and methods
     - All classes and modules
@@ -80,8 +83,6 @@
   - No global mutable state.
   - Use `dataclass` or `pydantic.BaseModel` where applicable.
 
-
-
 ## 📝 Commit Messages
 
 Every code change must conclude with a commit that follows the **Conventional Commits** standard:
@@ -92,8 +93,8 @@ Every code change must conclude with a commit that follows the **Conventional Co
 
 [Optional footer]
 
+### Valid `<type>` values
 
-### Valid `<type>` values:
 - `feat`: A new feature
 - `fix`: A bug fix
 - `refactor`: Code change that neither fixes a bug nor adds a feature
@@ -105,7 +106,8 @@ Every code change must conclude with a commit that follows the **Conventional Co
 - `build`: Changes that affect the build system or external dependencies
 - `ci`: Changes to CI/CD configuration
 
-### Examples:
+### Examples
+
 - `feat(api): add user registration endpoint`
 - `fix(ui): correct alignment issue on login page`
 - `test(services): add test for order total calculation`
@@ -120,6 +122,4 @@ Every code change must conclude with a commit that follows the **Conventional Co
 4. Ensure documentation is updated (if public APIs or UX is changed).
 5. Create a single, meaningful commit using the Conventional Commits format.
 
-
 ALWAYS FOLLOW THES STEPS WEHN DOING CHANGES IN THE CODEBASE
-

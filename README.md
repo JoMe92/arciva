@@ -1,88 +1,197 @@
 # Arciva
 
-Arciva keeps photo projects together: project cards with people, notes, and assets, plus background ingest and fast thumbs. **Status: alpha (v0.1.0)** — expect schema/API changes between releases.
+Arciva is a project-first archive for photo projects. It keeps project cards with people, notes, and assets together, featuring background ingest, deduplication, RAW/EXIF reading, and fast thumbnail generation.
+
+**Status: Alpha (v0.1.0)** — Expect schema/API changes between releases.
 
 ## Features
-- Project-first archive: projects, assets, notes, people metadata
-- Async ingest with dedup, RAW/EXIF read, and thumbnail generation
-- Bundled SPA + API in one container image; simple CORS + LAN origin helpers
-- Works with Postgres (Compose) or SQLite (single-node / dev)
 
-## Known limitations (alpha)
-- No migrations guaranteed yet; backups required before upgrading
-- Single-node file storage only (POSIX paths/volumes; no S3 adapter yet)
-- Basic email/password auth (no SSO/RBAC); cookie sessions only
-- UI/API may change without compatibility promises before 0.2.0
+- **Project-Centric**: Organize assets, notes, and people metadata into projects.
+- **Smart Ingest**: Async processing with deduplication and metadata extraction.
+- **Modern Stack**: Bundled SPA + API in a single container.
+- **Flexible Storage**: Works with Postgres (Compose) or SQLite (single-node/dev).
 
-## Docker/Compose quickstart
-```bash
-# 0) Build or pull the image (choose one)
-# Build from this checkout:
-docker build -t arciva:local .
-# OR pull a published tag:
-# docker pull ghcr.io/<your-namespace>/arciva:0.1.0 && docker tag ghcr.io/<your-namespace>/arciva:0.1.0 arciva:local
+## Installation Guide (Linux)
 
-# 1) Prepare env (run in repo root)
-cp deploy/.env.arciva.example deploy/.env.arciva
-python - <<'PY'
-import secrets; print(secrets.token_hex(32))
-PY
-# paste into deploy/.env.arciva -> SECRET_KEY=...
-# set ARCIVA_IMAGE=arciva:local (or your GHCR tag)
+### Prerequisites
 
-# 2) Start the stack (repo root)
-docker compose -f deploy/docker-compose.arciva.yml --env-file deploy/.env.arciva up --build
-# add -d to detach
+- **Docker Engine** + **Docker Compose** plugin.
+- **Hardware**: At least 4GB RAM recommended.
 
-# 3) Open http://localhost:8000  (set APP_PORT in env to change host port)
+### Steps
 
-# Stop
-docker compose -f deploy/docker-compose.arciva.yml --env-file deploy/.env.arciva down
-```
-More ops details: `docs/self-hosting.md`.
+1. **Clone the repository**:
 
-### Data directories (SQLite + media)
-- Defaults (as shipped): `/data/db/app.db`, `/data/media`, `/data/logs` inside the containers. When you leave the `volumes` in `deploy/docker-compose.arciva.yml` untouched, Docker stores them in named volumes (`arciva_sqlite`, `arciva_media`, `arciva_logs`).
-- Bind-mount to your host instead: set `APP_DB_PATH=/data/db/app.db`, `APP_MEDIA_ROOT=/data/media`, `LOGS_DIR=/data/logs` in `deploy/.env.arciva` (they already default to these paths), and replace the `volumes` entries for `app`/`worker` in `deploy/docker-compose.arciva.yml`, e.g.:
-  ```
-  volumes:
-    - /media/youruser/arciva/db:/data/db
-    - /media/youruser/arciva/media:/data/media
-    - /media/youruser/arciva/logs:/data/logs
-  ```
-  Make sure those host directories exist before `docker compose up`. With `DATABASE_URL` empty, the app/worker will share the same SQLite file at `/data/db/app.db`.
+    ```bash
+    git clone https://github.com/yourusername/arciva.git
+    cd arciva
+    ```
 
-### Troubleshooting (Docker)
-- Redis port already in use: remove the `ports` block under `redis` in `deploy/docker-compose.arciva.yml`, stop your host Redis, or remap e.g. `6380:6379`.
-- 401 after login on plain HTTP: cookies are `Secure` when `APP_ENV=prod`. For HTTP testing set `APP_ENV=dev` in `deploy/.env.arciva`, or serve via HTTPS when using `prod`.
-- Can’t reach from phone/LAN: open `http://<host-lan-ip>:8000` (not localhost) and ensure your firewall allows port 8000. CORS is already handled for the bundled SPA.
+2. **Prepare the environment**:
 
-## Local development (Pixi + pnpm)
-```bash
-# One-time toolchain
-curl -fsSL https://pixi.sh/install.sh | bash
-pixi install
+    ```bash
+    cp deploy/.env.arciva.example deploy/.env.arciva
+    ```
 
-# Env files
-cp backend/.env.example .env
-cp frontend/.env.example frontend/.env.local
+    Edit `deploy/.env.arciva` (see [Configuration](#configuration) below).
 
-# Prepare data dirs + schema
-pixi run setup
+3. **Start the stack**:
 
-# Full stack (API + worker + Vite dev server + Redis/Postgres helper)
-pixi run dev-stack
-# Individual: pixi run dev-backend | pixi run dev-frontend | pixi run test-backend | pixi run lint-frontend
-```
-Defaults: API on `http://localhost:8000`, frontend on `http://localhost:5173`, media in `.dev/app-data`.
+    ```bash
+    docker compose -f deploy/docker-compose.arciva.yml --env-file deploy/.env.arciva up -d --build
+    ```
+
+4. **Access**: Open [http://localhost:8000](http://localhost:8000).
+
+## Installation Guide (Windows)
+
+### Prerequisites
+
+- **Docker Desktop** (WSL2 backend recommended).
+- **Hardware**: At least 4GB RAM.
+
+### Steps
+
+1. **Clone the repository**:
+    Open a terminal (PowerShell or WSL2):
+
+    ```bash
+    git clone https://github.com/yourusername/arciva.git
+    cd arciva
+    ```
+
+    *Note: If using WSL2, clone inside the WSL filesystem (e.g., `\\wsl$\Ubuntu\home\user\...`) for best performance.*
+
+2. **Prepare the environment**:
+
+    ```bash
+    cp deploy/.env.arciva.example deploy/.env.arciva
+    ```
+
+    Edit `deploy/.env.arciva` (see [Configuration](#configuration) below).
+
+3. **Start the stack**:
+
+    ```bash
+    docker compose -f deploy/docker-compose.arciva.yml --env-file deploy/.env.arciva up -d --build
+    ```
+
+4. **Access**: Open [http://localhost:8000](http://localhost:8000).
+
+### Troubleshooting (Windows)
+
+- **Volume Permissions**: Ensure Docker Desktop has access to the drive.
+- **Line Endings**: Clone with `git config core.autocrlf input` to avoid script errors.
+
+## Configuration
+
+### Environment Variables (`deploy/.env.arciva`)
+
+| Variable | Default | Description |
+| :--- | :--- | :--- |
+| `APP_ENV` | `prod` | Runtime environment (`prod` or `dev`). |
+| `SECRET_KEY` | `change-me` | **Required**. Security key for sessions/auth. |
+| `APP_PORT` | `8000` | Host port for the application. |
+| `DATABASE_URL` | `postgresql+asyncpg://...` | Connection string for the database. |
+| `APP_DB_PATH` | `/data/db/app.db` | Path to SQLite DB (if used). |
+| `APP_MEDIA_ROOT` | `/data/media` | Internal path for media storage. |
+| `LOGS_DIR` | `/data/logs` | Internal path for logs. |
+| `THUMB_SIZES` | `[256]` | JSON list of thumbnail sizes to generate. |
+| `MAX_UPLOAD_MB` | `1000` | Max upload size in MB. |
+| `WORKER_CONCURRENCY` | `2` | Number of concurrent worker tasks. |
+| `EXPORT_RETENTION_HOURS` | `24` | How long to keep exports. |
+| `REDIS_URL` | `redis://redis:6379/0` | Redis connection string. |
+| `ALLOWED_ORIGINS__0` | `http://localhost:8000` | CORS allowed origin. |
+| `POSTGRES_USER` | `arciva` | Postgres username. |
+| `POSTGRES_PASSWORD` | `arciva` | Postgres password. |
+| `POSTGRES_DB` | `arciva` | Postgres database name. |
+| `ARCIVA_IMAGE` | `ghcr.io/jome92/arciva:latest` | Docker image to use. |
+
+### Changing Data Storage Paths
+
+#### Media Files
+
+To store media on a specific host directory instead of a Docker volume:
+
+1. Open `deploy/docker-compose.arciva.yml`.
+2. Update the `volumes` for `app` and `worker`:
+
+    ```yaml
+    - /your/host/path/media:/data/media
+    ```
+
+#### Database
+
+**Postgres (Default)**:
+To store Postgres data on a host directory:
+
+1. Open `deploy/docker-compose.arciva.yml`.
+2. Update the `volumes` for the `postgres` service:
+
+    ```yaml
+    - /your/host/path/postgres:/var/lib/postgresql/data
+    ```
+
+**SQLite**:
+If you switch to SQLite (by unsetting `DATABASE_URL`):
+
+1. Update `volumes` for `app` and `worker`:
+
+    ```yaml
+    - /your/host/path/db:/data/db
+    ```
+
+## Development Guide (Pixi)
+
+We use [Pixi](https://pixi.sh/) for a reproducible development environment.
+
+### Setup
+
+1. **Install Pixi**:
+
+    ```bash
+    curl -fsSL https://pixi.sh/install.sh | bash
+    ```
+
+2. **Install Dependencies**:
+
+    ```bash
+    pixi install
+    ```
+
+3. **Setup Environment**:
+
+    ```bash
+    cp backend/.env.example .env
+    cp frontend/.env.example frontend/.env.local
+    pixi run setup
+    ```
+
+### Running the App
+
+- **Full Stack (Recommended)**:
+
+    ```bash
+    pixi run dev-stack
+    ```
+
+    Starts API, Worker, Vite Dev Server, and database helpers.
+
+- **Individual Services**:
+  - Backend: `pixi run dev-backend`
+  - Frontend: `pixi run dev-frontend`
+  - Tests: `pixi run test-backend`
 
 ## Documentation
-- docs/README.md — navigation hub
-- docs/self-hosting.md — Compose/self-hosting notes
-- docs/backend/dev-guide.md — backend dev loop
-- docs/frontend/setup.md — frontend setup
-- docs/architecture/arc42.md — architecture overview
-- docs/contributing/conventions.md — workflow & conventions
+
+- [Documentation Index](docs/README.md)
+- [Self-Hosting & Operations](docs/self-hosting.md)
+- [Backend Guide](docs/backend/dev-guide.md)
+- [Frontend Setup](docs/frontend/setup.md)
+- [Architecture](docs/architecture/arc42.md)
+- [Contributing](docs/contributing/conventions.md)
+- [Agents & Automation](docs/Agents.md)
 
 ## License
-MIT (subject to change before 1.0)
+
+MIT

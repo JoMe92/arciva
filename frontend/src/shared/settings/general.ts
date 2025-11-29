@@ -25,7 +25,9 @@ function readSettings(): GeneralSettings {
     if (!parsed || typeof parsed.language !== 'string') return DEFAULT_SETTINGS
     const valid = LANGUAGE_OPTIONS.some((option) => option.value === parsed.language)
     return {
-      language: valid ? (parsed.language as GeneralSettings['language']) : DEFAULT_SETTINGS.language,
+      language: valid
+        ? (parsed.language as GeneralSettings['language'])
+        : DEFAULT_SETTINGS.language,
     }
   } catch {
     return DEFAULT_SETTINGS

@@ -2,12 +2,12 @@ name: Frontend CI
 
 on:
   pull_request:
-    branches: [ main ]
+    branches: [ develop ]
     paths:
       - 'frontend/**'
       - '.github/workflows/frontend-ci.yml'
   push:
-    branches: [ main ]
+    branches: [ main, develop ]
     paths:
       - 'frontend/**'
       - '.github/workflows/frontend-ci.yml'
@@ -19,28 +19,40 @@ jobs:
   build:
     name: Lint and build
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+          run_install: false
+
+      - name: Prepare pnpm store for caching
+        run: |
+          STORE_PATH=$(pnpm store path --silent)
+          mkdir -p "$STORE_PATH"
+          if [ "$STORE_PATH" != "$HOME/.pnpm-store" ]; then
+            rm -rf "$HOME/.pnpm-store"
+            ln -s "$STORE_PATH" "$HOME/.pnpm-store"
+          fi
 
       - name: Use Node.js 20.x with pnpm cache
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: 'pnpm'
-          cache-dependency-path: frontend/pnpm-lock.yaml
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Enable pnpm
         run: corepack enable
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --filter ./frontend
 
       - name: Lint
-        run: pnpm lint
+        run: pnpm --filter ./frontend lint
 
       - name: Build
-        run: pnpm build
+        run: pnpm --filter ./frontend build

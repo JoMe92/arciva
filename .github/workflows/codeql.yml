@@ -33,3 +33,10 @@ jobs:
         uses: github/codeql-action/analyze@v3
         with:
           output: codeql-results.sarif
+          upload: false
+
+      - name: Publish SARIF artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: codeql-results
+          path: codeql-results.sarif

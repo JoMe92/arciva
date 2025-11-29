@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from functools import wraps
 import asyncio
 import logging
 from datetime import datetime, timezone
@@ -27,6 +28,30 @@ from backend.app.services.raw_reader import RawReadResult, RawReaderService
 from backend.app.services.dedup import adopt_duplicate_asset
 from backend.app.utils.assets import detect_asset_format
 from PIL import Image, ImageOps
+
+# OpenTelemetry Imports
+from opentelemetry import trace
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
+from opentelemetry.instrumentation.logging import LoggingInstrumentor
+
+tracer = trace.get_tracer(__name__)
+
+
+def trace_job(func):
+    @wraps(func)
+    async def wrapper(ctx, *args, **kwargs):
+        asset_id = kwargs.get("asset_id")
+        if asset_id is None and args:
+            asset_id = args[0]
+        
+        with tracer.start_as_current_span(func.__name__, attributes={"asset.id": str(asset_id)}):
+            return await func(ctx, *args, **kwargs)
+    return wrapper
+
 
 SETTINGS = get_settings()
 setup_logging(SETTINGS.logs_dir)
@@ -109,6 +134,7 @@ def _merge_metadata(
     return merged
 
 
+@trace_job
 async def ingest_asset(ctx, asset_id: str):
     storage = PosixStorage.from_env()
     now = datetime.now(timezone.utc)
@@ -543,7 +569,21 @@ async def ingest_asset(ctx, asset_id: str):
             return {"error": str(exc)}
 
 
+async def startup(ctx):
+    resource = Resource.create(attributes={"service.name": "arciva-worker"})
+    tracer_provider = TracerProvider(resource=resource)
+    otlp_exporter = OTLPSpanExporter()
+    span_processor = BatchSpanProcessor(otlp_exporter)
+    tracer_provider.add_span_processor(span_processor)
+    trace.set_tracer_provider(tracer_provider)
+    LoggingInstrumentor().instrument(set_logging_format=True)
+    SQLAlchemyInstrumentor().instrument()
+    logger.info("OpenTelemetry instrumented for worker")
+
+
 class WorkerSettings:
     redis_settings = RedisSettings.from_dsn(SETTINGS.redis_url)
     functions = [ingest_asset]
+    max_jobs = SETTINGS.worker_concurrency
+    on_startup = startup
     max_jobs = SETTINGS.worker_concurrency

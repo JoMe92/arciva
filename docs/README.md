@@ -32,5 +32,6 @@ Use this as the entry point for all project docs.
 
 ## Contributing & Process
 
-- [Coding conventions & workflow](contributing/conventions.md)
+- [Learning Hub (Tutorials)](learning/README.md)
+- [Contributing](contributing/conventions.md)
 - [Automation guardrails (Agents)](Agents.md)

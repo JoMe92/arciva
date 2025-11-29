@@ -20,6 +20,16 @@ from .routers import (
 from .logging_utils import setup_logging
 from .schema_utils import ensure_base_schema
 
+# OpenTelemetry Imports
+from opentelemetry import trace
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
+from opentelemetry.instrumentation.logging import LoggingInstrumentor
+
 api_logger = logging.getLogger("arciva.api")
 startup_logger = logging.getLogger("arciva.startup")
 
@@ -50,7 +60,20 @@ def create_app() -> FastAPI:
     startup_logger.info(
         "CORS allow_origins: %s", ", ".join(s.allowed_origins) or "<none>"
     )
+
+    # OpenTelemetry Setup
+    resource = Resource.create(attributes={"service.name": "arciva-backend"})
+    tracer_provider = TracerProvider(resource=resource)
+    otlp_exporter = OTLPSpanExporter()  # Defaults to localhost:4317 or env var
+    span_processor = BatchSpanProcessor(otlp_exporter)
+    tracer_provider.add_span_processor(span_processor)
+    trace.set_tracer_provider(tracer_provider)
+
+    LoggingInstrumentor().instrument(set_logging_format=True)
+    SQLAlchemyInstrumentor().instrument()
+
     app = FastAPI(title="Arciva API", version="0.1.0")
+    FastAPIInstrumentor.instrument_app(app, tracer_provider=tracer_provider)
 
     app.add_middleware(
         CORSMiddleware,

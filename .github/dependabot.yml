@@ -5,15 +5,18 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    target-branch: "develop"
 
   # Maintain Python dependencies
   - package-ecosystem: "pip"
     directory: "/backend"
     schedule:
       interval: "weekly"
+    target-branch: "develop"
 
   # Maintain Node.js dependencies
   - package-ecosystem: "npm"
     directory: "/frontend"
     schedule:
       interval: "weekly"
+    target-branch: "develop"

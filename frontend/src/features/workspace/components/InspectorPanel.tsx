@@ -126,7 +126,7 @@ export function InspectorPanel({
     : 'flex h-full min-h-0 flex-col overflow-hidden rounded-[var(--r-lg,20px)] border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] p-4 shadow-[0_30px_80px_rgba(31,30,27,0.16)]'
   const panelContentClass = isMobilePanel
     ? 'flex flex-1 min-h-0 flex-col gap-3 pb-4'
-    : 'flex flex-1 min-h-0 flex-col gap-3 overflow-y-auto pr-2'
+    : 'flex flex-1 min-h-0 flex-col gap-3 overflow-y-auto pr-4'
   const mergedInspectorFields = useMemo(() => {
     const map = new Map<string, string>()
     generalFields.forEach((field) => {
@@ -200,13 +200,13 @@ export function InspectorPanel({
       id={RIGHT_PANEL_ID}
       role="complementary"
       aria-label="Image Details panel"
-      className={`relative h - full min - h - 0 ${isMobilePanel ? 'px-3 py-4' : 'px-2 py-4'} `}
+      className={`relative h-full min-h-0 ${isMobilePanel ? 'px-3 py-4' : 'px-2 py-4'} `}
       data-state={collapsedState ? 'collapsed' : 'expanded'}
     >
       <div
         data-panel="body"
         aria-hidden={collapsedState}
-        className={`h - full min - h - 0 ${isMobilePanel ? '' : `transition-opacity duration-150 ${collapsedState ? 'pointer-events-none opacity-0' : 'opacity-100'}`} `}
+        className={`h-full min-h-0 ${isMobilePanel ? '' : `transition-opacity duration-150 ${collapsedState ? 'pointer-events-none opacity-0' : 'opacity-100'}`} `}
       >
         <div className={panelShellClass}>
           {!isMobilePanel ? (
@@ -627,7 +627,7 @@ const InspectorSection = React.forwardRef<HTMLDivElement | null, InspectorSectio
         <div
           id={`${id}-content`}
           aria-hidden={!open}
-          className={`${open ? `${grow ? 'flex flex-col ' : ''}px-4 pb-4 pt-1` : 'hidden'} ${growClasses}`}
+          className={`${open ? `${grow ? 'flex flex-col overflow-y-auto ' : ''}px-4 pb-4 pt-1` : 'hidden'} ${growClasses}`}
         >
           {children}
         </div>
@@ -889,11 +889,10 @@ function MetadataSourceRow({
       type="button"
       role="radio"
       aria-checked={selected}
-      className={`flex w-full items-center gap-3 rounded-[12px] border px-3 py-2.5 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)] ${
-        selected
-          ? 'border-[var(--river-400,#69A3AE)] bg-[var(--river-50,#F0F7F6)]'
-          : 'border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] hover:border-[var(--text,#1F1E1B)]'
-      } ${disabled ? 'cursor-not-allowed opacity-70' : ''}`}
+      className={`flex w-full items-center gap-3 rounded-[12px] border px-3 py-2.5 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)] ${selected
+        ? 'border-[var(--river-400,#69A3AE)] bg-[var(--river-50,#F0F7F6)]'
+        : 'border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] hover:border-[var(--text,#1F1E1B)]'
+        } ${disabled ? 'cursor-not-allowed opacity-70' : ''}`}
       disabled={disabled}
       onClick={() => {
         if (!disabled) onSelect()
@@ -918,9 +917,8 @@ function RadioIndicator({ selected }: { selected: boolean }) {
   return (
     <span
       aria-hidden="true"
-      className={`inline-flex h-4 w-4 items-center justify-center rounded-full border ${
-        selected ? 'border-[var(--river-500,#3B7F87)]' : 'border-[var(--border,#EDE1C6)]'
-      }`}
+      className={`inline-flex h-4 w-4 items-center justify-center rounded-full border ${selected ? 'border-[var(--river-500,#3B7F87)]' : 'border-[var(--border,#EDE1C6)]'
+        }`}
     >
       <span
         className={`h-2 w-2 rounded-full ${selected ? 'bg-[var(--river-500,#3B7F87)]' : 'bg-transparent'}`}

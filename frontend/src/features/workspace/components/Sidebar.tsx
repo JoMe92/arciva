@@ -152,7 +152,7 @@ export function Sidebar({
     : 'flex h-full min-h-0 flex-col overflow-hidden rounded-[var(--r-lg,20px)] border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] p-4 shadow-[0_30px_80px_rgba(31,30,27,0.16)]'
   const panelContentClass = isMobilePanel
     ? 'flex flex-1 min-h-0 flex-col gap-3 pb-4'
-    : 'flex flex-1 min-h-0 flex-col gap-3 overflow-y-auto pr-2'
+    : 'flex flex-1 min-h-0 flex-col gap-3 overflow-y-auto pr-4'
 
   const hasDateFilter = !!selectedDayKey
 
@@ -245,7 +245,6 @@ export function Sidebar({
               label="Date"
               open={dateSectionOpen}
               onToggle={() => setDateSectionOpen((open) => !open)}
-              grow
             >
               {dateTree.length ? (
                 <ul className="space-y-1">
@@ -447,7 +446,7 @@ const InspectorSection = React.forwardRef<HTMLDivElement | null, InspectorSectio
         <div
           id={`${id}-content`}
           aria-hidden={!open}
-          className={`${open ? `${grow ? 'flex flex-col ' : ''}px-4 pb-4 pt-1` : 'hidden'} ${growClasses}`}
+          className={`${open ? `${grow ? 'flex flex-col overflow-y-auto ' : ''}px-4 pb-4 pt-1` : 'hidden'} ${growClasses}`}
         >
           {children}
         </div>
@@ -632,7 +631,7 @@ function ProjectOverviewDetails({
             <span className="text-[12px] text-[var(--text-muted,#6B645B)]">No tags</span>
           )}
         </div>
-        <div className="mt-2 flex items-center gap-2">
+        <div className="mt-2 flex flex-wrap items-center gap-2 sm:flex-nowrap">
           <input
             value={tagDraft}
             onChange={(event) => setTagDraft(event.target.value)}
@@ -644,13 +643,13 @@ function ProjectOverviewDetails({
             }}
             disabled={updatePending}
             placeholder="Add tag"
-            className="h-9 flex-1 rounded-full border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] px-3 text-[12px] text-[var(--text,#1F1E1B)] focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring,#1A73E8)]"
+            className="h-9 min-w-0 flex-auto basis-full rounded-full border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] px-3 text-[12px] text-[var(--text,#1F1E1B)] focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring,#1A73E8)] sm:basis-[65%]"
           />
           <button
             type="button"
             onClick={handleAddTag}
             disabled={updatePending}
-            className="inline-flex h-9 items-center rounded-full border border-[var(--border,#EDE1C6)] px-4 text-[12px] font-semibold text-[var(--text,#1F1E1B)]"
+            className="inline-flex h-9 flex-none items-center rounded-full border border-[var(--border,#EDE1C6)] px-4 text-[12px] font-semibold text-[var(--text,#1F1E1B)]"
           >
             Add
           </button>

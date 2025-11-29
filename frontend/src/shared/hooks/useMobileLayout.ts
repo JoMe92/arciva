@@ -5,9 +5,10 @@ const MOBILE_BREAKPOINT = 768
 const computeIsMobileLayout = () => {
   if (typeof window === 'undefined') return false
   const width = window.innerWidth
-  const prefersPortrait = typeof window.matchMedia === 'function'
-    ? window.matchMedia('(orientation: portrait)').matches
-    : window.innerHeight >= window.innerWidth
+  const prefersPortrait =
+    typeof window.matchMedia === 'function'
+      ? window.matchMedia('(orientation: portrait)').matches
+      : window.innerHeight >= window.innerWidth
   return width < MOBILE_BREAKPOINT && prefersPortrait
 }
 

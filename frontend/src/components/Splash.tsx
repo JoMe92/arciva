@@ -1,6 +1,6 @@
-import React from 'react';
-import { motion } from 'framer-motion';
-import StoneTrailIcon from './StoneTrailIcon';
+import React from 'react'
+import { motion } from 'framer-motion'
+import StoneTrailIcon from './StoneTrailIcon'
 
 /**
  * Splash screen displayed while demo assets are loading. It features
@@ -22,11 +22,13 @@ const Splash: React.FC = () => {
         </span>
         <div>
           <div className="text-base font-semibold tracking-tight">Loading your projects…</div>
-          <div className="text-xs text-[var(--text-muted,#6B645B)]">Preparing key assets & presets</div>
+          <div className="text-xs text-[var(--text-muted,#6B645B)]">
+            Preparing key assets & presets
+          </div>
         </div>
       </motion.div>
     </div>
-  );
-};
+  )
+}
 
-export default Splash;
+export default Splash

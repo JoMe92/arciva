@@ -11,11 +11,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from PIL import Image
 
-from ..adapters.raw_py import RawPyAdapter, RawPyAdapterError, RawPyReadResult, RawPyThumbnail
+from ..adapters.raw_py import (
+    RawPyAdapter,
+    RawPyAdapterError,
+    RawPyReadResult,
+    RawPyThumbnail,
+)
 
 
 class RawReaderProcessingError(RuntimeError):
@@ -155,7 +160,9 @@ class RawReaderService:
 
         if raw_result.thumbnail:
             try:
-                preview_bytes, preview_width, preview_height = self._normalise_thumbnail(raw_result.thumbnail)
+                preview_bytes, preview_width, preview_height = (
+                    self._normalise_thumbnail(raw_result.thumbnail)
+                )
                 preview_source = "thumbnail"
             except RawReaderProcessingError as exc:
                 warnings.append("RAW_THUMBNAIL_CONVERSION_FAILED")
@@ -211,7 +218,9 @@ class RawReaderService:
         }
         return {key: value for key, value in candidates.items() if value is not None}
 
-    def _normalise_thumbnail(self, thumbnail: RawPyThumbnail) -> Tuple[bytes, Optional[int], Optional[int]]:
+    def _normalise_thumbnail(
+        self, thumbnail: RawPyThumbnail
+    ) -> Tuple[bytes, Optional[int], Optional[int]]:
         """
         Ensure the embedded thumbnail is represented as JPEG bytes.
 
@@ -237,10 +246,14 @@ class RawReaderService:
         if fmt == "bitmap":
             return self._convert_bitmap_thumbnail(thumbnail)
 
-        raise RawReaderProcessingError(f"Unsupported RAW thumbnail format: {thumbnail.format!r}")
+        raise RawReaderProcessingError(
+            f"Unsupported RAW thumbnail format: {thumbnail.format!r}"
+        )
 
     @staticmethod
-    def _convert_bitmap_thumbnail(thumbnail: RawPyThumbnail) -> Tuple[bytes, Optional[int], Optional[int]]:
+    def _convert_bitmap_thumbnail(
+        thumbnail: RawPyThumbnail,
+    ) -> Tuple[bytes, Optional[int], Optional[int]]:
         """
         Convert a bitmap thumbnail into JPEG bytes.
 

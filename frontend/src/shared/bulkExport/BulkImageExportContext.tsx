@@ -1,4 +1,12 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import {
   exportAllProjectImages,
   getBulkExportEstimate,
@@ -165,7 +173,7 @@ export const BulkExportProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       dismissExport,
       downloadResult,
     }),
-    [state, startExport, cancelExport, dismissExport, downloadResult],
+    [state, startExport, cancelExport, dismissExport, downloadResult]
   )
 
   return <BulkExportContext.Provider value={value}>{children}</BulkExportContext.Provider>

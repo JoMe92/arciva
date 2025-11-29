@@ -2,21 +2,28 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field, field_validator
 from functools import lru_cache
-from typing import Any, List, Optional
+from typing import Any, List
 from pathlib import Path
 import logging
 import os
 import json
 import socket
 
+
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", case_sensitive=False, extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=".env", case_sensitive=False, extra="ignore"
+    )
 
     app_env: str = "dev"
     secret_key: str = "changeme"
 
-    # Default to both localhost and loopback since browsers treat them as different origins.
-    allowed_origins: List[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
+    # Default to both localhost and loopback since browsers treat them as
+    # different origins.
+    allowed_origins: List[str] = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ]
 
     # Database configuration (PostgreSQL via DATABASE_URL or SQLite fallback)
     app_db_path: str = "/data/db/app.db"
@@ -69,11 +76,14 @@ class Settings(BaseSettings):
             return [v]
         return v
 
+
 _config_logger = logging.getLogger("arciva.config")
+
 
 def _fail_config(message: str) -> None:
     _config_logger.error(message)
     raise RuntimeError(message)
+
 
 def _normalize_path(raw: str, *, name: str) -> Path:
     candidate = Path(raw).expanduser()
@@ -83,6 +93,7 @@ def _normalize_path(raw: str, *, name: str) -> Path:
         return candidate.resolve(strict=False)
     except FileNotFoundError:
         return candidate
+
 
 def _check_directory_access(path: Path, *, description: str) -> None:
     try:
@@ -95,6 +106,7 @@ def _check_directory_access(path: Path, *, description: str) -> None:
         test_file.unlink(missing_ok=True)
     except OSError as exc:  # pragma: no cover - depends on host FS
         _fail_config(f"{description} is not writable ({path}): {exc}")
+
 
 def _validate_db_path(raw: str) -> Path:
     if not raw:
@@ -110,12 +122,14 @@ def _validate_db_path(raw: str) -> Path:
         _fail_config(f"Cannot access database file {path}: {exc}")
     return path
 
+
 def _validate_media_root(raw: str) -> Path:
     if not raw:
         _fail_config("APP_MEDIA_ROOT is required.")
     path = _normalize_path(raw, name="APP_MEDIA_ROOT")
     _check_directory_access(path, description="media root")
     return path
+
 
 def _detect_local_ipv4_addresses() -> List[str]:
     """Return non-loopback IPv4 addresses assigned to this host."""
@@ -134,10 +148,12 @@ def _detect_local_ipv4_addresses() -> List[str]:
         pass
     return [ip for ip in ips if not ip.startswith("127.")]
 
+
 def _subdir(root: Path, name: str) -> Path:
     sub = root / name
     _check_directory_access(sub, description=f"media subdirectory '{name}'")
     return sub
+
 
 @lru_cache
 def get_settings() -> Settings:
@@ -160,7 +176,10 @@ def get_settings() -> Settings:
         except ValueError:
             pass
         else:
-            _fail_config("APP_DB_PATH must not be located inside APP_MEDIA_ROOT; choose a separate directory.")
+            _fail_config(
+                "APP_DB_PATH must not be located inside APP_MEDIA_ROOT; "
+                "choose a separate directory."
+            )
         s.app_db_path = str(db_path)
         s.database_url = f"sqlite+aiosqlite:///{db_path}"
 
@@ -183,9 +202,7 @@ def get_settings() -> Settings:
     s.logs_dir = str(logs_path)
     if s.app_env.lower() == "dev" and s.allow_lan_frontend_origins:
         lan_ips = _detect_local_ipv4_addresses()
-        extra_origins = [
-            f"http://{ip}:{s.dev_frontend_port}" for ip in lan_ips if ip
-        ]
+        extra_origins = [f"http://{ip}:{s.dev_frontend_port}" for ip in lan_ips if ip]
         for origin in extra_origins:
             if origin not in s.allowed_origins:
                 s.allowed_origins.append(origin)

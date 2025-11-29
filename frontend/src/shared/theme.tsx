@@ -12,7 +12,8 @@ type ThemeContextValue = {
 
 const ThemeContext = React.createContext<ThemeContextValue | null>(null)
 
-const isThemeMode = (value: string | null | undefined): value is ThemeMode => value === 'light' || value === 'dark'
+const isThemeMode = (value: string | null | undefined): value is ThemeMode =>
+  value === 'light' || value === 'dark'
 
 const readStoredMode = (): ThemeMode | null => {
   if (typeof window === 'undefined') return null
@@ -60,16 +61,20 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return next
   }, [])
 
-  const setMode = React.useCallback((next: ThemeMode) => {
-    setModeState(commitMode(next))
-  }, [commitMode])
+  const setMode = React.useCallback(
+    (next: ThemeMode) => {
+      setModeState(commitMode(next))
+    },
+    [commitMode]
+  )
 
   const toggle = React.useCallback(() => {
     setModeState((prev) => commitMode(prev === 'light' ? 'dark' : 'light'))
   }, [commitMode])
 
   React.useEffect(() => {
-    const mediaQuery = typeof window !== 'undefined' ? window.matchMedia('(prefers-color-scheme: dark)') : null
+    const mediaQuery =
+      typeof window !== 'undefined' ? window.matchMedia('(prefers-color-scheme: dark)') : null
     if (!mediaQuery) return
     const stored = readStoredMode()
     if (stored) return

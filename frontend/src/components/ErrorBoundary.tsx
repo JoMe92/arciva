@@ -22,10 +22,12 @@ export default class ErrorBoundary extends React.Component<ErrorBoundaryProps, E
 
   render() {
     if (this.state.hasError) {
-      return this.props.fallback ?? (
-        <div className="p-6 text-sm text-[var(--text,#1F1E1B)]">
-          Something went wrong while loading this panel. Close it and try again.
-        </div>
+      return (
+        this.props.fallback ?? (
+          <div className="p-6 text-sm text-[var(--text,#1F1E1B)]">
+            Something went wrong while loading this panel. Close it and try again.
+          </div>
+        )
       )
     }
     return this.props.children

@@ -4,6 +4,8 @@ export function cssVar(name: string, fallback: string) {
   return v || fallback
 }
 
+import { ColorTag } from './types'
+
 export const TOKENS = {
   clay500: cssVar('--clay-500', '#A56A4A'),
   sand50: cssVar('--sand-50', '#FBF7EF'),
@@ -15,7 +17,17 @@ export const TOKENS = {
   river500: cssVar('--river-500', '#6B7C7A'),
 }
 
-const DEMO_RATIOS: import('../../shared/placeholder').PlaceholderRatio[] = ['3x2', '4x3', '16x9', '2x3', '3x4', '9x16', '1x2', '2x1', '1x1']
+const DEMO_RATIOS: import('../../shared/placeholder').PlaceholderRatio[] = [
+  '3x2',
+  '4x3',
+  '16x9',
+  '2x3',
+  '3x4',
+  '9x16',
+  '1x2',
+  '2x1',
+  '1x1',
+]
 
 export function randomPlaceholderRatio() {
   return DEMO_RATIOS[Math.floor(Math.random() * DEMO_RATIOS.length)]
@@ -46,4 +58,52 @@ export function makeDemo(n = 24) {
     })
   }
   return out
+}
+
+export function computeCols(containerWidth: number, size: number, gap: number): number {
+  if (!Number.isFinite(containerWidth) || containerWidth <= 0) return 1
+  if (!Number.isFinite(size) || size <= 0) return 1
+  const divisor = size + gap
+  if (divisor <= 0) return 1
+  const possible = Math.floor((containerWidth + gap) / divisor)
+  return Math.max(1, possible)
+}
+
+export function setsAreEqual<T>(a: Set<T>, b: Set<T>): boolean {
+  if (a.size !== b.size) return false
+  for (const value of a) {
+    if (!b.has(value)) return false
+  }
+  return true
+}
+
+export const COLOR_MAP: Record<ColorTag, string> = {
+  None: '#E5E7EB',
+  Red: '#F87171',
+  Green: '#34D399',
+  Blue: '#60A5FA',
+  Yellow: '#FBBF24',
+  Purple: '#C084FC',
+}
+
+export const PROJECT_DATE_FORMAT =
+  typeof Intl !== 'undefined' ? new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }) : null
+
+export function projectInitials(name: string): string {
+  const parts = name.split(/\s+/).filter(Boolean)
+  if (!parts.length) return 'P'
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  return `${parts[0][0]}${parts[1][0]}`.toUpperCase()
+}
+
+export function localizedMonthLabel(date: Date): string {
+  return date.toLocaleString('default', { month: 'long' })
+}
+
+export function makeMonthKey(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+}
+
+export function makeDayKey(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 }

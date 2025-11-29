@@ -60,9 +60,13 @@ async def estimate_bulk_image_export(
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    total_files, total_bytes = await bulk_image_exports.estimate_bulk_image_export(db, current_user.id)
+    total_files, total_bytes = await bulk_image_exports.estimate_bulk_image_export(
+        db, current_user.id
+    )
     if total_files == 0:
-        raise HTTPException(status_code=400, detail="No project images available to export.")
+        raise HTTPException(
+            status_code=400, detail="No project images available to export."
+        )
     return schemas.BulkImageExportEstimate(
         total_files=total_files,
         total_bytes=total_bytes,
@@ -77,9 +81,13 @@ async def start_bulk_image_export(
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    asset_ids = await bulk_image_exports.collect_bulk_export_asset_ids(db, current_user.id)
+    asset_ids = await bulk_image_exports.collect_bulk_export_asset_ids(
+        db, current_user.id
+    )
     if not asset_ids:
-        raise HTTPException(status_code=400, detail="No project images available to export.")
+        raise HTTPException(
+            status_code=400, detail="No project images available to export."
+        )
     job = models.BulkImageExport(
         user_id=current_user.id,
         asset_ids=[str(asset_id) for asset_id in asset_ids],

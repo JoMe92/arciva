@@ -32,7 +32,11 @@ async def test_bulk_image_export_flow(client, TestSessionLocal):
         await session.execute(delete(models.Asset))
         await session.commit()
 
-    project_payload = {"title": "Bulk Export", "client": "ACME", "note": "all images"}
+    project_payload = {
+        "title": "Bulk Export",
+        "client": "ACME",
+        "note": "all images",
+    }
     project_res = await client.post("/v1/projects", json=project_payload)
     assert project_res.status_code == 201
     project_id = project_res.json()["id"]
@@ -44,6 +48,7 @@ async def test_bulk_image_export_flow(client, TestSessionLocal):
 
     async with TestSessionLocal() as session:
         asset = models.Asset(
+            user_id=uuid.UUID("12345678-1234-5678-1234-567812345678"),
             original_filename="Final Shot.jpg",
             mime="image/jpeg",
             size_bytes=10,
@@ -53,7 +58,13 @@ async def test_bulk_image_export_flow(client, TestSessionLocal):
         )
         session.add(asset)
         await session.flush()
-        session.add(models.ProjectAsset(project_id=uuid.UUID(project_id), asset_id=asset.id))
+        session.add(
+            models.ProjectAsset(
+                user_id=uuid.UUID("12345678-1234-5678-1234-567812345678"),
+                project_id=uuid.UUID(project_id),
+                asset_id=asset.id,
+            )
+        )
         await session.commit()
 
     estimate_res = await client.get("/v1/bulk-image-exports/estimate")

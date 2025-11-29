@@ -1,4 +1,4 @@
-import React, { memo, useMemo, useCallback } from "react";
+import React, { memo, useMemo, useCallback } from 'react'
 
 // EditActionGrid20 – 20 common image editing actions (Case 2)
 // Self‑contained: no external deps; production‑ready structure, a11y, and lightweight styling.
@@ -6,35 +6,44 @@ import React, { memo, useMemo, useCallback } from "react";
 // -----------------------------
 // Types
 // -----------------------------
-export type Variant = "primary" | "secondary" | "accent" | "destructive" | "ghost";
+export type Variant = 'primary' | 'secondary' | 'accent' | 'destructive' | 'ghost'
 
 export interface ActionItem {
-  id: string;
-  label: string;
-  variant?: Variant;
-  disabled?: boolean;
+  id: string
+  label: string
+  variant?: Variant
+  disabled?: boolean
 }
 
 interface ButtonProps {
-  label: string;
-  variant?: Variant;
-  disabled?: boolean;
-  onClick?: () => void;
-  testId?: string;
-  icon?: React.ReactNode;
+  label: string
+  variant?: Variant
+  disabled?: boolean
+  onClick?: () => void
+  testId?: string
+  icon?: React.ReactNode
 }
 
 // -----------------------------
 // Helpers
 // -----------------------------
-const cx = (...parts: Array<string | false | null | undefined>) => parts.filter(Boolean).join(" ");
+const cx = (...parts: Array<string | false | null | undefined>) => parts.filter(Boolean).join(' ')
 
-const Button = memo(function Button({ label, variant = "secondary", disabled, onClick, testId, icon }: ButtonProps) {
+const Button = memo(function Button({
+  label,
+  variant = 'secondary',
+  disabled,
+  onClick,
+  testId,
+  icon,
+}: ButtonProps) {
   const className = useMemo(
-    () => cx("btn", `btn--${variant}`, disabled && "is-disabled"),
+    () => cx('btn', `btn--${variant}`, disabled && 'is-disabled'),
     [variant, disabled]
-  );
-  const handleClick = useCallback(() => { if (!disabled) onClick?.(); }, [disabled, onClick]);
+  )
+  const handleClick = useCallback(() => {
+    if (!disabled) onClick?.()
+  }, [disabled, onClick])
 
   return (
     <button
@@ -46,71 +55,297 @@ const Button = memo(function Button({ label, variant = "secondary", disabled, on
       disabled={disabled}
       data-testid={testId}
     >
-      {icon && <span className="btn__icon" aria-hidden="true">{icon}</span>}
+      {icon && (
+        <span className="btn__icon" aria-hidden="true">
+          {icon}
+        </span>
+      )}
       <span className="btn__label">{label}</span>
     </button>
-  );
-});
+  )
+})
 
 // -----------------------------
 // Edit Actions (Case 2)
 // -----------------------------
 const ACTIONS: ActionItem[] = [
-  { id: "crop",           label: "Crop",            variant: "primary" },
-  { id: "straighten",     label: "Straighten",      variant: "primary" },
-  { id: "rotate-left",    label: "Rotate Left",     variant: "primary" },
-  { id: "rotate-right",   label: "Rotate Right",    variant: "primary" },
-  { id: "flip-h",         label: "Flip Horizontal", variant: "primary" },
-  { id: "flip-v",         label: "Flip Vertical",   variant: "primary" },
-  { id: "resize",         label: "Resize",          variant: "primary" },
-  { id: "canvas-size",    label: "Canvas Size",     variant: "primary" },
-  { id: "perspective",    label: "Perspective",     variant: "primary" },
-  { id: "skew",           label: "Skew",            variant: "primary" },
-  { id: "aspect-1-1",     label: "Aspect 1:1",     variant: "primary" },
-  { id: "aspect-4-5",     label: "Aspect 4:5",     variant: "primary" },
-  { id: "aspect-16-9",    label: "Aspect 16:9",    variant: "primary" },
-  { id: "aspect-9-16",    label: "Aspect 9:16",    variant: "primary" },
-  { id: "auto-enhance",   label: "Auto Enhance",    variant: "primary" },
-  { id: "exposure",       label: "Exposure",        variant: "primary" },
-  { id: "contrast",       label: "Contrast",        variant: "primary" },
-  { id: "saturation",     label: "Saturation",      variant: "primary" },
-  { id: "temperature",    label: "Temperature",     variant: "primary" },
-  { id: "sharpen",        label: "Sharpen",         variant: "primary" },
-];
+  { id: 'crop', label: 'Crop', variant: 'primary' },
+  { id: 'straighten', label: 'Straighten', variant: 'primary' },
+  { id: 'rotate-left', label: 'Rotate Left', variant: 'primary' },
+  { id: 'rotate-right', label: 'Rotate Right', variant: 'primary' },
+  { id: 'flip-h', label: 'Flip Horizontal', variant: 'primary' },
+  { id: 'flip-v', label: 'Flip Vertical', variant: 'primary' },
+  { id: 'resize', label: 'Resize', variant: 'primary' },
+  { id: 'canvas-size', label: 'Canvas Size', variant: 'primary' },
+  { id: 'perspective', label: 'Perspective', variant: 'primary' },
+  { id: 'skew', label: 'Skew', variant: 'primary' },
+  { id: 'aspect-1-1', label: 'Aspect 1:1', variant: 'primary' },
+  { id: 'aspect-4-5', label: 'Aspect 4:5', variant: 'primary' },
+  { id: 'aspect-16-9', label: 'Aspect 16:9', variant: 'primary' },
+  { id: 'aspect-9-16', label: 'Aspect 9:16', variant: 'primary' },
+  { id: 'auto-enhance', label: 'Auto Enhance', variant: 'primary' },
+  { id: 'exposure', label: 'Exposure', variant: 'primary' },
+  { id: 'contrast', label: 'Contrast', variant: 'primary' },
+  { id: 'saturation', label: 'Saturation', variant: 'primary' },
+  { id: 'temperature', label: 'Temperature', variant: 'primary' },
+  { id: 'sharpen', label: 'Sharpen', variant: 'primary' },
+]
 
 // -----------------------------
 // Icons (inline SVG)
 // -----------------------------
-const Svg: React.FC<{ path: React.ReactNode; viewBox?: string }> = ({ path, viewBox = "0 0 24 24" }) => (
-  <svg width="18" height="18" viewBox={viewBox} fill="none" xmlns="http://www.w3.org/2000/svg" focusable="false">
+const Svg: React.FC<{ path: React.ReactNode; viewBox?: string }> = ({
+  path,
+  viewBox = '0 0 24 24',
+}) => (
+  <svg
+    width="18"
+    height="18"
+    viewBox={viewBox}
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    focusable="false"
+  >
     {path}
   </svg>
-);
+)
 
 const ICONS: Record<string, React.ReactNode> = {
-  crop: <Svg path={<path d="M7 3v12h12M3 7h12v12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>} />,
-  straighten: <Svg path={<><path d="M4 14h16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/><path d="M5 14l2.5-4 3 5 3-6 3 5 2.5-4" stroke="currentColor" strokeWidth="1.2"/></>} />,
-  "rotate-left": <Svg path={<><path d="M8 8H4V4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/><path d="M6 6a8 8 0 1 1-2 5" stroke="currentColor" strokeWidth="1.6" fill="none"/></>} />,
-  "rotate-right": <Svg path={<><path d="M16 8h4V4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/><path d="M18 6a8 8 0 1 0 2 5" stroke="currentColor" strokeWidth="1.6" fill="none"/></>} />,
-  "flip-h": <Svg path={<><rect x="4" y="4" width="16" height="16" rx="2" stroke="currentColor" strokeWidth="1.6"/><path d="M12 4v16M12 6l3 3M12 10l5 0M12 14l5 0M12 18l3-3" stroke="currentColor" strokeWidth="1.2"/></>} />,
-  "flip-v": <Svg path={<><rect x="4" y="4" width="16" height="16" rx="2" stroke="currentColor" strokeWidth="1.6"/><path d="M4 12h16M6 12l3 3M10 12l0 5M14 12l0 5M18 12l-3 3" stroke="currentColor" strokeWidth="1.2"/></>} />,
-  resize: <Svg path={<><path d="M20 14v6h-6" stroke="currentColor" strokeWidth="1.6"/><path d="M10 4H4v6" stroke="currentColor" strokeWidth="1.6"/><path d="M14 20l6-6M4 10l6-6" stroke="currentColor" strokeWidth="1.6"/></>} />,
-  "canvas-size": <Svg path={<><rect x="5" y="5" width="14" height="14" rx="2" stroke="currentColor" strokeWidth="1.6"/><path d="M9 9h6v6H9z" stroke="currentColor" strokeWidth="1.2"/></>} />,
-  perspective: <Svg path={<><path d="M4 8l8-4 8 4v8l-8 4-8-4V8z" stroke="currentColor" strokeWidth="1.6"/><path d="M4 12h16" stroke="currentColor" strokeWidth="1.2"/></>} />,
-  skew: <Svg path={<><rect x="6" y="6" width="12" height="12" transform="skewX(-15)" stroke="currentColor" strokeWidth="1.6"/></>} viewBox="0 0 24 24" />,
-  "aspect-1-1": <Svg path={<><rect x="5" y="5" width="14" height="14" rx="2" stroke="currentColor" strokeWidth="1.6"/><path d="M9 9h6v6H9z" stroke="currentColor" strokeWidth="1.2"/></>} />,
-  "aspect-4-5": <Svg path={<><rect x="5" y="4" width="14" height="16" rx="2" stroke="currentColor" strokeWidth="1.6"/><path d="M8 7h8v10H8z" stroke="currentColor" strokeWidth="1.2"/></>} />,
-  "aspect-16-9": <Svg path={<><rect x="4" y="7" width="16" height="10" rx="2" stroke="currentColor" strokeWidth="1.6"/><path d="M7 9h10v6H7z" stroke="currentColor" strokeWidth="1.2"/></>} />,
-  "aspect-9-16": <Svg path={<><rect x="7" y="4" width="10" height="16" rx="2" stroke="currentColor" strokeWidth="1.6"/><path d="M9 7h6v10H9z" stroke="currentColor" strokeWidth="1.2"/></>} />,
-  "auto-enhance": <Svg path={<><circle cx="12" cy="12" r="5" stroke="currentColor" strokeWidth="1.6"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></>} />,
-  exposure: <Svg path={<><rect x="5" y="5" width="14" height="14" rx="2" stroke="currentColor" strokeWidth="1.6"/><path d="M8 16l8-8" stroke="currentColor" strokeWidth="1.6"/></>} />,
-  contrast: <Svg path={<><circle cx="12" cy="12" r="7" stroke="currentColor" strokeWidth="1.6"/><path d="M12 5a7 7 0 0 1 0 14V5z" fill="currentColor"/></>} />,
-  saturation: <Svg path={<><path d="M12 5s5 4.5 5 8a5 5 0 1 1-10 0c0-3.5 5-8 5-8z" stroke="currentColor" strokeWidth="1.6" fill="none"/></>} />,
-  temperature: <Svg path={<><path d="M12 6v7" stroke="currentColor" strokeWidth="1.6"/><path d="M10 6a2 2 0 1 1 4 0v6a4 4 0 1 1-4 0V6z" stroke="currentColor" strokeWidth="1.6"/></>} />,
-  sharpen: <Svg path={<><path d="M12 4l6 16H6l6-16z" stroke="currentColor" strokeWidth="1.6"/><path d="M8 16h8" stroke="currentColor" strokeWidth="1.2"/></>} />,
-};
+  crop: (
+    <Svg
+      path={
+        <path
+          d="M7 3v12h12M3 7h12v12"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+        />
+      }
+    />
+  ),
+  straighten: (
+    <Svg
+      path={
+        <>
+          <path d="M4 14h16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+          <path d="M5 14l2.5-4 3 5 3-6 3 5 2.5-4" stroke="currentColor" strokeWidth="1.2" />
+        </>
+      }
+    />
+  ),
+  'rotate-left': (
+    <Svg
+      path={
+        <>
+          <path d="M8 8H4V4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+          <path d="M6 6a8 8 0 1 1-2 5" stroke="currentColor" strokeWidth="1.6" fill="none" />
+        </>
+      }
+    />
+  ),
+  'rotate-right': (
+    <Svg
+      path={
+        <>
+          <path d="M16 8h4V4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+          <path d="M18 6a8 8 0 1 0 2 5" stroke="currentColor" strokeWidth="1.6" fill="none" />
+        </>
+      }
+    />
+  ),
+  'flip-h': (
+    <Svg
+      path={
+        <>
+          <rect x="4" y="4" width="16" height="16" rx="2" stroke="currentColor" strokeWidth="1.6" />
+          <path
+            d="M12 4v16M12 6l3 3M12 10l5 0M12 14l5 0M12 18l3-3"
+            stroke="currentColor"
+            strokeWidth="1.2"
+          />
+        </>
+      }
+    />
+  ),
+  'flip-v': (
+    <Svg
+      path={
+        <>
+          <rect x="4" y="4" width="16" height="16" rx="2" stroke="currentColor" strokeWidth="1.6" />
+          <path
+            d="M4 12h16M6 12l3 3M10 12l0 5M14 12l0 5M18 12l-3 3"
+            stroke="currentColor"
+            strokeWidth="1.2"
+          />
+        </>
+      }
+    />
+  ),
+  resize: (
+    <Svg
+      path={
+        <>
+          <path d="M20 14v6h-6" stroke="currentColor" strokeWidth="1.6" />
+          <path d="M10 4H4v6" stroke="currentColor" strokeWidth="1.6" />
+          <path d="M14 20l6-6M4 10l6-6" stroke="currentColor" strokeWidth="1.6" />
+        </>
+      }
+    />
+  ),
+  'canvas-size': (
+    <Svg
+      path={
+        <>
+          <rect x="5" y="5" width="14" height="14" rx="2" stroke="currentColor" strokeWidth="1.6" />
+          <path d="M9 9h6v6H9z" stroke="currentColor" strokeWidth="1.2" />
+        </>
+      }
+    />
+  ),
+  perspective: (
+    <Svg
+      path={
+        <>
+          <path d="M4 8l8-4 8 4v8l-8 4-8-4V8z" stroke="currentColor" strokeWidth="1.6" />
+          <path d="M4 12h16" stroke="currentColor" strokeWidth="1.2" />
+        </>
+      }
+    />
+  ),
+  skew: (
+    <Svg
+      path={
+        <>
+          <rect
+            x="6"
+            y="6"
+            width="12"
+            height="12"
+            transform="skewX(-15)"
+            stroke="currentColor"
+            strokeWidth="1.6"
+          />
+        </>
+      }
+      viewBox="0 0 24 24"
+    />
+  ),
+  'aspect-1-1': (
+    <Svg
+      path={
+        <>
+          <rect x="5" y="5" width="14" height="14" rx="2" stroke="currentColor" strokeWidth="1.6" />
+          <path d="M9 9h6v6H9z" stroke="currentColor" strokeWidth="1.2" />
+        </>
+      }
+    />
+  ),
+  'aspect-4-5': (
+    <Svg
+      path={
+        <>
+          <rect x="5" y="4" width="14" height="16" rx="2" stroke="currentColor" strokeWidth="1.6" />
+          <path d="M8 7h8v10H8z" stroke="currentColor" strokeWidth="1.2" />
+        </>
+      }
+    />
+  ),
+  'aspect-16-9': (
+    <Svg
+      path={
+        <>
+          <rect x="4" y="7" width="16" height="10" rx="2" stroke="currentColor" strokeWidth="1.6" />
+          <path d="M7 9h10v6H7z" stroke="currentColor" strokeWidth="1.2" />
+        </>
+      }
+    />
+  ),
+  'aspect-9-16': (
+    <Svg
+      path={
+        <>
+          <rect x="7" y="4" width="10" height="16" rx="2" stroke="currentColor" strokeWidth="1.6" />
+          <path d="M9 7h6v10H9z" stroke="currentColor" strokeWidth="1.2" />
+        </>
+      }
+    />
+  ),
+  'auto-enhance': (
+    <Svg
+      path={
+        <>
+          <circle cx="12" cy="12" r="5" stroke="currentColor" strokeWidth="1.6" />
+          <path
+            d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"
+            stroke="currentColor"
+            strokeWidth="1.2"
+            strokeLinecap="round"
+          />
+        </>
+      }
+    />
+  ),
+  exposure: (
+    <Svg
+      path={
+        <>
+          <rect x="5" y="5" width="14" height="14" rx="2" stroke="currentColor" strokeWidth="1.6" />
+          <path d="M8 16l8-8" stroke="currentColor" strokeWidth="1.6" />
+        </>
+      }
+    />
+  ),
+  contrast: (
+    <Svg
+      path={
+        <>
+          <circle cx="12" cy="12" r="7" stroke="currentColor" strokeWidth="1.6" />
+          <path d="M12 5a7 7 0 0 1 0 14V5z" fill="currentColor" />
+        </>
+      }
+    />
+  ),
+  saturation: (
+    <Svg
+      path={
+        <>
+          <path
+            d="M12 5s5 4.5 5 8a5 5 0 1 1-10 0c0-3.5 5-8 5-8z"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            fill="none"
+          />
+        </>
+      }
+    />
+  ),
+  temperature: (
+    <Svg
+      path={
+        <>
+          <path d="M12 6v7" stroke="currentColor" strokeWidth="1.6" />
+          <path
+            d="M10 6a2 2 0 1 1 4 0v6a4 4 0 1 1-4 0V6z"
+            stroke="currentColor"
+            strokeWidth="1.6"
+          />
+        </>
+      }
+    />
+  ),
+  sharpen: (
+    <Svg
+      path={
+        <>
+          <path d="M12 4l6 16H6l6-16z" stroke="currentColor" strokeWidth="1.6" />
+          <path d="M8 16h8" stroke="currentColor" strokeWidth="1.2" />
+        </>
+      }
+    />
+  ),
+}
 
-const iconFor = (id: string) => ICONS[id] ?? null;
+const iconFor = (id: string) => ICONS[id] ?? null
 
 // -----------------------------
 // Component
@@ -118,15 +353,17 @@ const iconFor = (id: string) => ICONS[id] ?? null;
 export default function EditActionGrid20() {
   const onAction = useCallback((id: string) => {
     // Replace this with real logic. For now, it is a safe no-op with a console line.
-    // eslint-disable-next-line no-console
-    console.log(`[EditAction] ${id}`);
-  }, []);
+     
+    console.log(`[EditAction] ${id}`)
+  }, [])
 
   return (
     <section className="action-grid" aria-label="Action grid for edit actions">
       <header className="grid__header">
         <h2 className="grid__title">Edit Actions</h2>
-        <p className="grid__hint" role="note">Keyboard accessible – use Tab/Shift+Tab to navigate, Enter/Space to activate.</p>
+        <p className="grid__hint" role="note">
+          Keyboard accessible – use Tab/Shift+Tab to navigate, Enter/Space to activate.
+        </p>
       </header>
 
       <div
@@ -158,23 +395,23 @@ export default function EditActionGrid20() {
 
       <style>{styles}</style>
     </section>
-  );
+  )
 }
 
 // -----------------------------
 // Lightweight runtime checks (dev-only) – "test cases"
 // -----------------------------
-if (typeof process !== "undefined" && process.env && process.env.NODE_ENV !== "production") {
-  const ids = ACTIONS.map(a => a.id);
-  const unique = new Set(ids);
+if (typeof process !== 'undefined' && process.env && process.env.NODE_ENV !== 'production') {
+  const ids = ACTIONS.map((a) => a.id)
+  const unique = new Set(ids)
   if (unique.size !== ids.length) {
-    // eslint-disable-next-line no-console
-    console.warn("[EditActionGrid20][test] Duplicate IDs detected", ids);
+     
+    console.warn('[EditActionGrid20][test] Duplicate IDs detected', ids)
   }
-  const allHaveLabels = ACTIONS.every(a => typeof a.label === "string" && a.label.length > 0);
+  const allHaveLabels = ACTIONS.every((a) => typeof a.label === 'string' && a.label.length > 0)
   if (!allHaveLabels) {
-    // eslint-disable-next-line no-console
-    console.warn("[EditActionGrid20][test] Some actions have missing labels");
+     
+    console.warn('[EditActionGrid20][test] Some actions have missing labels')
   }
 }
 
@@ -277,4 +514,4 @@ const styles = `
 @media (max-width: 680px) {
   .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
-`;
+`

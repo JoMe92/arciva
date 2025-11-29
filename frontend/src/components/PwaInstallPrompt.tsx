@@ -6,22 +6,32 @@ type BeforeInstallPromptEvent = Event & {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>
 }
 
-const IOS_PROMPT_TEXT = 'To install Arciva on iOS, open the Share menu in Safari and pick “Add to Home Screen”.'
+const IOS_PROMPT_TEXT =
+  'To install Arciva on iOS, open the Share menu in Safari and pick “Add to Home Screen”.'
 
 function useIsIosStandalone(): [boolean, boolean] {
-  const [isIos, setIsIos] = useState(false)
-  const [isStandalone, setIsStandalone] = useState(false)
+  const detectIos = () => {
+    if (typeof window === 'undefined') return false
+    const ua = window.navigator.userAgent.toLowerCase()
+    return /iphone|ipad|ipod/.test(ua)
+  }
+
+  const detectStandalone = () => {
+    if (typeof window === 'undefined') return false
+    return (
+      window.matchMedia('(display-mode: standalone)').matches ||
+      (window.navigator as Navigator & { standalone?: boolean }).standalone ||
+      false
+    )
+  }
+
+  const [isIos] = useState(detectIos)
+  const [isStandalone, setIsStandalone] = useState(detectStandalone)
 
   useEffect(() => {
     if (typeof window === 'undefined') {
       return
     }
-
-    const ua = window.navigator.userAgent.toLowerCase()
-    const detectedIos = /iphone|ipad|ipod/.test(ua)
-    const standalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as Navigator & { standalone?: boolean }).standalone
-    setIsIos(detectedIos)
-    setIsStandalone(Boolean(standalone))
 
     const mediaQuery = window.matchMedia('(display-mode: standalone)')
     const listener = (event: MediaQueryListEvent) => setIsStandalone(event.matches)
@@ -75,7 +85,10 @@ export default function PwaInstallPrompt() {
     }
   }, [])
 
-  const shouldShowIosHint = useMemo(() => isIos && !isStandalone && !iosHintDismissed && !hasInstalled, [isIos, isStandalone, iosHintDismissed, hasInstalled])
+  const shouldShowIosHint = useMemo(
+    () => isIos && !isStandalone && !iosHintDismissed && !hasInstalled,
+    [isIos, isStandalone, iosHintDismissed, hasInstalled]
+  )
 
   const handleInstall = useCallback(async () => {
     if (!deferredPrompt) {
@@ -90,7 +103,8 @@ export default function PwaInstallPrompt() {
       if (outcome === 'accepted') {
         setHasInstalled(true)
       }
-    } catch {
+    } catch (error) {
+      console.error('Failed to prompt install', error)
     }
     setDeferredPrompt(null)
   }, [deferredPrompt])
@@ -109,7 +123,9 @@ export default function PwaInstallPrompt() {
         <div className="install-hint__card">
           <div>
             <p className="install-hint__title">Install Arciva</p>
-            <p className="install-hint__body">Add Arciva to your home screen for fullscreen access and offline caching.</p>
+            <p className="install-hint__body">
+              Add Arciva to your home screen for fullscreen access and offline caching.
+            </p>
           </div>
           <div className="install-hint__actions">
             <button type="button" className="install-hint__dismiss" onClick={handleDismiss}>
@@ -128,7 +144,11 @@ export default function PwaInstallPrompt() {
             <p className="install-hint__title">Install on iOS</p>
             <p className="install-hint__body">{IOS_PROMPT_TEXT}</p>
           </div>
-          <button type="button" className="install-hint__dismiss" onClick={() => setIosHintDismissed(true)}>
+          <button
+            type="button"
+            className="install-hint__dismiss"
+            onClick={() => setIosHintDismissed(true)}
+          >
             Got it
           </button>
         </div>

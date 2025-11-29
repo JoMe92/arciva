@@ -66,19 +66,24 @@ async def start_export_job(
     await ensure_project_access(db, project_id=body.project_id, user_id=current_user.id)
     photo_ids = list(dict.fromkeys(body.photo_ids))
     rows = (
-        await db.execute(
-            select(models.ProjectAsset.asset_id)
-            .where(
-                models.ProjectAsset.project_id == body.project_id,
-                models.ProjectAsset.asset_id.in_(photo_ids),
-                models.ProjectAsset.user_id == current_user.id,
+        (
+            await db.execute(
+                select(models.ProjectAsset.asset_id).where(
+                    models.ProjectAsset.project_id == body.project_id,
+                    models.ProjectAsset.asset_id.in_(photo_ids),
+                    models.ProjectAsset.user_id == current_user.id,
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     found = set(rows)
     missing = [str(pid) for pid in photo_ids if pid not in found]
     if missing:
-        raise HTTPException(status_code=400, detail=f"Photo(s) not part of project: {missing}")
+        raise HTTPException(
+            status_code=400, detail=f"Photo(s) not part of project: {missing}"
+        )
     job = models.ExportJob(
         user_id=current_user.id,
         project_id=body.project_id,
@@ -93,7 +98,12 @@ async def start_export_job(
     await db.refresh(job)
     background_tasks.add_task(process_export_job, job.id)
     background_tasks.add_task(cleanup_export_jobs)
-    logger.info("start_export_job: job=%s project=%s photos=%d", job.id, job.project_id, len(body.photo_ids))
+    logger.info(
+        "start_export_job: job=%s project=%s photos=%d",
+        job.id,
+        job.project_id,
+        len(body.photo_ids),
+    )
     return _serialize_job(job)
 
 

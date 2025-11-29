@@ -36,7 +36,14 @@ export const StoneTrailIcon: React.FC<StoneTrailIconProps> = ({
       aria-label={title}
       className={`block ${className}`}
     >
-      <circle cx="12" cy="12" r="11" fill={TOKENS.circleFill} stroke={TOKENS.circleStroke} strokeWidth="1.2" />
+      <circle
+        cx="12"
+        cy="12"
+        r="11"
+        fill={TOKENS.circleFill}
+        stroke={TOKENS.circleStroke}
+        strokeWidth="1.2"
+      />
       <ellipse cx="7.5" cy="16.2" rx="4.5" ry="3.4" fill={TOKENS.pebbleLarge} />
       <ellipse cx="13" cy="11.4" rx="3.6" ry="2.8" fill={TOKENS.pebbleMedium} />
       <ellipse cx="17.8" cy="7.2" rx="3" ry="2.3" fill={TOKENS.pebbleSmall} />

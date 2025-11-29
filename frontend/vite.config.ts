@@ -29,8 +29,7 @@ export default defineConfig(({ mode }) => {
         : undefined
 
   const enableDevSw =
-    mode === 'development' &&
-    (env.ENABLE_PWA_DEV === 'true' || env.VITE_ENABLE_PWA_DEV === 'true')
+    mode === 'development' && (env.ENABLE_PWA_DEV === 'true' || env.VITE_ENABLE_PWA_DEV === 'true')
 
   const plugins = [
     react(),
@@ -52,7 +51,8 @@ export default defineConfig(({ mode }) => {
             },
           },
           {
-            urlPattern: ({ request }) => request.destination === 'style' || request.destination === 'script',
+            urlPattern: ({ request }) =>
+              request.destination === 'style' || request.destination === 'script',
             handler: 'StaleWhileRevalidate',
             options: {
               cacheName: 'arciva-assets',

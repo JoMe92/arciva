@@ -6,7 +6,16 @@ export interface ThemeToggleProps {
 }
 
 const SunIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" role="presentation" aria-hidden fill="none" stroke="currentColor" strokeWidth="1.6">
+  <svg
+    width="16"
+    height="16"
+    viewBox="0 0 24 24"
+    role="presentation"
+    aria-hidden
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.6"
+  >
     <circle cx="12" cy="12" r="4" fill="currentColor" stroke="none" />
     <g strokeLinecap="round">
       <line x1="12" y1="3" x2="12" y2="1" />
@@ -22,8 +31,21 @@ const SunIcon = () => (
 )
 
 const MoonIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" role="presentation" aria-hidden fill="none" stroke="currentColor" strokeWidth="1.6">
-    <path d="M21 14.5A8.5 8.5 0 0 1 10.5 4 6.5 6.5 0 1 0 21 14.5Z" fill="currentColor" stroke="none" />
+  <svg
+    width="16"
+    height="16"
+    viewBox="0 0 24 24"
+    role="presentation"
+    aria-hidden
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.6"
+  >
+    <path
+      d="M21 14.5A8.5 8.5 0 0 1 10.5 4 6.5 6.5 0 1 0 21 14.5Z"
+      fill="currentColor"
+      stroke="none"
+    />
     <path d="M21 14.5A8.5 8.5 0 0 1 10.5 4" />
   </svg>
 )

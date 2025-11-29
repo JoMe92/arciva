@@ -210,6 +210,15 @@ services:
       interval: 3s
       timeout: 2s
       retries: 20
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: dev-jaeger-1
+    ports:
+      - "16686:16686"
+      - "4317:4317"
+      - "4318:4318"
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
 volumes:
   pgdata:
 YAML
@@ -228,7 +237,12 @@ ensure_compose_up() {
       return ;;
     auto|Auto|AUTO)
       if is_port_open 127.0.0.1 5432 || is_port_open 127.0.0.1 6379; then
-        info "Local services detected on 5432/6379 → skipping Docker"
+        info "Local services detected on 5432/6379 → skipping Docker for DB/Redis"
+        if command -v docker >/dev/null 2>&1; then
+           info "Ensuring Jaeger is running via Docker..."
+           write_compose
+           compose up -d jaeger
+        fi
         return
       fi ;;
   esac
@@ -290,13 +304,16 @@ start_backend() {
   if command -v conda >/dev/null 2>&1 || command -v micromamba >/dev/null 2>&1; then
     conda_activate
     info "Conda env: ${CONDA_ENV:-arciva}"
+    info "Conda env: ${CONDA_ENV:-arciva}"
     REDIS_URL="${NEW_REDIS_URL:-$REDIS_URL}" \
+      OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:4317" \
       python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload \
       >>"${LOG_DIR}/backend.out.log" 2>>"${LOG_DIR}/backend.err.log" &
   elif [[ -f "pyproject.toml" && -f "poetry.lock" && $(command -v poetry) ]]; then
     info "Using poetry env"
     poetry install --no-interaction >>"${LOG_DIR}/backend.install.log" 2>&1 || true
     REDIS_URL="${NEW_REDIS_URL:-$REDIS_URL}" \
+      OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:4317" \
       poetry run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload \
       >>"${LOG_DIR}/backend.out.log" 2>>"${LOG_DIR}/backend.err.log" &
   else
@@ -308,6 +325,7 @@ start_backend() {
     fi
     info "Starting FastAPI dev server (venv)"
     REDIS_URL="${NEW_REDIS_URL:-$REDIS_URL}" \
+      OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:4317" \
       "${VENV_DIR}/bin/uvicorn" app.main:app --host 0.0.0.0 --port 8000 --reload \
       >>"${LOG_DIR}/backend.out.log" 2>>"${LOG_DIR}/backend.err.log" &
   fi
@@ -361,6 +379,7 @@ start_worker() {
     prepare_data_env
     PYTHONPATH="${ROOT_DIR}" \
       REDIS_URL="${NEW_REDIS_URL:-$REDIS_URL}" \
+      OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:4317" \
       python -m arq backend.worker.worker.WorkerSettings \
       >>"${LOG_DIR}/worker.out.log" 2>>"${LOG_DIR}/worker.err.log" &
     if ! python - <<'PY' >/dev/null 2>&1
@@ -386,6 +405,8 @@ Dev environment is up!"
   echo "Frontend (Vite) → http://localhost:5173"
   echo "SQLite DB       → ${db_path}"
   echo "Redis           → ${NEW_REDIS_URL:-$REDIS_URL}"
+  echo "Redis           → ${NEW_REDIS_URL:-$REDIS_URL}"
+  echo "Jaeger UI       → http://localhost:16686"
   echo "Logs            → ${LOG_DIR} (backend.*, frontend.*, worker.*)"
 }
 

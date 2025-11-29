@@ -13,13 +13,20 @@ type ProjectSettingsButtonProps = {
  * Small rounded icon button that launches the project settings dialog.
  * Reusing it keeps hover/focus/disabled states identical everywhere.
  */
-const ProjectSettingsButton: React.FC<ProjectSettingsButtonProps> = ({ onClick, disabled = false, label, title, className }) => {
+const ProjectSettingsButton: React.FC<ProjectSettingsButtonProps> = ({
+  onClick,
+  disabled = false,
+  label,
+  title,
+  className,
+}) => {
   const fallbackLabel = 'Open application settings'
   const ariaLabel = label || fallbackLabel
   const buttonTitle = title || fallbackLabel
   const enabledClasses =
     'border-[var(--border,#E1D3B9)] text-[var(--text,#1F1E1B)] hover:border-[var(--text,#1F1E1B)] hover:text-[var(--text,#1F1E1B)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--stone-trail-brand-focus,#4A463F)]'
-  const disabledClasses = 'border-[var(--border,#E1D3B9)] text-[var(--text-muted,#6B645B)] opacity-60 cursor-not-allowed'
+  const disabledClasses =
+    'border-[var(--border,#E1D3B9)] text-[var(--text-muted,#6B645B)] opacity-60 cursor-not-allowed'
 
   return (
     <button

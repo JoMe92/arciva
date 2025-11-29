@@ -7,7 +7,10 @@ from ..db import get_db
 from ..deps import get_settings
 from ..security import get_current_user
 from ..services.app_settings import get_app_setting, set_app_setting
-from ..services.database_settings import load_database_settings, update_database_path
+from ..services.database_settings import (
+    load_database_settings,
+    update_database_path,
+)
 from ..services.data_reset import wipe_application_data
 from ..services.schema_guard import ensure_enum_values
 from ..services.photo_store_settings import (
@@ -20,7 +23,11 @@ from ..services.photo_store_settings import (
     validate_candidate_path,
 )
 
-router = APIRouter(prefix="/v1/settings", tags=["settings"], dependencies=[Depends(get_current_user)])
+router = APIRouter(
+    prefix="/v1/settings",
+    tags=["settings"],
+    dependencies=[Depends(get_current_user)],
+)
 
 _IMAGE_HUB_SETTINGS_KEY = "image_hub"
 
@@ -35,13 +42,17 @@ def _coerce_mode(value: str | None) -> schemas.MetadataInheritanceMode:
 
 
 @router.get("/image-hub", response_model=schemas.ImageHubSettings)
-async def get_image_hub_settings(db: AsyncSession = Depends(get_db)) -> schemas.ImageHubSettings:
+async def get_image_hub_settings(
+    db: AsyncSession = Depends(get_db),
+) -> schemas.ImageHubSettings:
     record = await get_app_setting(
         db,
         _IMAGE_HUB_SETTINGS_KEY,
         {"metadata_inheritance": schemas.MetadataInheritanceMode.ASK.value},
     )
-    mode = _coerce_mode(record.get("metadata_inheritance") if isinstance(record, dict) else None)
+    mode = _coerce_mode(
+        record.get("metadata_inheritance") if isinstance(record, dict) else None
+    )
     return schemas.ImageHubSettings(metadata_inheritance=mode)
 
 
@@ -60,7 +71,9 @@ async def update_image_hub_settings(
 
 
 @router.get("/database-path", response_model=schemas.DatabasePathSettings)
-async def get_database_path_settings(db: AsyncSession = Depends(get_db)) -> schemas.DatabasePathSettings:
+async def get_database_path_settings(
+    db: AsyncSession = Depends(get_db),
+) -> schemas.DatabasePathSettings:
     return await load_database_settings(db)
 
 
@@ -106,7 +119,9 @@ async def get_photo_store_settings_api() -> schemas.PhotoStoreSettings:
 
 
 @router.post("/photo-store/validate", response_model=schemas.PhotoStoreValidationResult)
-async def validate_photo_store_path(body: schemas.PhotoStoreValidationRequest) -> schemas.PhotoStoreValidationResult:
+async def validate_photo_store_path(
+    body: schemas.PhotoStoreValidationRequest,
+) -> schemas.PhotoStoreValidationResult:
     settings = get_settings()
     enabled = bool(getattr(settings, "experimental_photo_store_enabled", False))
     if not enabled:
@@ -124,12 +139,19 @@ async def validate_photo_store_path(body: schemas.PhotoStoreValidationRequest) -
             db_file = normalized / "arciva.db"
             if not db_file.exists():
                 valid = False
-                message = "arciva.db not found in the selected folder. Choose an existing PhotoStore directory."
-    return schemas.PhotoStoreValidationResult(path=body.path, valid=valid, message=message)
+                message = (
+                    "arciva.db not found in the selected folder. "
+                    "Choose an existing PhotoStore directory."
+                )
+    return schemas.PhotoStoreValidationResult(
+        path=body.path, valid=valid, message=message
+    )
 
 
 @router.post("/photo-store/apply", response_model=schemas.PhotoStoreSettings)
-async def apply_photo_store_change(body: schemas.PhotoStoreApplyRequest, db: AsyncSession = Depends(get_db)) -> schemas.PhotoStoreSettings:
+async def apply_photo_store_change(
+    body: schemas.PhotoStoreApplyRequest, db: AsyncSession = Depends(get_db)
+) -> schemas.PhotoStoreSettings:
     settings = get_settings()
     enabled = bool(getattr(settings, "experimental_photo_store_enabled", False))
     if not enabled:
@@ -149,10 +171,19 @@ async def apply_photo_store_change(body: schemas.PhotoStoreApplyRequest, db: Asy
     next_state = update_state(state, normalized, body.mode)
     apply_state_to_settings(settings, next_state)
     db_candidate = normalized / "arciva.db"
-    db_result = await update_database_path(db, str(db_candidate), copy_existing=False, allow_create=not load_existing)
+    db_result = await update_database_path(
+        db,
+        str(db_candidate),
+        copy_existing=False,
+        allow_create=not load_existing,
+    )
     if db_result.status is not schemas.DatabasePathStatus.READY:
         await db.rollback()
-        raise HTTPException(400, db_result.message or "Unable to initialize database at the selected location.")
+        raise HTTPException(
+            400,
+            db_result.message
+            or "Unable to initialize database at the selected location.",
+        )
     if not load_existing:
         await ensure_enum_values(db)
         await wipe_application_data(db)

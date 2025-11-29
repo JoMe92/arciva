@@ -4,7 +4,7 @@ import logging
 from datetime import datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,7 +18,9 @@ logger = logging.getLogger("arciva.image_hub")
 router = APIRouter(prefix="/v1/image-hub", tags=["image-hub"])
 
 
-def _color_label_to_schema(value: models.ColorLabel | str | None) -> schemas.ColorLabel:
+def _color_label_to_schema(
+    value: models.ColorLabel | str | None,
+) -> schemas.ColorLabel:
     if isinstance(value, models.ColorLabel):
         return schemas.ColorLabel(value.value)
     if isinstance(value, str):
@@ -54,26 +56,44 @@ async def list_hub_assets(
     current_user: models.User = Depends(get_current_user),
 ) -> schemas.ImageHubAssetsResponse:
     asset_ids = (
-        await db.execute(
-            select(models.Asset.id)
-            .where(
-                models.Asset.status == models.AssetStatus.READY,
-                models.Asset.user_id == current_user.id,
+        (
+            await db.execute(
+                select(models.Asset.id)
+                .where(
+                    models.Asset.status == models.AssetStatus.READY,
+                    models.Asset.user_id == current_user.id,
+                )
+                .order_by(models.Asset.created_at.desc())
+                .limit(limit)
             )
-            .order_by(models.Asset.created_at.desc())
-            .limit(limit)
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     if not asset_ids:
         return schemas.ImageHubAssetsResponse(assets=[], projects=[], dates=[])
 
     rows = (
         await db.execute(
-            select(models.Asset, models.ProjectAsset, models.Project, models.MetadataState)
-            .join(models.ProjectAsset, models.ProjectAsset.asset_id == models.Asset.id)
-            .join(models.Project, models.Project.id == models.ProjectAsset.project_id)
-            .outerjoin(models.MetadataState, models.MetadataState.link_id == models.ProjectAsset.id)
+            select(
+                models.Asset,
+                models.ProjectAsset,
+                models.Project,
+                models.MetadataState,
+            )
+            .join(
+                models.ProjectAsset,
+                models.ProjectAsset.asset_id == models.Asset.id,
+            )
+            .join(
+                models.Project,
+                models.Project.id == models.ProjectAsset.project_id,
+            )
+            .outerjoin(
+                models.MetadataState,
+                models.MetadataState.link_id == models.ProjectAsset.id,
+            )
             .where(
                 models.Asset.id.in_(asset_ids),
                 models.ProjectAsset.user_id == current_user.id,
@@ -86,10 +106,16 @@ async def list_hub_assets(
     pair_map: dict[UUID, UUID] = {}
     if project_ids:
         pair_rows = (
-            await db.execute(
-                select(models.ProjectAssetPair).where(models.ProjectAssetPair.project_id.in_(project_ids))
+            (
+                await db.execute(
+                    select(models.ProjectAssetPair).where(
+                        models.ProjectAssetPair.project_id.in_(project_ids)
+                    )
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         for pair in pair_rows:
             pair_map[pair.jpeg_asset_id] = pair.raw_asset_id
             pair_map[pair.raw_asset_id] = pair.jpeg_asset_id
@@ -107,10 +133,14 @@ async def list_hub_assets(
             project.id, {"project": project, "count": 0, "last_linked": None}
         )
         summary["count"] += 1
-        if summary["last_linked"] is None or (link.added_at and link.added_at > summary["last_linked"]):
+        if summary["last_linked"] is None or (
+            link.added_at and link.added_at > summary["last_linked"]
+        ):
             summary["last_linked"] = link.added_at
 
-        date_ref = asset.taken_at or asset.created_at or link.added_at or datetime.utcnow()
+        date_ref = (
+            asset.taken_at or asset.created_at or link.added_at or datetime.utcnow()
+        )
         date_key = date_ref.date().isoformat()
         date_summary[date_key] = date_summary.get(date_key, 0) + 1
 
@@ -119,7 +149,10 @@ async def list_hub_assets(
 
     ordered_assets: list[schemas.HubAsset] = []
     order_map = {aid: idx for idx, aid in enumerate(asset_ids)}
-    for asset_id, payload in sorted(assets_map.items(), key=lambda item: order_map.get(item[0], len(order_map))):
+    for asset_id, payload in sorted(
+        assets_map.items(),
+        key=lambda item: order_map.get(item[0], len(order_map)),
+    ):
         asset: models.Asset = payload["asset"]
         proj_entries = []
         for project, link, metadata in payload["projects"]:

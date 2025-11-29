@@ -77,7 +77,10 @@ export function updateProject(projectId: string, payload: ProjectUpdatePayload) 
   })
 }
 
-export function deleteProject(projectId: string, payload: { confirmTitle: string; deleteAssets: boolean }) {
+export function deleteProject(
+  projectId: string,
+  payload: { confirmTitle: string; deleteAssets: boolean }
+) {
   return request<void>(`/v1/projects/${projectId}`, {
     method: 'DELETE',
     body: JSON.stringify({

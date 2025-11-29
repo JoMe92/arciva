@@ -64,7 +64,10 @@ def _render_image(
             im = ImageOps.exif_transpose(im)
             if settings.output_format == schemas.ExportOutputFormat.JPEG:
                 im = im.convert("RGB")
-            if settings.size_mode == schemas.ExportSizeMode.RESIZE and settings.long_edge:
+            if (
+                settings.size_mode == schemas.ExportSizeMode.RESIZE
+                and settings.long_edge
+            ):
                 long_edge = settings.long_edge
                 resampling = getattr(Image, "Resampling", Image)
                 im.thumbnail((long_edge, long_edge), resampling.LANCZOS)
@@ -78,7 +81,12 @@ def _render_image(
                 save_kwargs["compression"] = "tiff_deflate"
             im.save(dest_path, format=target_format, **save_kwargs)
     except Exception as exc:  # pragma: no cover - fallback to raw copy
-        logger.warning("Falling back to byte copy for %s -> %s (%s)", source_path, dest_path, exc)
+        logger.warning(
+            "Falling back to byte copy for %s -> %s (%s)",
+            source_path,
+            dest_path,
+            exc,
+        )
         shutil.copy2(source_path, dest_path)
 
 
@@ -124,35 +132,50 @@ def _build_contact_sheet(
         sheet.save(dest_path, format=fmt.value)
 
 
-async def _load_assets_for_job(db: AsyncSession, job: models.ExportJob, settings: schemas.ExportJobSettings) -> tuple[dict[UUID, models.Asset], list[UUID]]:
+async def _load_assets_for_job(
+    db: AsyncSession,
+    job: models.ExportJob,
+    settings: schemas.ExportJobSettings,
+) -> tuple[dict[UUID, models.Asset], list[UUID]]:
     photo_ids = [UUID(value) for value in job.photo_ids]
     wanted_ids: set[UUID] = set(photo_ids)
     raw_to_jpeg: dict[UUID, UUID] = {}
     if settings.raw_handling == schemas.ExportRawStrategy.DEVELOPED and photo_ids:
         pair_rows = (
-            await db.execute(
-                select(models.ProjectAssetPair).where(
-                    models.ProjectAssetPair.project_id == job.project_id,
-                    models.ProjectAssetPair.raw_asset_id.in_(photo_ids),
+            (
+                await db.execute(
+                    select(models.ProjectAssetPair).where(
+                        models.ProjectAssetPair.project_id == job.project_id,
+                        models.ProjectAssetPair.raw_asset_id.in_(photo_ids),
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         for pair in pair_rows:
             raw_to_jpeg[pair.raw_asset_id] = pair.jpeg_asset_id
             wanted_ids.add(pair.jpeg_asset_id)
 
     rows = (
-        await db.execute(
-            select(models.Asset)
-            .join(models.ProjectAsset, models.ProjectAsset.asset_id == models.Asset.id)
-            .where(
-                models.ProjectAsset.project_id == job.project_id,
-                models.Asset.id.in_(wanted_ids),
-                models.ProjectAsset.user_id == job.user_id,
-                models.Asset.user_id == job.user_id,
+        (
+            await db.execute(
+                select(models.Asset)
+                .join(
+                    models.ProjectAsset,
+                    models.ProjectAsset.asset_id == models.Asset.id,
+                )
+                .where(
+                    models.ProjectAsset.project_id == job.project_id,
+                    models.Asset.id.in_(wanted_ids),
+                    models.ProjectAsset.user_id == job.user_id,
+                    models.Asset.user_id == job.user_id,
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     asset_map: dict[UUID, models.Asset] = {asset.id: asset for asset in rows}
 
     missing = [asset_id for asset_id in wanted_ids if asset_id not in asset_map]
@@ -171,8 +194,15 @@ async def process_export_job(job_id: UUID) -> None:
         if not job:
             logger.warning("process_export_job: job=%s not found", job_id)
             return
-        if job.status not in {models.ExportJobStatus.QUEUED, models.ExportJobStatus.RUNNING}:
-            logger.info("process_export_job: job=%s already processed status=%s", job_id, job.status)
+        if job.status not in {
+            models.ExportJobStatus.QUEUED,
+            models.ExportJobStatus.RUNNING,
+        }:
+            logger.info(
+                "process_export_job: job=%s already processed status=%s",
+                job_id,
+                job.status,
+            )
             return
 
         try:
@@ -212,13 +242,21 @@ async def process_export_job(job_id: UUID) -> None:
                 try:
                     source_path = storage.path_from_key(asset.storage_uri)
                 except ValueError as exc:
-                    raise RuntimeError(f"Invalid storage key for asset {asset_id}: {exc}") from exc
+                    raise RuntimeError(
+                        f"Invalid storage key for asset {asset_id}: {exc}"
+                    ) from exc
                 if not source_path.exists():
                     raise RuntimeError(f"Asset source missing on disk: {source_path}")
 
-                base_name = Path(asset.original_filename or str(asset.id)).stem or asset.id.hex
+                base_name = (
+                    Path(asset.original_filename or str(asset.id)).stem or asset.id.hex
+                )
                 safe_base = _slugify(base_name)
-                dest_name = _generate_file_name(safe_base, _output_extension(settings.output_format), used_names)
+                dest_name = _generate_file_name(
+                    safe_base,
+                    _output_extension(settings.output_format),
+                    used_names,
+                )
                 dest_path = files_dir / dest_name
                 await asyncio.to_thread(_render_image, source_path, dest_path, settings)
                 exported_paths.append(dest_path)
@@ -231,7 +269,12 @@ async def process_export_job(job_id: UUID) -> None:
                 sheet_ext = _contact_sheet_extension(settings.contact_sheet_format)
                 sheet_name = _generate_file_name("contact-sheet", sheet_ext, used_names)
                 sheet_path = files_dir / sheet_name
-                await asyncio.to_thread(_build_contact_sheet, exported_paths, sheet_path, settings.contact_sheet_format)
+                await asyncio.to_thread(
+                    _build_contact_sheet,
+                    exported_paths,
+                    sheet_path,
+                    settings.contact_sheet_format,
+                )
                 if sheet_path.exists():
                     exported_paths.append(sheet_path)
 
@@ -246,11 +289,15 @@ async def process_export_job(job_id: UUID) -> None:
             except ValueError:
                 job.artifact_path = str(archive_path)
             job.artifact_filename = archive_name
-            job.artifact_size = archive_path.stat().st_size if archive_path.exists() else None
+            job.artifact_size = (
+                archive_path.stat().st_size if archive_path.exists() else None
+            )
             job.status = models.ExportJobStatus.COMPLETED
             job.progress = 100
             job.finished_at = datetime.now(timezone.utc)
-            job.expires_at = job.finished_at + timedelta(hours=settings_obj.export_retention_hours)
+            job.expires_at = job.finished_at + timedelta(
+                hours=settings_obj.export_retention_hours
+            )
             await db.commit()
             logger.info("process_export_job: completed job=%s", job.id)
         except Exception as exc:  # pragma: no cover - best effort
@@ -274,17 +321,23 @@ def _make_zip_archive(source_dir: Path, archive_path: Path) -> None:
 async def cleanup_export_jobs() -> None:
     settings = get_settings()
     storage = PosixStorage.from_env()
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=settings.export_retention_hours)
+    cutoff = datetime.now(timezone.utc) - timedelta(
+        hours=settings.export_retention_hours
+    )
     async with SessionLocal() as db:
         rows = (
-            await db.execute(
-                select(models.ExportJob).where(
-                    models.ExportJob.finished_at.is_not(None),
-                    models.ExportJob.finished_at < cutoff,
-                    models.ExportJob.artifact_path.is_not(None),
+            (
+                await db.execute(
+                    select(models.ExportJob).where(
+                        models.ExportJob.finished_at.is_not(None),
+                        models.ExportJob.finished_at < cutoff,
+                        models.ExportJob.artifact_path.is_not(None),
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
         removed: list[UUID] = []
         for job in rows:
@@ -294,7 +347,10 @@ async def cleanup_export_jobs() -> None:
                     path = storage.path_from_key(job.artifact_path)
                 except ValueError:
                     path = None
-                    logger.warning("cleanup_export_jobs: invalid artifact path job=%s", job.id)
+                    logger.warning(
+                        "cleanup_export_jobs: invalid artifact path job=%s",
+                        job.id,
+                    )
             if path and path.exists():
                 try:
                     if path.is_file():
@@ -305,7 +361,11 @@ async def cleanup_export_jobs() -> None:
                     if parent.name == job.id.hex:
                         shutil.rmtree(parent, ignore_errors=True)
                 except Exception as exc:  # pragma: no cover - best effort
-                    logger.warning("cleanup_export_jobs: failed to remove %s (%s)", path, exc)
+                    logger.warning(
+                        "cleanup_export_jobs: failed to remove %s (%s)",
+                        path,
+                        exc,
+                    )
             job.artifact_path = None
             job.artifact_filename = None
             job.artifact_size = None

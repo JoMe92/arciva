@@ -190,8 +190,12 @@ const ProjectSettingsDialog: React.FC<ProjectSettingsDialogProps> = ({
         ) : null}
         <section>
           <header className="mb-3">
-            <p className="text-[12px] font-medium uppercase tracking-wide text-[var(--text-muted,#6B645B)]">Preview images</p>
-            <p className="text-[12px] text-[var(--text-muted,#6B645B)]">Pick images in the project workspace to feature them on the project card.</p>
+            <p className="text-[12px] font-medium uppercase tracking-wide text-[var(--text-muted,#6B645B)]">
+              Preview images
+            </p>
+            <p className="text-[12px] text-[var(--text-muted,#6B645B)]">
+              Pick images in the project workspace to feature them on the project card.
+            </p>
           </header>
           {previews.length ? (
             <div className="flex gap-3 overflow-x-auto rounded-2xl border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 py-3">
@@ -205,9 +209,15 @@ const ProjectSettingsDialog: React.FC<ProjectSettingsDialogProps> = ({
                     title={isPrimary ? 'Current cover' : `Preview ${idx + 1}`}
                   >
                     {img.url ? (
-                      <img src={img.url} alt={`${project.title} preview ${idx + 1}`} className="h-full w-full object-cover" />
+                      <img
+                        src={img.url}
+                        alt={`${project.title} preview ${idx + 1}`}
+                        className="h-full w-full object-cover"
+                      />
                     ) : (
-                      <div className="flex h-full w-full items-center justify-center text-[11px] text-[var(--text-muted,#6B645B)]">No preview</div>
+                      <div className="flex h-full w-full items-center justify-center text-[11px] text-[var(--text-muted,#6B645B)]">
+                        No preview
+                      </div>
                     )}
                     <div className="absolute inset-x-0 bottom-0 bg-black/45 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-white">
                       {isPrimary ? 'Cover' : `#${idx + 1}`}

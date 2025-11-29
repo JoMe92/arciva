@@ -46,15 +46,26 @@ const ProjectCard: React.FC<{
   const primaryPreview = previews[0] ?? null
   const currentUrl = current?.url ?? null
   const showNav = hovered && previewCount > 1
-  const fallbackAspectRatio = React.useMemo(() => fallbackAspectRatioForAspect(p.aspect), [p.aspect])
-  const fallbackAspectRatioValue = React.useMemo(() => parseRatio(fallbackAspectRatio), [fallbackAspectRatio])
-  const primaryAspectRatio = aspectRatioValue(primaryPreview?.width, primaryPreview?.height) ?? fallbackAspectRatio
-  const primaryAspectRatioValue = ratioFromDimensions(primaryPreview?.width, primaryPreview?.height) ?? fallbackAspectRatioValue
+  const fallbackAspectRatio = React.useMemo(
+    () => fallbackAspectRatioForAspect(p.aspect),
+    [p.aspect]
+  )
+  const fallbackAspectRatioValue = React.useMemo(
+    () => parseRatio(fallbackAspectRatio),
+    [fallbackAspectRatio]
+  )
+  const primaryAspectRatio =
+    aspectRatioValue(primaryPreview?.width, primaryPreview?.height) ?? fallbackAspectRatio
+  const primaryAspectRatioValue =
+    ratioFromDimensions(primaryPreview?.width, primaryPreview?.height) ?? fallbackAspectRatioValue
   const tileOrientation = orientationFromRatio(primaryAspectRatioValue)
   const currentRatio = ratioFromDimensions(current?.width, current?.height)
   const currentOrientation = orientationFromRatio(currentRatio)
   const shouldCoverCurrent =
-    activePreview === 0 || !tileOrientation || !currentOrientation || currentOrientation === tileOrientation
+    activePreview === 0 ||
+    !tileOrientation ||
+    !currentOrientation ||
+    currentOrientation === tileOrientation
 
   React.useEffect(() => {
     setImageLoaded(false)
@@ -76,7 +87,7 @@ const ProjectCard: React.FC<{
         return next
       })
     },
-    [previewCount],
+    [previewCount]
   )
 
   const wheelAccumulatorRef = React.useRef(0)
@@ -84,7 +95,8 @@ const ProjectCard: React.FC<{
   const handleWheel = React.useCallback(
     (event: React.WheelEvent<HTMLDivElement>) => {
       if (previewCount < 2) return
-      const primaryDelta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY
+      const primaryDelta =
+        Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY
       if (!primaryDelta) return
       wheelAccumulatorRef.current += primaryDelta
       const threshold = 40
@@ -99,7 +111,7 @@ const ProjectCard: React.FC<{
       event.stopPropagation()
       cycleRelative(direction)
     },
-    [cycleRelative, previewCount],
+    [cycleRelative, previewCount]
   )
 
   React.useEffect(() => {
@@ -132,11 +144,7 @@ const ProjectCard: React.FC<{
   }, [cycleRelative, hovered, previewCount])
 
   const [promoting, setPromoting] = React.useState(false)
-  const canPromote = Boolean(
-    onSelectPrimary &&
-    current?.assetId &&
-    (current?.order ?? 0) !== 0,
-  )
+  const canPromote = Boolean(onSelectPrimary && current?.assetId && (current?.order ?? 0) !== 0)
 
   const promote = async (e: React.MouseEvent) => {
     e.preventDefault()
@@ -270,7 +278,10 @@ const ProjectCard: React.FC<{
             )}
           </div>
           {previews.length > 1 && (
-            <div className="pointer-events-none absolute inset-0 flex items-center justify-between px-1 opacity-0 transition-opacity duration-150 ease-out" style={{ opacity: showNav ? 1 : 0 }}>
+            <div
+              className="pointer-events-none absolute inset-0 flex items-center justify-between px-1 opacity-0 transition-opacity duration-150 ease-out"
+              style={{ opacity: showNav ? 1 : 0 }}
+            >
               <button
                 type="button"
                 className="pointer-events-auto inline-flex h-8 w-8 items-center justify-center rounded-full bg-black/50 text-white text-lg"
@@ -298,7 +309,11 @@ const ProjectCard: React.FC<{
         {hasTags && (
           <div className="mb-2">
             <div className={tagShellClassName}>
-              <div className="tag-strip flex flex-nowrap gap-1.5 text-[11px] text-[var(--text-muted,#6B645B)]" role="list" aria-label="Project tags">
+              <div
+                className="tag-strip flex flex-nowrap gap-1.5 text-[11px] text-[var(--text-muted,#6B645B)]"
+                role="list"
+                aria-label="Project tags"
+              >
                 {tags.map((tag, index) => (
                   <span
                     key={`${tag}-${index}`}

@@ -100,8 +100,15 @@ type FrameProps = {
  */
 export function RawPlaceholderFrame({ ratio = '1x1', className = '', title }: FrameProps) {
   return (
-    <div className={`relative flex items-center justify-center bg-[var(--placeholder-bg-beige,#F3EBDD)] ${className}`}>
-      <RawPlaceholder ratio={ratio} title={title ?? 'Placeholder image'} preserveAspectRatio="xMidYMid meet" fit="contain" />
+    <div
+      className={`relative flex items-center justify-center bg-[var(--placeholder-bg-beige,#F3EBDD)] ${className}`}
+    >
+      <RawPlaceholder
+        ratio={ratio}
+        title={title ?? 'Placeholder image'}
+        preserveAspectRatio="xMidYMid meet"
+        fit="contain"
+      />
     </div>
   )
 }

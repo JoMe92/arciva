@@ -58,7 +58,11 @@ function snapshotFromState(state: ExportSettingsState): ExportSettingsSnapshot {
   }
 }
 
-function applySnapshot(prev: ExportSettingsState, snapshot: ExportSettingsSnapshot, presetId: string | null): ExportSettingsState {
+function applySnapshot(
+  prev: ExportSettingsState,
+  snapshot: ExportSettingsSnapshot,
+  presetId: string | null
+): ExportSettingsState {
   return {
     ...prev,
     outputFormat: snapshot.outputFormat,
@@ -87,8 +91,13 @@ export function ExportDialog({ isOpen, photos, projectId, onClose }: ExportDialo
   const [presetSaveError, setPresetSaveError] = useState<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
 
-  const hasRawSource = useMemo(() => photos.some((photo) => photo.type === 'RAW' || photo.pairedAssetType === 'RAW'), [photos])
-  const jpegSettingsVisible = settings.outputFormat === 'JPEG' || (settings.contactSheetEnabled && settings.contactSheetFormat === 'JPEG')
+  const hasRawSource = useMemo(
+    () => photos.some((photo) => photo.type === 'RAW' || photo.pairedAssetType === 'RAW'),
+    [photos]
+  )
+  const jpegSettingsVisible =
+    settings.outputFormat === 'JPEG' ||
+    (settings.contactSheetEnabled && settings.contactSheetFormat === 'JPEG')
   const totalSelected = photos.length
   const canExport = Boolean(projectId && totalSelected > 0)
 
@@ -164,7 +173,7 @@ export function ExportDialog({ isOpen, photos, projectId, onClose }: ExportDialo
         setSettings((prev) => applySnapshot(prev, preset.settings, preset.id))
       }
     },
-    [presets],
+    [presets]
   )
 
   const handleSavePreset = useCallback(() => {
@@ -212,7 +221,7 @@ export function ExportDialog({ isOpen, photos, projectId, onClose }: ExportDialo
         {
           signal: controller.signal,
           onProgress: (snapshot) => setProgress(snapshot),
-        },
+        }
       )
       setExportResult(result)
       setPhase('success')
@@ -264,7 +273,9 @@ export function ExportDialog({ isOpen, photos, projectId, onClose }: ExportDialo
                 <p className="text-sm font-semibold text-[var(--text,#1F1E1B)]">
                   {totalSelected} photo{totalSelected === 1 ? '' : 's'} will be exported
                 </p>
-                <p className="text-xs text-[var(--text-muted,#6B645B)]">Selection snapshot is taken at the time export starts.</p>
+                <p className="text-xs text-[var(--text-muted,#6B645B)]">
+                  Selection snapshot is taken at the time export starts.
+                </p>
                 <div className="mt-4 flex-1 overflow-y-auto pr-2">
                   {photos.length ? (
                     <div className="space-y-3">
@@ -275,14 +286,26 @@ export function ExportDialog({ isOpen, photos, projectId, onClose }: ExportDialo
                         >
                           <div className="h-14 w-14 overflow-hidden rounded-xl bg-[var(--placeholder-bg-beige,#F3EBDD)]">
                             {photo.thumbSrc ? (
-                              <img src={photo.thumbSrc} alt={photo.name} className="h-full w-full object-cover" />
+                              <img
+                                src={photo.thumbSrc}
+                                alt={photo.name}
+                                className="h-full w-full object-cover"
+                              />
                             ) : (
-                              <RawPlaceholderFrame ratio={photo.placeholderRatio} className="h-full w-full" title={photo.name} />
+                              <RawPlaceholderFrame
+                                ratio={photo.placeholderRatio}
+                                className="h-full w-full"
+                                title={photo.name}
+                              />
                             )}
                           </div>
                           <div className="min-w-0 flex-1">
-                            <div className="truncate text-sm font-semibold text-[var(--text,#1F1E1B)]">{photo.name}</div>
-                            <div className="truncate text-[11px] text-[var(--text-muted,#6B645B)]">{photo.basename ?? photo.id}</div>
+                            <div className="truncate text-sm font-semibold text-[var(--text,#1F1E1B)]">
+                              {photo.name}
+                            </div>
+                            <div className="truncate text-[11px] text-[var(--text-muted,#6B645B)]">
+                              {photo.basename ?? photo.id}
+                            </div>
                           </div>
                           <span className="rounded-full border border-[var(--border,#E1D3B9)] px-2 py-0.5 text-[11px] font-medium text-[var(--text,#1F1E1B)]">
                             {photo.type}
@@ -300,7 +323,10 @@ export function ExportDialog({ isOpen, photos, projectId, onClose }: ExportDialo
               <div className="flex min-h-0 w-full flex-col gap-5 overflow-y-auto px-6 py-5 lg:w-[420px] lg:pr-4">
                 <div>
                   <div className="flex items-center justify-between gap-3">
-                    <label className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]" htmlFor="export-preset-select">
+                    <label
+                      className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]"
+                      htmlFor="export-preset-select"
+                    >
                       Preset
                     </label>
                     <button
@@ -326,7 +352,10 @@ export function ExportDialog({ isOpen, photos, projectId, onClose }: ExportDialo
                   </select>
                   {presetSaveOpen ? (
                     <div className="mt-3 rounded-[16px] border border-[var(--border,#E1D3B9)] bg-[var(--surface-subtle,#FBF7EF)] p-3 text-sm">
-                      <label htmlFor="export-preset-name" className="text-[12px] font-medium text-[var(--text,#1F1E1B)]">
+                      <label
+                        htmlFor="export-preset-name"
+                        className="text-[12px] font-medium text-[var(--text,#1F1E1B)]"
+                      >
                         Preset name
                       </label>
                       <input
@@ -335,9 +364,15 @@ export function ExportDialog({ isOpen, photos, projectId, onClose }: ExportDialo
                         onChange={(event) => setPresetName(event.target.value)}
                         className="mt-2 h-9 w-full rounded-[12px] border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring,#1A73E8)]"
                       />
-                      {presetSaveError ? <p className="mt-1 text-[11px] text-[#B42318]">{presetSaveError}</p> : null}
+                      {presetSaveError ? (
+                        <p className="mt-1 text-[11px] text-[#B42318]">{presetSaveError}</p>
+                      ) : null}
                       <div className="mt-3 flex justify-end gap-2">
-                        <button type="button" onClick={() => setPresetSaveOpen(false)} className="text-[12px] text-[var(--text-muted,#6B645B)] hover:underline">
+                        <button
+                          type="button"
+                          onClick={() => setPresetSaveOpen(false)}
+                          className="text-[12px] text-[var(--text-muted,#6B645B)] hover:underline"
+                        >
                           Cancel
                         </button>
                         <button
@@ -352,14 +387,24 @@ export function ExportDialog({ isOpen, photos, projectId, onClose }: ExportDialo
                   ) : null}
                 </div>
                 <div className="space-y-4 rounded-[18px] border border-[var(--border,#E1D3B9)] p-4">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">File format</p>
-                  <label className="text-sm font-medium text-[var(--text,#1F1E1B)]" htmlFor="export-format-select">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">
+                    File format
+                  </p>
+                  <label
+                    className="text-sm font-medium text-[var(--text,#1F1E1B)]"
+                    htmlFor="export-format-select"
+                  >
                     Output format
                   </label>
                   <select
                     id="export-format-select"
                     value={settings.outputFormat}
-                    onChange={(event) => setSettings((prev) => ({ ...prev, outputFormat: event.target.value as ExportSettingsState['outputFormat'] }))}
+                    onChange={(event) =>
+                      setSettings((prev) => ({
+                        ...prev,
+                        outputFormat: event.target.value as ExportSettingsState['outputFormat'],
+                      }))
+                    }
                     className="h-10 rounded-[14px] border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 text-sm"
                   >
                     <option value="JPEG">JPEG (default)</option>
@@ -368,7 +413,9 @@ export function ExportDialog({ isOpen, photos, projectId, onClose }: ExportDialo
                   </select>
                   {hasRawSource ? (
                     <div className="space-y-2 rounded-[16px] bg-[var(--sand-50,#FBF7EF)] p-3 text-sm">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">For RAW files</p>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">
+                        For RAW files
+                      </p>
                       <label className="flex items-center gap-2">
                         <input
                           type="radio"
@@ -381,24 +428,37 @@ export function ExportDialog({ isOpen, photos, projectId, onClose }: ExportDialo
                         <input
                           type="radio"
                           checked={settings.rawHandling === 'developed'}
-                          onChange={() => setSettings((prev) => ({ ...prev, rawHandling: 'developed' }))}
+                          onChange={() =>
+                            setSettings((prev) => ({ ...prev, rawHandling: 'developed' }))
+                          }
                         />
                         <span>Use developed JPEG output</span>
                       </label>
                       <p className="text-[11px] text-[var(--text-muted,#6B645B)]">
-                        RAW handling only applies to assets with a RAW source. Other files always use their current image.
+                        RAW handling only applies to assets with a RAW source. Other files always
+                        use their current image.
                       </p>
                     </div>
                   ) : null}
                 </div>
                 <div className="space-y-3 rounded-[18px] border border-[var(--border,#E1D3B9)] p-4">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">Size &amp; quality</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">
+                    Size &amp; quality
+                  </p>
                   <label className="flex items-center gap-2 text-sm">
-                    <input type="radio" checked={settings.sizeMode === 'original'} onChange={() => setSettings((prev) => ({ ...prev, sizeMode: 'original' }))} />
+                    <input
+                      type="radio"
+                      checked={settings.sizeMode === 'original'}
+                      onChange={() => setSettings((prev) => ({ ...prev, sizeMode: 'original' }))}
+                    />
                     <span>Original size</span>
                   </label>
                   <label className="flex items-center gap-2 text-sm">
-                    <input type="radio" checked={settings.sizeMode === 'resize'} onChange={() => setSettings((prev) => ({ ...prev, sizeMode: 'resize' }))} />
+                    <input
+                      type="radio"
+                      checked={settings.sizeMode === 'resize'}
+                      onChange={() => setSettings((prev) => ({ ...prev, sizeMode: 'resize' }))}
+                    />
                     <span className="flex items-center gap-2">
                       Resize by long edge
                       <input
@@ -407,19 +467,28 @@ export function ExportDialog({ isOpen, photos, projectId, onClose }: ExportDialo
                         max={MAX_LONG_EDGE}
                         value={settings.longEdge}
                         disabled={settings.sizeMode !== 'resize'}
-                        onChange={(event) => setSettings((prev) => ({ ...prev, longEdge: Number(event.target.value) }))}
+                        onChange={(event) =>
+                          setSettings((prev) => ({ ...prev, longEdge: Number(event.target.value) }))
+                        }
                         className="h-9 w-20 rounded-[10px] border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-2 text-sm disabled:bg-[var(--sand-50,#FBF7EF)]"
                       />
                       <span>px</span>
                     </span>
                   </label>
-                  {errors.longEdge ? <p className="text-[11px] text-[#B42318]">{errors.longEdge}</p> : null}
+                  {errors.longEdge ? (
+                    <p className="text-[11px] text-[#B42318]">{errors.longEdge}</p>
+                  ) : null}
                   {jpegSettingsVisible ? (
                     <div className="flex items-center gap-2 text-sm">
                       <span>JPEG quality</span>
                       <select
                         value={settings.jpegQuality}
-                        onChange={(event) => setSettings((prev) => ({ ...prev, jpegQuality: Number(event.target.value) }))}
+                        onChange={(event) =>
+                          setSettings((prev) => ({
+                            ...prev,
+                            jpegQuality: Number(event.target.value),
+                          }))
+                        }
                         className="h-9 rounded-[10px] border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-2 text-sm"
                       >
                         {JPEG_QUALITY_OPTIONS.map((value) => (
@@ -437,14 +506,25 @@ export function ExportDialog({ isOpen, photos, projectId, onClose }: ExportDialo
                       <input
                         type="checkbox"
                         checked={settings.contactSheetEnabled}
-                        onChange={(event) => setSettings((prev) => ({ ...prev, contactSheetEnabled: event.target.checked }))}
+                        onChange={(event) =>
+                          setSettings((prev) => ({
+                            ...prev,
+                            contactSheetEnabled: event.target.checked,
+                          }))
+                        }
                       />
                       <span>Also create contact sheet</span>
                     </label>
                     {settings.contactSheetEnabled ? (
                       <select
                         value={settings.contactSheetFormat}
-                        onChange={(event) => setSettings((prev) => ({ ...prev, contactSheetFormat: event.target.value as ExportSettingsState['contactSheetFormat'] }))}
+                        onChange={(event) =>
+                          setSettings((prev) => ({
+                            ...prev,
+                            contactSheetFormat: event.target
+                              .value as ExportSettingsState['contactSheetFormat'],
+                          }))
+                        }
                         className="h-9 rounded-[10px] border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-2 text-sm"
                       >
                         <option value="PDF">PDF</option>
@@ -455,17 +535,28 @@ export function ExportDialog({ isOpen, photos, projectId, onClose }: ExportDialo
                   </div>
                   {settings.contactSheetEnabled ? (
                     <p className="text-[11px] text-[var(--text-muted,#6B645B)]">
-                      Generates a vintage-style contact sheet with thumbnails and filenames for this export.
+                      Generates a vintage-style contact sheet with thumbnails and filenames for this
+                      export.
                     </p>
                   ) : null}
                 </div>
                 <div className="space-y-2 rounded-[18px] border border-[var(--border,#E1D3B9)] p-4">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">Download</p>
-                  <p className="text-sm text-[var(--text,#1F1E1B)]">
-                    Exports are packaged as ZIP archives. When the export finishes, your browser will prompt you to choose where the file is saved.
+                  <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">
+                    Download
                   </p>
-                  <p className="text-[11px] text-[var(--text-muted,#6B645B)]">No server-side path selection is required—the download works in hosted deployments.</p>
-                  {!projectId ? <p className="text-[11px] text-[#B42318]">Connect to a project to enable exporting.</p> : null}
+                  <p className="text-sm text-[var(--text,#1F1E1B)]">
+                    Exports are packaged as ZIP archives. When the export finishes, your browser
+                    will prompt you to choose where the file is saved.
+                  </p>
+                  <p className="text-[11px] text-[var(--text-muted,#6B645B)]">
+                    No server-side path selection is required—the download works in hosted
+                    deployments.
+                  </p>
+                  {!projectId ? (
+                    <p className="text-[11px] text-[#B42318]">
+                      Connect to a project to enable exporting.
+                    </p>
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -509,13 +600,18 @@ export function ExportDialog({ isOpen, photos, projectId, onClose }: ExportDialo
             <div>
               <p className="text-xl font-semibold text-[var(--text,#1F1E1B)]">Exporting photos…</p>
               <p className="text-sm text-[var(--text-muted,#6B645B)]">
-                Preparing a ZIP download for {progress.total} photo{progress.total === 1 ? '' : 's'}. Your browser will prompt for a save location once ready.
+                Preparing a ZIP download for {progress.total} photo{progress.total === 1 ? '' : 's'}
+                . Your browser will prompt for a save location once ready.
               </p>
             </div>
             <div className="h-3 w-full max-w-lg rounded-full bg-[var(--sand-100,#F3EBDD)]">
               <div
                 className="h-full rounded-full bg-[var(--charcoal-800,#1F1E1B)] transition-[width]"
-                style={{ width: progress.total ? `${Math.min(100, Math.round((progress.completed / progress.total) * 100))}%` : '0%' }}
+                style={{
+                  width: progress.total
+                    ? `${Math.min(100, Math.round((progress.completed / progress.total) * 100))}%`
+                    : '0%',
+                }}
               />
             </div>
             <p className="text-sm text-[var(--text-muted,#6B645B)]">
@@ -536,11 +632,17 @@ export function ExportDialog({ isOpen, photos, projectId, onClose }: ExportDialo
               ✓
             </div>
             <div>
-              <p className="text-xl font-semibold text-[var(--text,#1F1E1B)]">Export ready to download</p>
-              <p className="text-sm text-[var(--text-muted,#6B645B)]">
-                {progress.total} photo{progress.total === 1 ? '' : 's'} packaged as a ZIP archive. The download button below will re-trigger the browser save dialog.
+              <p className="text-xl font-semibold text-[var(--text,#1F1E1B)]">
+                Export ready to download
               </p>
-              <p className="text-xs text-[var(--text-muted,#6B645B)]">The browser decides where downloads are stored. Use the button below to download again.</p>
+              <p className="text-sm text-[var(--text-muted,#6B645B)]">
+                {progress.total} photo{progress.total === 1 ? '' : 's'} packaged as a ZIP archive.
+                The download button below will re-trigger the browser save dialog.
+              </p>
+              <p className="text-xs text-[var(--text-muted,#6B645B)]">
+                The browser decides where downloads are stored. Use the button below to download
+                again.
+              </p>
               {exportError ? <p className="mt-2 text-xs text-[#B42318]">{exportError}</p> : null}
             </div>
             <div className="flex items-center gap-3">
@@ -549,7 +651,9 @@ export function ExportDialog({ isOpen, photos, projectId, onClose }: ExportDialo
                 disabled={!exportResult?.downloadUrl}
                 onClick={handleDownloadExport}
                 className={`inline-flex h-10 items-center rounded-full px-5 text-sm font-semibold ${
-                  exportResult?.downloadUrl ? 'bg-[var(--charcoal-800,#1F1E1B)] text-white shadow-lg' : 'cursor-not-allowed border border-[var(--border,#E1D3B9)] text-[var(--text-muted,#6B645B)]'
+                  exportResult?.downloadUrl
+                    ? 'bg-[var(--charcoal-800,#1F1E1B)] text-white shadow-lg'
+                    : 'cursor-not-allowed border border-[var(--border,#E1D3B9)] text-[var(--text-muted,#6B645B)]'
                 }`}
               >
                 {exportResult?.downloadUrl ? 'Download export' : 'Download unavailable'}
@@ -566,7 +670,7 @@ export function ExportDialog({ isOpen, photos, projectId, onClose }: ExportDialo
         ) : null}
       </div>
     </div>,
-    document.body,
+    document.body
   )
 }
 

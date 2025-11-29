@@ -7,14 +7,63 @@ from datetime import datetime
 from typing import Any, Optional
 
 from sqlalchemy import (
-    String, Text, Enum as SAEnum, ForeignKey, BigInteger, Integer,
-    DateTime, PrimaryKeyConstraint, Boolean, text, JSON, UniqueConstraint
+    String,
+    Text,
+    Enum as SAEnum,
+    ForeignKey,
+    BigInteger,
+    Integer,
+    DateTime,
+    PrimaryKeyConstraint,
+    Boolean,
+    text,
+    JSON,
+    UniqueConstraint,
+    TypeDecorator,
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
 
 from .db import Base
+
+
+# Custom UUID type that works with both PostgreSQL and SQLite
+class GUID(TypeDecorator):
+    """Platform-independent GUID type.
+
+    Uses PostgreSQL's UUID type when available, otherwise uses
+    CHAR(32) storing as stringified hex values.
+    """
+
+    impl = String
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == "postgresql":
+            return dialect.type_descriptor(UUID(as_uuid=True))
+        else:
+            return dialect.type_descriptor(String(32))
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return value
+        elif dialect.name == "postgresql":
+            return value
+        else:
+            if not isinstance(value, uuid.UUID):
+                return uuid.UUID(value).hex
+            else:
+                return value.hex
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return value
+        else:
+            if not isinstance(value, uuid.UUID):
+                return uuid.UUID(value)
+            else:
+                return value
 
 
 class AssetStatus(str, enum.Enum):
@@ -30,35 +79,55 @@ class AssetStatus(str, enum.Enum):
 class User(Base):
     __tablename__ = "users"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
+    id: Mapped[uuid.UUID] = mapped_column(GUID, primary_key=True, default=uuid.uuid4)
+    email: Mapped[str] = mapped_column(
+        String(255), nullable=False, unique=True, index=True
+    )
     password_hash: Mapped[str] = mapped_column(Text, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
 
 class UserSession(Base):
     __tablename__ = "user_sessions"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    id: Mapped[uuid.UUID] = mapped_column(GUID, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     token_hash: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
 
 class Project(Base):
     __tablename__ = "projects"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    id: Mapped[uuid.UUID] = mapped_column(GUID, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     title: Mapped[str] = mapped_column(Text, nullable=False)
     client: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    stack_pairs_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
+    stack_pairs_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
 
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
 
 class ColorLabel(str, enum.Enum):
@@ -73,9 +142,13 @@ class ColorLabel(str, enum.Enum):
 class Asset(Base):
     __tablename__ = "assets"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    sha256: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, unique=True)
+    id: Mapped[uuid.UUID] = mapped_column(GUID, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    sha256: Mapped[Optional[str]] = mapped_column(
+        String(64), nullable=True, unique=True
+    )
     format: Mapped[str] = mapped_column(
         String(32),
         nullable=False,
@@ -88,13 +161,25 @@ class Asset(Base):
 
     width: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     height: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    taken_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    taken_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
-    storage_uri: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # Relative path under APP_MEDIA_ROOT
-    status: Mapped[AssetStatus] = mapped_column(SAEnum(AssetStatus), nullable=False, default=AssetStatus.UPLOADING)
-    queued_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    processing_started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    storage_uri: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True
+    )  # Relative path under APP_MEDIA_ROOT
+    status: Mapped[AssetStatus] = mapped_column(
+        SAEnum(AssetStatus), nullable=False, default=AssetStatus.UPLOADING
+    )
+    queued_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    processing_started_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    completed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     metadata_warnings: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     metadata_json: Mapped[Optional[dict[str, Any]]] = mapped_column(
@@ -102,79 +187,140 @@ class Asset(Base):
         nullable=True,
     )
     pixel_format: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
-    pixel_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, unique=False)
+    pixel_hash: Mapped[Optional[str]] = mapped_column(
+        String(64), nullable=True, unique=False
+    )
     reference_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
 
 class ProjectAssetPair(Base):
     __tablename__ = "project_asset_pairs"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    id: Mapped[uuid.UUID] = mapped_column(GUID, primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
     basename: Mapped[str] = mapped_column(Text, nullable=False)
-    jpeg_asset_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("assets.id", ondelete="CASCADE"), nullable=False)
-    raw_asset_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("assets.id", ondelete="CASCADE"), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    jpeg_asset_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("assets.id", ondelete="CASCADE"), nullable=False
+    )
+    raw_asset_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("assets.id", ondelete="CASCADE"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
     __table_args__ = (
-        UniqueConstraint("project_id", "basename", name="uq_project_asset_pairs_project_basename"),
-        UniqueConstraint("project_id", "jpeg_asset_id", name="uq_project_asset_pairs_project_jpeg"),
-        UniqueConstraint("project_id", "raw_asset_id", name="uq_project_asset_pairs_project_raw"),
+        UniqueConstraint(
+            "project_id",
+            "basename",
+            name="uq_project_asset_pairs_project_basename",
+        ),
+        UniqueConstraint(
+            "project_id",
+            "jpeg_asset_id",
+            name="uq_project_asset_pairs_project_jpeg",
+        ),
+        UniqueConstraint(
+            "project_id",
+            "raw_asset_id",
+            name="uq_project_asset_pairs_project_raw",
+        ),
     )
 
 
 class ProjectAsset(Base):
     __tablename__ = "project_assets"
 
-    id: Mapped[uuid.UUID] = mapped_column("link_id", UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"))
-    asset_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("assets.id", ondelete="CASCADE"))
-    added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
-    is_preview: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
+    id: Mapped[uuid.UUID] = mapped_column(
+        "link_id", GUID, primary_key=True, default=uuid.uuid4
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE")
+    )
+    asset_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("assets.id", ondelete="CASCADE")
+    )
+    added_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    is_preview: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
     preview_order: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    pair_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("project_asset_pairs.id", ondelete="SET NULL"), nullable=True)
+    pair_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("project_asset_pairs.id", ondelete="SET NULL"),
+        nullable=True,
+    )
 
     __table_args__ = (
-        UniqueConstraint("project_id", "asset_id", name="uq_project_assets_project_asset"),
+        UniqueConstraint(
+            "project_id", "asset_id", name="uq_project_assets_project_asset"
+        ),
     )
 
 
 class Derivative(Base):
     __tablename__ = "derivatives"
 
-    asset_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("assets.id", ondelete="CASCADE"))
-    variant: Mapped[str] = mapped_column(String(64))    # e.g., "thumb_256"
-    format: Mapped[str] = mapped_column(String(16))     # e.g., "jpg"
+    asset_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("assets.id", ondelete="CASCADE")
+    )
+    variant: Mapped[str] = mapped_column(String(64))  # e.g., "thumb_256"
+    format: Mapped[str] = mapped_column(String(16))  # e.g., "jpg"
     width: Mapped[int] = mapped_column(Integer)
     height: Mapped[int] = mapped_column(Integer)
     storage_key: Mapped[str] = mapped_column(Text)  # Relative path under APP_MEDIA_ROOT
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-
-    __table_args__ = (
-        PrimaryKeyConstraint("asset_id", "variant"),
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
     )
+
+    __table_args__ = (PrimaryKeyConstraint("asset_id", "variant"),)
 
 
 class MetadataState(Base):
     __tablename__ = "asset_metadata_states"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    link_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("project_assets.link_id", ondelete="CASCADE"), unique=True)
+    id: Mapped[uuid.UUID] = mapped_column(GUID, primary_key=True, default=uuid.uuid4)
+    link_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("project_assets.link_id", ondelete="CASCADE"), unique=True
+    )
     rating: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    color_label: Mapped[ColorLabel] = mapped_column(SAEnum(ColorLabel), nullable=False, default=ColorLabel.NONE)
-    picked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
-    rejected: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
+    color_label: Mapped[ColorLabel] = mapped_column(
+        SAEnum(ColorLabel), nullable=False, default=ColorLabel.NONE
+    )
+    picked: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    rejected: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
     edits: Mapped[Optional[dict[str, Any]]] = mapped_column(
         JSON().with_variant(JSONB, "postgresql"),
         nullable=True,
     )
-    source_project_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("projects.id", ondelete="SET NULL"), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    source_project_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("projects.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
 
 class AppSetting(Base):
@@ -185,7 +331,9 @@ class AppSetting(Base):
         JSON().with_variant(JSONB, "postgresql"),
         nullable=False,
     )
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
 
 class ExportJobStatus(str, enum.Enum):
@@ -199,9 +347,13 @@ class ExportJobStatus(str, enum.Enum):
 class ExportJob(Base):
     __tablename__ = "export_jobs"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    id: Mapped[uuid.UUID] = mapped_column(GUID, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
     photo_ids: Mapped[list[str]] = mapped_column(
         JSON().with_variant(JSONB, "postgresql"),
         nullable=False,
@@ -228,17 +380,27 @@ class ExportJob(Base):
     artifact_filename: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     artifact_size: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    started_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    finished_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    expires_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
 
 class BulkImageExport(Base):
     __tablename__ = "bulk_image_exports"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    id: Mapped[uuid.UUID] = mapped_column(GUID, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     asset_ids: Mapped[list[str]] = mapped_column(
         JSON().with_variant(JSONB, "postgresql"),
         nullable=False,
@@ -260,9 +422,19 @@ class BulkImageExport(Base):
     artifact_path: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     artifact_filename: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     artifact_size: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
-    date_basis: Mapped[str] = mapped_column(String(32), nullable=False, default="capture-date")
+    date_basis: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="capture-date"
+    )
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    started_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    finished_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    expires_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )

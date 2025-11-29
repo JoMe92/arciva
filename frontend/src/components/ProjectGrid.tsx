@@ -1,7 +1,12 @@
 import React from 'react'
 import type { Project } from '../features/projects/types'
 import Row from './Row'
-import { buildLayout, type FirstRowArtistPlan, type Aspect, type ArtistSize } from '../features/projects/layout'
+import {
+  buildLayout,
+  type FirstRowArtistPlan,
+  type Aspect,
+  type ArtistSize,
+} from '../features/projects/layout'
 
 const ProjectGrid: React.FC<{
   items: Project[]
@@ -12,7 +17,16 @@ const ProjectGrid: React.FC<{
   archiveMode: boolean
   onEdit: (p: Project) => void
   onSelectPrimary?: (projectId: string, assetId: string) => Promise<void>
-}> = ({ items, onOpen, onArchive, onUnarchive, onCreate, archiveMode, onEdit, onSelectPrimary }) => {
+}> = ({
+  items,
+  onOpen,
+  onArchive,
+  onUnarchive,
+  onCreate,
+  archiveMode,
+  onEdit,
+  onSelectPrimary,
+}) => {
   // In der Archive-Ansicht keine Create-Card
   const firstRowPlan = useFirstRowArtistPlan(items, !archiveMode)
   const layout = buildLayout(items, !archiveMode, firstRowPlan)
@@ -41,7 +55,8 @@ export default ProjectGrid
 
 type Orientation = 'landscape' | 'portrait'
 
-const normalizeOrientation = (aspect?: Aspect): Orientation => (aspect === 'landscape' ? 'landscape' : 'portrait')
+const normalizeOrientation = (aspect?: Aspect): Orientation =>
+  aspect === 'landscape' ? 'landscape' : 'portrait'
 
 const randomBetween = (min: number, max: number) => Math.random() * (max - min) + min
 const randomIntBetween = (min: number, max: number) => Math.round(randomBetween(min, max))
@@ -66,27 +81,27 @@ const getScale = (size: ArtistSize) => {
   return typeof value === 'function' ? value() : value
 }
 
-type CachedPlan = { key: string; plan?: FirstRowArtistPlan }
-
-function useFirstRowArtistPlan(projects: Project[], withCreate: boolean): FirstRowArtistPlan | undefined {
-  const cacheRef = React.useRef<CachedPlan | null>(null)
-  if (!withCreate || projects.length < 2) {
-    return undefined
-  }
-
-  const first = projects[0]
-  const second = projects[1]
-  if (!first || !second) return undefined
-  const key = `${first.id}:${second.id}:${first.aspect}:${second.aspect}`
-
-  if (!cacheRef.current || cacheRef.current.key !== key) {
-    cacheRef.current = {
-      key,
-      plan: buildFirstRowArtistPlan(first, second),
+function useFirstRowArtistPlan(
+  projects: Project[],
+  withCreate: boolean
+): FirstRowArtistPlan | undefined {
+  return React.useMemo(() => {
+    if (!withCreate || projects.length < 2) {
+      return undefined
     }
-  }
 
-  return cacheRef.current.plan
+    const first = projects[0]
+    const second = projects[1]
+    if (!first || !second) return undefined
+
+    return buildFirstRowArtistPlan(first, second)
+  }, [
+    withCreate,
+    projects[0]?.id,
+    projects[1]?.id,
+    projects[0]?.aspect,
+    projects[1]?.aspect,
+  ])
 }
 
 function buildFirstRowArtistPlan(primary: Project, secondary: Project): FirstRowArtistPlan {

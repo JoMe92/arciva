@@ -37,8 +37,14 @@ export function DialogHeader({
         </span>
         {(title || subtitle) && (
           <div className="min-w-0">
-            {title ? <p className="text-base font-semibold leading-tight text-[var(--text,#1F1E1B)]">{title}</p> : null}
-            {subtitle ? <p className="text-[12px] text-[var(--text-muted,#6B645B)]">{subtitle}</p> : null}
+            {title ? (
+              <p className="text-base font-semibold leading-tight text-[var(--text,#1F1E1B)]">
+                {title}
+              </p>
+            ) : null}
+            {subtitle ? (
+              <p className="text-[12px] text-[var(--text-muted,#6B645B)]">{subtitle}</p>
+            ) : null}
           </div>
         )}
       </div>

@@ -20,7 +20,8 @@ from ..storage import PosixStorage
 
 logger = logging.getLogger("arciva.bulk_image_exports")
 
-# Images are grouped by capture date (`Asset.taken_at`) and fall back to import timestamp when missing.
+# Images are grouped by capture date (`Asset.taken_at`) and fall back to import
+# timestamp when missing.
 DATE_BASIS_LABEL = "capture-date"
 FOLDER_TEMPLATE = "year/month/day"
 ARCHIVE_PREFIX = "arciva-images"
@@ -42,20 +43,26 @@ def _bulk_export_conditions(user_id: UUID):
 
 async def collect_bulk_export_asset_ids(db: AsyncSession, user_id: UUID) -> list[UUID]:
     rows = (
-        await db.execute(
-            select(models.Asset.id)
+        (
+            await db.execute(
+                select(models.Asset.id)
                 .where(*_bulk_export_conditions(user_id))
                 .order_by(
                     models.Asset.taken_at.is_(None),
                     models.Asset.taken_at.asc(),
                     models.Asset.created_at.asc(),
                 )
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return rows
 
 
-async def estimate_bulk_image_export(db: AsyncSession, user_id: UUID) -> tuple[int, int]:
+async def estimate_bulk_image_export(
+    db: AsyncSession, user_id: UUID
+) -> tuple[int, int]:
     total_files, total_bytes = (
         await db.execute(
             select(
@@ -123,19 +130,25 @@ def _build_member_path(asset: models.Asset, used: set[str]) -> Path:
     return candidate
 
 
-async def _iter_assets(db: AsyncSession, asset_ids: Iterable[UUID], user_id: UUID) -> AsyncIterator[models.Asset]:
+async def _iter_assets(
+    db: AsyncSession, asset_ids: Iterable[UUID], user_id: UUID
+) -> AsyncIterator[models.Asset]:
     batch = []
     for asset_id in asset_ids:
         batch.append(asset_id)
         if len(batch) >= CHUNK_SIZE:
             rows = (
-                await db.execute(
-                    select(models.Asset).where(
-                        models.Asset.id.in_(batch),
-                        models.Asset.user_id == user_id,
+                (
+                    await db.execute(
+                        select(models.Asset).where(
+                            models.Asset.id.in_(batch),
+                            models.Asset.user_id == user_id,
+                        )
                     )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
             mapping = {asset.id: asset for asset in rows}
             for item in batch:
                 asset = mapping.get(item)
@@ -145,13 +158,17 @@ async def _iter_assets(db: AsyncSession, asset_ids: Iterable[UUID], user_id: UUI
             batch = []
     if batch:
         rows = (
-            await db.execute(
-                select(models.Asset).where(
-                    models.Asset.id.in_(batch),
-                    models.Asset.user_id == user_id,
+            (
+                await db.execute(
+                    select(models.Asset).where(
+                        models.Asset.id.in_(batch),
+                        models.Asset.user_id == user_id,
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         mapping = {asset.id: asset for asset in rows}
         for item in batch:
             asset = mapping.get(item)
@@ -168,8 +185,15 @@ async def process_bulk_image_export(job_id: UUID) -> None:
         if not job:
             logger.warning("process_bulk_image_export: job=%s missing", job_id)
             return
-        if job.status not in {models.ExportJobStatus.QUEUED, models.ExportJobStatus.RUNNING}:
-            logger.info("process_bulk_image_export: job=%s already handled status=%s", job_id, job.status)
+        if job.status not in {
+            models.ExportJobStatus.QUEUED,
+            models.ExportJobStatus.RUNNING,
+        }:
+            logger.info(
+                "process_bulk_image_export: job=%s already handled status=%s",
+                job_id,
+                job.status,
+            )
             return
 
         asset_ids = [UUID(value) for value in job.asset_ids]
@@ -199,21 +223,32 @@ async def process_bulk_image_export(job_id: UUID) -> None:
         used_paths: set[str] = set()
 
         try:
-            with zipfile.ZipFile(archive_path, "w", compression=zipfile.ZIP_DEFLATED, allowZip64=True) as zf:
+            with zipfile.ZipFile(
+                archive_path,
+                "w",
+                compression=zipfile.ZIP_DEFLATED,
+                allowZip64=True,
+            ) as zf:
                 async for asset in _iter_assets(db, asset_ids, job.user_id):
                     if not asset.storage_uri:
                         raise RuntimeError(f"Asset {asset.id} missing storage path")
                     try:
                         source_path = storage.path_from_key(asset.storage_uri)
                     except ValueError as exc:
-                        raise RuntimeError(f"Invalid storage key for asset {asset.id}: {exc}") from exc
+                        raise RuntimeError(
+                            f"Invalid storage key for asset {asset.id}: {exc}"
+                        ) from exc
                     if not source_path.exists():
                         raise RuntimeError(f"Asset source missing: {source_path}")
                     member_path = _build_member_path(asset, used_paths)
-                    await asyncio.to_thread(zf.write, str(source_path), str(member_path))
+                    await asyncio.to_thread(
+                        zf.write, str(source_path), str(member_path)
+                    )
                     processed += 1
                     job.processed_files = processed
-                    job.progress = min(95, int((processed / max(job.total_files, 1)) * 95))
+                    job.progress = min(
+                        95, int((processed / max(job.total_files, 1)) * 95)
+                    )
                     if processed % COMMIT_INTERVAL == 0:
                         await db.commit()
 
@@ -222,13 +257,21 @@ async def process_bulk_image_export(job_id: UUID) -> None:
             except ValueError:
                 job.artifact_path = str(archive_path)
             job.artifact_filename = archive_name
-            job.artifact_size = archive_path.stat().st_size if archive_path.exists() else None
+            job.artifact_size = (
+                archive_path.stat().st_size if archive_path.exists() else None
+            )
             job.status = models.ExportJobStatus.COMPLETED
             job.progress = 100
             job.finished_at = datetime.now(timezone.utc)
-            job.expires_at = job.finished_at + timedelta(hours=settings.export_retention_hours)
+            job.expires_at = job.finished_at + timedelta(
+                hours=settings.export_retention_hours
+            )
             await db.commit()
-            logger.info("process_bulk_image_export: job=%s finished count=%d", job.id, processed)
+            logger.info(
+                "process_bulk_image_export: job=%s finished count=%d",
+                job.id,
+                processed,
+            )
         except Exception as exc:  # pragma: no cover - best effort
             logger.exception("process_bulk_image_export: job=%s failed", job.id)
             job.status = models.ExportJobStatus.FAILED
@@ -242,17 +285,23 @@ async def process_bulk_image_export(job_id: UUID) -> None:
 async def cleanup_bulk_image_exports() -> None:
     settings = get_settings()
     storage = PosixStorage.from_env()
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=settings.export_retention_hours)
+    cutoff = datetime.now(timezone.utc) - timedelta(
+        hours=settings.export_retention_hours
+    )
     async with SessionLocal() as db:
         rows = (
-            await db.execute(
-                select(models.BulkImageExport).where(
-                    models.BulkImageExport.finished_at.is_not(None),
-                    models.BulkImageExport.finished_at < cutoff,
-                    models.BulkImageExport.artifact_path.is_not(None),
+            (
+                await db.execute(
+                    select(models.BulkImageExport).where(
+                        models.BulkImageExport.finished_at.is_not(None),
+                        models.BulkImageExport.finished_at < cutoff,
+                        models.BulkImageExport.artifact_path.is_not(None),
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         cleaned: list[UUID] = []
         for job in rows:
             path: Path | None = None
@@ -261,7 +310,10 @@ async def cleanup_bulk_image_exports() -> None:
                     path = storage.path_from_key(job.artifact_path)
                 except ValueError:
                     path = None
-                    logger.warning("cleanup_bulk_image_exports: invalid artifact path job=%s", job.id)
+                    logger.warning(
+                        "cleanup_bulk_image_exports: invalid artifact path " "job=%s",
+                        job.id,
+                    )
             if path and path.exists():
                 try:
                     if path.is_file():
@@ -272,7 +324,11 @@ async def cleanup_bulk_image_exports() -> None:
                     if parent.name == job.id.hex:
                         shutil.rmtree(parent, ignore_errors=True)
                 except Exception as exc:  # pragma: no cover
-                    logger.warning("cleanup_bulk_image_exports: failed to remove %s (%s)", path, exc)
+                    logger.warning(
+                        "cleanup_bulk_image_exports: failed to remove %s (%s)",
+                        path,
+                        exc,
+                    )
             job.artifact_path = None
             job.artifact_filename = None
             job.artifact_size = None
@@ -280,4 +336,7 @@ async def cleanup_bulk_image_exports() -> None:
             cleaned.append(job.id)
         if cleaned:
             await db.commit()
-            logger.info("cleanup_bulk_image_exports: removed %d expired jobs", len(cleaned))
+            logger.info(
+                "cleanup_bulk_image_exports: removed %d expired jobs",
+                len(cleaned),
+            )

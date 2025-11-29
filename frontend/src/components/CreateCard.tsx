@@ -27,18 +27,26 @@ const CreateCard: React.FC<{
         className="block w-full focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus,#6B7C7A)] rounded-xl"
       >
         <div className="overflow-hidden rounded-t-xl bg-[var(--placeholder-bg-beige,#F3EBDD)]">
-          <div className={`relative ${aspectClass(aspect)} w-full ${maxHeightClass} overflow-hidden`} style={aspectStyle}>
+          <div
+            className={`relative ${aspectClass(aspect)} w-full ${maxHeightClass} overflow-hidden`}
+            style={aspectStyle}
+          >
             <RawPlaceholder ratio={ratio} className="absolute inset-0" />
           </div>
         </div>
         <div className="rounded-b-xl border border-[var(--border,#E1D3B9)] border-t-0 bg-[var(--surface,#FFFFFF)] px-1.5 sm:px-2 md:px-3 pt-2 pb-3">
           <div className="flex items-center gap-3">
-            <span aria-hidden className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]">
+            <span
+              aria-hidden
+              className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]"
+            >
               <span className="text-lg leading-none">＋</span>
             </span>
             <div className="text-left">
               <div className="text-[13px] font-medium tracking-tight">New project</div>
-              <div className="text-[11px] uppercase tracking-wide text-[var(--text-muted,#6B645B)]">Start from scratch</div>
+              <div className="text-[11px] uppercase tracking-wide text-[var(--text-muted,#6B645B)]">
+                Start from scratch
+              </div>
             </div>
           </div>
         </div>

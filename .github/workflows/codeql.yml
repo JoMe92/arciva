@@ -2,12 +2,13 @@ name: CodeQL Analysis
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, develop ]
   pull_request:
-    branches: [ main ]
+    branches: [ develop ]
 
 permissions:
   contents: read
+  actions: read
   security-events: write
 
 jobs:
@@ -32,3 +33,10 @@ jobs:
         uses: github/codeql-action/analyze@v3
         with:
           output: codeql-results.sarif
+          upload: false
+
+      - name: Publish SARIF artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: codeql-results
+          path: codeql-results.sarif

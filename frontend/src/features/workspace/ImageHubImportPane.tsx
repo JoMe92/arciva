@@ -91,7 +91,10 @@ function formatCount(count: number) {
   return String(count)
 }
 
-function buildFilters(filters: HubFilterState, searchTerm: string): ImageHubAssetFilters | undefined {
+function buildFilters(
+  filters: HubFilterState,
+  searchTerm: string
+): ImageHubAssetFilters | undefined {
   const payload: ImageHubAssetFilters = {}
   if (filters.types.size) {
     payload.types = Array.from(filters.types)
@@ -149,12 +152,12 @@ function groupAssetsByPair(assets: ImageHubAsset[]): HubTile[] {
 type AssetStatusMap = Map<string, { already_linked: boolean; other_projects: string[] }>
 
 function useAssetStatuses(assetIds: string[], currentProjectId: string | null) {
-  const cacheRef = useRef<AssetStatusMap>(new Map())
+  const [statusMap, setStatusMap] = useState<AssetStatusMap>(() => new Map())
   const [version, forceRender] = useState(0)
 
   useEffect(() => {
     if (!assetIds.length || !currentProjectId) return
-    const missing = assetIds.filter((id) => !cacheRef.current.has(id))
+    const missing = assetIds.filter((id) => !statusMap.has(id))
     if (!missing.length) return
     let canceled = false
 
@@ -163,11 +166,19 @@ function useAssetStatuses(assetIds: string[], currentProjectId: string | null) {
         if (canceled) break
         try {
           const status = await fetchImageHubAssetStatus(assetId, currentProjectId)
-          cacheRef.current.set(assetId, status)
+          setStatusMap((prev) => {
+            const nextMap = new Map(prev)
+            nextMap.set(assetId, status)
+            return nextMap
+          })
           forceRender((v) => v + 1)
         } catch (err) {
           console.error('Failed to load status for ImageHub asset', assetId, err)
-          cacheRef.current.set(assetId, { already_linked: false, other_projects: [] })
+          setStatusMap((prev) => {
+            const nextMap = new Map(prev)
+            nextMap.set(assetId, { already_linked: false, other_projects: [] })
+            return nextMap
+          })
           forceRender((v) => v + 1)
         }
       }
@@ -178,9 +189,9 @@ function useAssetStatuses(assetIds: string[], currentProjectId: string | null) {
     return () => {
       canceled = true
     }
-  }, [assetIds, currentProjectId])
+  }, [assetIds, currentProjectId, statusMap])
 
-  return [cacheRef.current, version] as const
+  return [statusMap, version] as const
 }
 
 type VirtualizedGridProps<T> = {
@@ -193,7 +204,15 @@ type VirtualizedGridProps<T> = {
   onScrollMetrics?: (metrics: VirtualMetrics) => void
 }
 
-function VirtualizedAssetGrid<T>({ items, viewMode, estimateHeight, columnWidth, gap, renderItem, onScrollMetrics }: VirtualizedGridProps<T>) {
+function VirtualizedAssetGrid<T>({
+  items,
+  viewMode,
+  estimateHeight,
+  columnWidth,
+  gap,
+  renderItem,
+  onScrollMetrics,
+}: VirtualizedGridProps<T>) {
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const [scrollTop, setScrollTop] = useState(0)
   const [viewportHeight, setViewportHeight] = useState(0)
@@ -205,7 +224,11 @@ function VirtualizedAssetGrid<T>({ items, viewMode, estimateHeight, columnWidth,
     const handleScroll = () => {
       setScrollTop(node.scrollTop)
       if (onScrollMetrics) {
-        onScrollMetrics({ scrollTop: node.scrollTop, scrollHeight: node.scrollHeight, clientHeight: node.clientHeight })
+        onScrollMetrics({
+          scrollTop: node.scrollTop,
+          scrollHeight: node.scrollHeight,
+          clientHeight: node.clientHeight,
+        })
       }
     }
     node.addEventListener('scroll', handleScroll)
@@ -239,7 +262,10 @@ function VirtualizedAssetGrid<T>({ items, viewMode, estimateHeight, columnWidth,
   const overscan = 3
   const totalRows = Math.max(1, Math.ceil(items.length / columns))
   const startRow = Math.max(0, Math.floor(scrollTop / rowStride) - overscan)
-  const endRow = Math.min(totalRows, Math.ceil((scrollTop + (viewportHeight || rowStride)) / rowStride) + overscan)
+  const endRow = Math.min(
+    totalRows,
+    Math.ceil((scrollTop + (viewportHeight || rowStride)) / rowStride) + overscan
+  )
   const startIndex = Math.min(items.length, startRow * columns)
   const endIndex = Math.min(items.length, endRow * columns)
   const visible = items.slice(startIndex, endIndex)
@@ -248,10 +274,21 @@ function VirtualizedAssetGrid<T>({ items, viewMode, estimateHeight, columnWidth,
 
   return (
     <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto">
-      <div style={{ paddingTop, paddingBottom, paddingLeft: viewMode === 'list' ? 0 : 2, paddingRight: viewMode === 'list' ? 0 : 2 }}>
+      <div
+        style={{
+          paddingTop,
+          paddingBottom,
+          paddingLeft: viewMode === 'list' ? 0 : 2,
+          paddingRight: viewMode === 'list' ? 0 : 2,
+        }}
+      >
         <div
           className={viewMode === 'grid' ? 'grid gap-3' : 'flex flex-col gap-2'}
-          style={viewMode === 'grid' ? { gridTemplateColumns: `repeat(${columns}, minmax(${columnWidth}px, 1fr))` } : undefined}
+          style={
+            viewMode === 'grid'
+              ? { gridTemplateColumns: `repeat(${columns}, minmax(${columnWidth}px, 1fr))` }
+              : undefined
+          }
         >
           {visible.map((item) => renderItem(item))}
         </div>
@@ -281,56 +318,41 @@ function createPendingItems(tile: HubTile, folderLabel: string): PendingItem[] {
   return entries
 }
 
-export default function ImageHubImportPane({ currentProjectId, onSelectionChange, onStatusSnapshot, onProjectDirectoryChange, resetSignal }: ImageHubImportPaneProps) {
+export default function ImageHubImportPane({
+  currentProjectId,
+  onSelectionChange,
+  onStatusSnapshot,
+  onProjectDirectoryChange,
+  resetSignal,
+}: ImageHubImportPaneProps) {
   const [tab, setTab] = useState<HubBrowserTab>('project')
   const [viewMode, setViewMode] = useState<HubViewMode>('grid')
   const [search, setSearch] = useState('')
   const [filters, setFilters] = useState<HubFilterState>(() => createDefaultFilters())
-  const [activeProjectId, setActiveProjectId] = useState<string | null>(null)
-  const [dateSelection, setDateSelection] = useState<{ year?: number; month?: number; day?: number }>({})
-  const [selectionMap, setSelectionMap] = useState<Map<string, PendingItem[]>>(new Map())
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
+  const [dateSelection, setDateSelection] = useState<{
+    year?: number
+    month?: number
+    day?: number
+  }>({})
+  const [selectionBuckets, setSelectionBuckets] = useState<
+    Record<string, Map<string, PendingItem[]>>
+  >({})
 
   const debouncedSearch = useDebouncedValue(search, 300)
-
-  useEffect(() => {
-    onSelectionChange(Array.from(selectionMap.values()).flat())
-  }, [selectionMap, onSelectionChange])
-
-  useEffect(() => {
-    setSelectionMap(new Map())
-  }, [tab])
-
-  useEffect(() => {
-    if (tab !== 'project') return
-    setSelectionMap(new Map())
-  }, [tab, activeProjectId])
-
-  useEffect(() => {
-    if (tab !== 'date') return
-    setSelectionMap(new Map())
-  }, [tab, dateSelection.year, dateSelection.month, dateSelection.day])
-
-  const resetRef = useRef<number | undefined>(undefined)
-  useEffect(() => {
-    if (resetSignal === undefined) return
-    if (resetRef.current === undefined) {
-      resetRef.current = resetSignal
-      return
-    }
-    if (resetSignal !== resetRef.current) {
-      resetRef.current = resetSignal
-      setSelectionMap(new Map())
-    }
-  }, [resetSignal])
 
   const projectQuery = useInfiniteQuery({
     queryKey: ['imagehub-projects', debouncedSearch],
     initialPageParam: null as string | null,
-    queryFn: ({ pageParam }) => fetchImageHubProjects({ query: debouncedSearch, cursor: pageParam, sort: '-updated_at' }),
+    queryFn: ({ pageParam }) =>
+      fetchImageHubProjects({ query: debouncedSearch, cursor: pageParam, sort: '-updated_at' }),
     getNextPageParam: (last) => last.next_cursor ?? undefined,
   })
 
-  const projects = useMemo(() => projectQuery.data?.pages.flatMap((page) => page.projects) ?? [], [projectQuery.data])
+  const projects = useMemo(
+    () => projectQuery.data?.pages.flatMap((page) => page.projects) ?? [],
+    [projectQuery.data]
+  )
 
   useEffect(() => {
     if (!onProjectDirectoryChange) return
@@ -338,38 +360,81 @@ export default function ImageHubImportPane({ currentProjectId, onSelectionChange
       onProjectDirectoryChange({})
       return
     }
-    onProjectDirectoryChange(Object.fromEntries(projects.map((proj) => [proj.project_id, proj.name])))
+    onProjectDirectoryChange(
+      Object.fromEntries(projects.map((proj) => [proj.project_id, proj.name]))
+    )
   }, [projects, onProjectDirectoryChange])
 
-  useEffect(() => {
-    if (tab !== 'project') return
-    if (activeProjectId && projects.some((proj) => proj.project_id === activeProjectId)) return
-    if (projects.length) {
-      setActiveProjectId(projects[0].project_id)
+  const activeProjectId = useMemo(() => {
+    if (tab !== 'project') return selectedProjectId
+    if (selectedProjectId && projects.some((proj) => proj.project_id === selectedProjectId)) {
+      return selectedProjectId
     }
-  }, [projects, activeProjectId, tab])
+    return projects[0]?.project_id ?? null
+  }, [tab, selectedProjectId, projects])
 
-  const filtersPayload = useMemo(() => buildFilters(filters, debouncedSearch), [filters, debouncedSearch])
+  const selectionKey = useMemo(() => {
+    const scope =
+      tab === 'project'
+        ? `project:${activeProjectId ?? 'none'}`
+        : `date:${dateSelection.year ?? 'all'}-${dateSelection.month ?? 'all'}-${dateSelection.day ?? 'all'}`
+    return `${scope}|${resetSignal ?? 0}`
+  }, [tab, activeProjectId, dateSelection, resetSignal])
+
+  const selectionMap = useMemo(() => {
+    const existing = selectionBuckets[selectionKey]
+    return existing ?? new Map<string, PendingItem[]>()
+  }, [selectionBuckets, selectionKey])
+
+  const updateSelectionMap = useCallback(
+    (updater: (current: Map<string, PendingItem[]>) => Map<string, PendingItem[]>) => {
+      setSelectionBuckets((prev) => {
+        const current = prev[selectionKey] ?? new Map<string, PendingItem[]>()
+        const nextMap = updater(current)
+        if (nextMap === current) return prev
+        return { ...prev, [selectionKey]: nextMap }
+      })
+    },
+    [selectionKey]
+  )
+
+  useEffect(() => {
+    onSelectionChange(Array.from(selectionMap.values()).flat())
+  }, [selectionMap, onSelectionChange])
+
+  const filtersPayload = useMemo(
+    () => buildFilters(filters, debouncedSearch),
+    [filters, debouncedSearch]
+  )
 
   const assetQueryKey = useMemo(() => {
     if (tab === 'project') {
       return ['imagehub-assets', tab, viewMode, activeProjectId, filtersPayload]
     }
-    return ['imagehub-assets', tab, viewMode, dateSelection.year ?? 'all', dateSelection.month ?? 'all', dateSelection.day ?? 'all', filtersPayload]
+    return [
+      'imagehub-assets',
+      tab,
+      viewMode,
+      dateSelection.year ?? 'all',
+      dateSelection.month ?? 'all',
+      dateSelection.day ?? 'all',
+      filtersPayload,
+    ]
   }, [tab, viewMode, activeProjectId, dateSelection, filtersPayload])
 
   const projectAssets = useInfiniteQuery({
     queryKey: assetQueryKey,
     initialPageParam: null as string | null,
     enabled: tab === 'project' && !!activeProjectId,
-    queryFn: ({ pageParam }) => fetchImageHubAssets({
-      mode: 'project',
-      projectId: activeProjectId!,
-      view: viewMode,
-      limit: viewMode === 'grid' ? HUB_GRID_PAGE_SIZE : HUB_LIST_PAGE_SIZE,
-      cursor: pageParam,
-      filters: filtersPayload,
-    }),
+    queryFn: ({ pageParam }) =>
+      fetchImageHubAssets({
+        mode: 'project',
+        projectId: activeProjectId!,
+        view: viewMode,
+        limit: viewMode === 'grid' ? HUB_GRID_PAGE_SIZE : HUB_LIST_PAGE_SIZE,
+        cursor: pageParam,
+        filters: filtersPayload,
+      }),
     getNextPageParam: (last) => last.next_cursor ?? undefined,
   })
 
@@ -388,7 +453,13 @@ export default function ImageHubImportPane({ currentProjectId, onSelectionChange
 
   const shouldLoadBuckets = tab === 'date'
   const dateBuckets = useQuery({
-    queryKey: ['imagehub-date-buckets', drilldownLevel, dateSelection.year ?? 'all', dateSelection.month ?? 'all', filtersPayload],
+    queryKey: [
+      'imagehub-date-buckets',
+      drilldownLevel,
+      dateSelection.year ?? 'all',
+      dateSelection.month ?? 'all',
+      filtersPayload,
+    ],
     enabled: shouldLoadBuckets,
     queryFn: async () => {
       const response = await fetchImageHubAssets({
@@ -408,16 +479,17 @@ export default function ImageHubImportPane({ currentProjectId, onSelectionChange
     queryKey: assetQueryKey,
     initialPageParam: null as string | null,
     enabled: tab === 'date' && dateBucketLevel === 'asset',
-    queryFn: ({ pageParam }) => fetchImageHubAssets({
-      mode: 'date',
-      year: dateSelection.year,
-      month: dateSelection.month,
-      day: dateSelection.day,
-      view: viewMode,
-      limit: viewMode === 'grid' ? HUB_GRID_PAGE_SIZE : HUB_LIST_PAGE_SIZE,
-      cursor: pageParam,
-      filters: filtersPayload,
-    }),
+    queryFn: ({ pageParam }) =>
+      fetchImageHubAssets({
+        mode: 'date',
+        year: dateSelection.year,
+        month: dateSelection.month,
+        day: dateSelection.day,
+        view: viewMode,
+        limit: viewMode === 'grid' ? HUB_GRID_PAGE_SIZE : HUB_LIST_PAGE_SIZE,
+        cursor: pageParam,
+        filters: filtersPayload,
+      }),
     getNextPageParam: (last) => last.next_cursor ?? undefined,
   })
 
@@ -444,40 +516,69 @@ export default function ImageHubImportPane({ currentProjectId, onSelectionChange
     onStatusSnapshot(Object.fromEntries(statusMap.entries()))
   }, [statusVersion, statusMap, onStatusSnapshot])
 
-  const selectedCount = useMemo(() => Array.from(selectionMap.values()).flat().length, [selectionMap])
+  const selectedCount = useMemo(
+    () => Array.from(selectionMap.values()).flat().length,
+    [selectionMap]
+  )
 
-  const toggleSelection = useCallback((tile: HubTile) => {
-    setSelectionMap((prev) => {
-      const next = new Map(prev)
-      if (next.has(tile.id)) {
-        next.delete(tile.id)
+  const toggleSelection = useCallback(
+    (tile: HubTile) => {
+      updateSelectionMap((current) => {
+        const next = new Map(current)
+        if (next.has(tile.id)) {
+          next.delete(tile.id)
+          return next
+        }
+        const folderLabel =
+          tab === 'project'
+            ? (projects.find((proj) => proj.project_id === activeProjectId)?.name ?? 'ImageHub')
+            : buildDateLabel(dateSelection)
+        next.set(tile.id, createPendingItems(tile, folderLabel))
         return next
-      }
-      const folderLabel = tab === 'project' ? (projects.find((proj) => proj.project_id === activeProjectId)?.name ?? 'ImageHub') : buildDateLabel(dateSelection)
-      next.set(tile.id, createPendingItems(tile, folderLabel))
-      return next
-    })
-  }, [activeProjectId, projects, tab, dateSelection])
+      })
+    },
+    [activeProjectId, projects, tab, dateSelection, updateSelectionMap]
+  )
 
-  const hasMore = tab === 'project'
-    ? !!projectAssets.hasNextPage
-    : dateBucketLevel === 'asset' && !!dateAssets.hasNextPage
+  const hasMore =
+    tab === 'project'
+      ? !!projectAssets.hasNextPage
+      : dateBucketLevel === 'asset' && !!dateAssets.hasNextPage
   const fetchNext = tab === 'project' ? projectAssets.fetchNextPage : dateAssets.fetchNextPage
 
   const assetErrorRaw = tab === 'project' ? projectAssets.error : dateAssets.error
-  const assetError = assetErrorRaw ? (assetErrorRaw instanceof Error ? assetErrorRaw : new Error('Failed to load assets')) : null
-  const assetLoading = tab === 'project' ? projectAssets.isLoading : (dateBucketLevel === 'asset' ? dateAssets.isLoading : false)
+  const assetError = assetErrorRaw
+    ? assetErrorRaw instanceof Error
+      ? assetErrorRaw
+      : new Error('Failed to load assets')
+    : null
+  const assetLoading =
+    tab === 'project'
+      ? projectAssets.isLoading
+      : dateBucketLevel === 'asset'
+        ? dateAssets.isLoading
+        : false
 
-  const handleScrollMetrics = useCallback((metrics: VirtualMetrics) => {
-    if (tab === 'date' && dateBucketLevel !== 'asset') return
-    if (!hasMore || projectAssets.isFetchingNextPage || dateAssets.isFetchingNextPage) return
-    const threshold = metrics.scrollHeight - metrics.clientHeight
-    if (threshold <= 0) return
-    const ratio = metrics.scrollTop / threshold
-    if (ratio >= 0.75) {
-      fetchNext()
-    }
-  }, [tab, dateBucketLevel, hasMore, projectAssets.isFetchingNextPage, dateAssets.isFetchingNextPage, fetchNext])
+  const handleScrollMetrics = useCallback(
+    (metrics: VirtualMetrics) => {
+      if (tab === 'date' && dateBucketLevel !== 'asset') return
+      if (!hasMore || projectAssets.isFetchingNextPage || dateAssets.isFetchingNextPage) return
+      const threshold = metrics.scrollHeight - metrics.clientHeight
+      if (threshold <= 0) return
+      const ratio = metrics.scrollTop / threshold
+      if (ratio >= 0.75) {
+        fetchNext()
+      }
+    },
+    [
+      tab,
+      dateBucketLevel,
+      hasMore,
+      projectAssets.isFetchingNextPage,
+      dateAssets.isFetchingNextPage,
+      fetchNext,
+    ]
+  )
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
@@ -534,12 +635,14 @@ export default function ImageHubImportPane({ currentProjectId, onSelectionChange
               <button
                 key={type}
                 type="button"
-                onClick={() => setFilters((prev) => {
-                  const next = new Set(prev.types)
-                  if (next.has(type)) next.delete(type)
-                  else next.add(type)
-                  return { ...prev, types: next }
-                })}
+                onClick={() =>
+                  setFilters((prev) => {
+                    const next = new Set(prev.types)
+                    if (next.has(type)) next.delete(type)
+                    else next.add(type)
+                    return { ...prev, types: next }
+                  })
+                }
                 className={`rounded-full border px-2 py-1 ${active ? 'border-[var(--charcoal-800,#1F1E1B)] bg-[var(--sand-100,#F3EBDD)]' : 'border-[var(--border,#E1D3B9)]'}`}
               >
                 {type}
@@ -551,11 +654,15 @@ export default function ImageHubImportPane({ currentProjectId, onSelectionChange
           <span className="font-medium">Rating</span>
           <select
             value={filters.rating}
-            onChange={(event) => setFilters((prev) => ({ ...prev, rating: Number(event.target.value) }))}
+            onChange={(event) =>
+              setFilters((prev) => ({ ...prev, rating: Number(event.target.value) }))
+            }
             className="rounded border border-[var(--border,#E1D3B9)] px-2 py-1"
           >
             {RATING_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>{option.label}</option>
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
             ))}
           </select>
         </label>
@@ -571,7 +678,9 @@ export default function ImageHubImportPane({ currentProjectId, onSelectionChange
           >
             <option value="Any">All labels</option>
             {LABEL_OPTIONS.map((label) => (
-              <option key={label} value={label}>{label}</option>
+              <option key={label} value={label}>
+                {label}
+              </option>
             ))}
           </select>
         </label>
@@ -580,7 +689,9 @@ export default function ImageHubImportPane({ currentProjectId, onSelectionChange
           <input
             type="date"
             value={filters.dateFrom ?? ''}
-            onChange={(event) => setFilters((prev) => ({ ...prev, dateFrom: event.target.value || undefined }))}
+            onChange={(event) =>
+              setFilters((prev) => ({ ...prev, dateFrom: event.target.value || undefined }))
+            }
             className="rounded border border-[var(--border,#E1D3B9)] px-2 py-1"
           />
         </label>
@@ -589,7 +700,9 @@ export default function ImageHubImportPane({ currentProjectId, onSelectionChange
           <input
             type="date"
             value={filters.dateTo ?? ''}
-            onChange={(event) => setFilters((prev) => ({ ...prev, dateTo: event.target.value || undefined }))}
+            onChange={(event) =>
+              setFilters((prev) => ({ ...prev, dateTo: event.target.value || undefined }))
+            }
             className="rounded border border-[var(--border,#E1D3B9)] px-2 py-1"
           />
         </label>
@@ -600,9 +713,15 @@ export default function ImageHubImportPane({ currentProjectId, onSelectionChange
             <ProjectList
               projects={projects}
               isLoading={projectQuery.isLoading}
-              error={projectQuery.error ? (projectQuery.error instanceof Error ? projectQuery.error : new Error('Failed to load projects')) : null}
+              error={
+                projectQuery.error
+                  ? projectQuery.error instanceof Error
+                    ? projectQuery.error
+                    : new Error('Failed to load projects')
+                  : null
+              }
               activeProjectId={activeProjectId}
-              onSelectProject={setActiveProjectId}
+              onSelectProject={setSelectedProjectId}
               hasMore={!!projectQuery.hasNextPage}
               onLoadMore={() => projectQuery.fetchNextPage()}
               isFetchingMore={projectQuery.isFetchingNextPage}
@@ -612,7 +731,13 @@ export default function ImageHubImportPane({ currentProjectId, onSelectionChange
               level={drilldownLevel}
               buckets={dateBuckets.data ?? []}
               isLoading={dateBuckets.isLoading}
-              error={dateBuckets.error instanceof Error ? dateBuckets.error : dateBuckets.error ? new Error('Failed to load dates') : null}
+              error={
+                dateBuckets.error instanceof Error
+                  ? dateBuckets.error
+                  : dateBuckets.error
+                    ? new Error('Failed to load dates')
+                    : null
+              }
               selection={dateSelection}
               onSelect={setDateSelection}
             />
@@ -630,9 +755,13 @@ export default function ImageHubImportPane({ currentProjectId, onSelectionChange
               </div>
             )}
             {assetLoading && !tiles.length ? (
-              <div className="flex h-full items-center justify-center text-xs text-[var(--text-muted,#6B645B)]">Loading assets…</div>
+              <div className="flex h-full items-center justify-center text-xs text-[var(--text-muted,#6B645B)]">
+                Loading assets…
+              </div>
             ) : tab === 'date' && dateBucketLevel !== 'asset' ? (
-              <div className="flex h-full items-center justify-center text-xs text-[var(--text-muted,#6B645B)]">Choose a day to view assets.</div>
+              <div className="flex h-full items-center justify-center text-xs text-[var(--text-muted,#6B645B)]">
+                Choose a day to view assets.
+              </div>
             ) : tiles.length ? (
               <VirtualizedAssetGrid
                 items={tiles}
@@ -675,15 +804,30 @@ type ProjectListProps = {
   isFetchingMore: boolean
 }
 
-function ProjectList({ projects, isLoading, error, activeProjectId, onSelectProject, hasMore, onLoadMore, isFetchingMore }: ProjectListProps) {
+function ProjectList({
+  projects,
+  isLoading,
+  error,
+  activeProjectId,
+  onSelectProject,
+  hasMore,
+  onLoadMore,
+  isFetchingMore,
+}: ProjectListProps) {
   if (isLoading) {
     return <div className="p-4 text-xs text-[var(--text-muted,#6B645B)]">Loading projects…</div>
   }
   if (error) {
-    return <div className="p-4 text-xs text-[#B42318]">Failed to load projects. {error.message}</div>
+    return (
+      <div className="p-4 text-xs text-[#B42318]">Failed to load projects. {error.message}</div>
+    )
   }
   if (!projects.length) {
-    return <div className="p-4 text-xs text-[var(--text-muted,#6B645B)]">You have no projects with Hub assets yet.</div>
+    return (
+      <div className="p-4 text-xs text-[var(--text-muted,#6B645B)]">
+        You have no projects with Hub assets yet.
+      </div>
+    )
   }
   return (
     <div className="flex h-full flex-col">
@@ -698,13 +842,23 @@ function ProjectList({ projects, isLoading, error, activeProjectId, onSelectProj
                 onClick={() => onSelectProject(project.project_id)}
               >
                 {project.cover_thumb ? (
-                  <img src={project.cover_thumb} alt="" className="h-10 w-10 rounded object-cover" loading="lazy" />
+                  <img
+                    src={project.cover_thumb}
+                    alt=""
+                    className="h-10 w-10 rounded object-cover"
+                    loading="lazy"
+                  />
                 ) : (
                   <div className="h-10 w-10 rounded bg-[var(--sand-200,#F0E5CF)]" />
                 )}
                 <div className="flex-1">
                   <div className="truncate">{project.name}</div>
-                  <div className="text-xs text-[var(--text-muted,#6B645B)]">{project.asset_count} assets • Updated {project.updated_at ? DATE_FULL_FORMAT.format(new Date(project.updated_at)) : '—'}</div>
+                  <div className="text-xs text-[var(--text-muted,#6B645B)]">
+                    {project.asset_count} assets • Updated{' '}
+                    {project.updated_at
+                      ? DATE_FULL_FORMAT.format(new Date(project.updated_at))
+                      : '—'}
+                  </div>
                 </div>
               </button>
             </li>
@@ -736,7 +890,14 @@ type DateDrilldownProps = {
   onSelect: (next: { year?: number; month?: number; day?: number }) => void
 }
 
-function DateDrilldown({ level, buckets, isLoading, error, selection, onSelect }: DateDrilldownProps) {
+function DateDrilldown({
+  level,
+  buckets,
+  isLoading,
+  error,
+  selection,
+  onSelect,
+}: DateDrilldownProps) {
   const goBack = () => {
     if (level === 'month') onSelect({})
     else if (level === 'day') onSelect({ year: selection.year })
@@ -746,7 +907,13 @@ function DateDrilldown({ level, buckets, isLoading, error, selection, onSelect }
       <div className="flex items-center justify-between border-b border-[var(--border,#E1D3B9)] px-4 py-3 text-sm font-semibold">
         <span>{level === 'year' ? 'Years' : level === 'month' ? 'Months' : 'Days'}</span>
         {level !== 'year' && (
-          <button type="button" className="text-xs text-[var(--river-500,#6B7C7A)]" onClick={goBack}>Back</button>
+          <button
+            type="button"
+            className="text-xs text-[var(--river-500,#6B7C7A)]"
+            onClick={goBack}
+          >
+            Back
+          </button>
         )}
       </div>
       <div className="flex-1 overflow-y-auto">
@@ -755,15 +922,20 @@ function DateDrilldown({ level, buckets, isLoading, error, selection, onSelect }
         ) : error ? (
           <div className="p-4 text-xs text-[#B42318]">Failed to load. {error.message}</div>
         ) : !buckets.length ? (
-          <div className="p-4 text-xs text-[var(--text-muted,#6B645B)]">No assets found in this source.</div>
+          <div className="p-4 text-xs text-[var(--text-muted,#6B645B)]">
+            No assets found in this source.
+          </div>
         ) : (
           <ul>
             {buckets.map((bucket) => {
-              const isActive = level === 'year'
-                ? selection.year === bucket.year
-                : level === 'month'
-                  ? selection.month === bucket.month && selection.year === bucket.year
-                  : selection.day === bucket.day && selection.month === bucket.month && selection.year === bucket.year
+              const isActive =
+                level === 'year'
+                  ? selection.year === bucket.year
+                  : level === 'month'
+                    ? selection.month === bucket.month && selection.year === bucket.year
+                    : selection.day === bucket.day &&
+                      selection.month === bucket.month &&
+                      selection.year === bucket.year
               return (
                 <li key={bucket.key}>
                   <button
@@ -771,12 +943,20 @@ function DateDrilldown({ level, buckets, isLoading, error, selection, onSelect }
                     className={`flex w-full items-center justify-between px-4 py-3 text-left text-sm hover:bg-[var(--sand-50,#FBF7EF)] ${isActive ? 'bg-[var(--sand-100,#F3EBDD)] font-semibold' : ''}`}
                     onClick={() => {
                       if (level === 'year') onSelect({ year: bucket.year })
-                      else if (level === 'month') onSelect({ year: selection.year, month: bucket.month ?? undefined })
-                      else if (level === 'day') onSelect({ year: selection.year, month: selection.month, day: bucket.day ?? undefined })
+                      else if (level === 'month')
+                        onSelect({ year: selection.year, month: bucket.month ?? undefined })
+                      else if (level === 'day')
+                        onSelect({
+                          year: selection.year,
+                          month: selection.month,
+                          day: bucket.day ?? undefined,
+                        })
                     }}
                   >
                     <span>{bucket.label}</span>
-                    <span className="text-xs text-[var(--text-muted,#6B645B)]">{formatCount(bucket.asset_count)}</span>
+                    <span className="text-xs text-[var(--text-muted,#6B645B)]">
+                      {formatCount(bucket.asset_count)}
+                    </span>
                   </button>
                 </li>
               )
@@ -799,11 +979,20 @@ type AssetTileProps = {
 function AssetTile({ tile, selected, disabled, onToggle, viewMode }: AssetTileProps) {
   const primary = tile.primary
   const secondary = tile.secondary
-  const createdAt = primary.created_at ? DATE_FULL_FORMAT.format(new Date(primary.created_at)) : 'Unknown date'
+  const createdAt = primary.created_at
+    ? DATE_FULL_FORMAT.format(new Date(primary.created_at))
+    : 'Unknown date'
   const disabledTooltip = disabled ? 'Already in this project' : undefined
   const content = (
-    <div className={`relative w-full overflow-hidden rounded border ${selected ? 'border-[var(--charcoal-800,#1F1E1B)]' : 'border-[var(--border,#E1D3B9)]'} ${disabled ? 'opacity-60' : ''}`}>
-      <img src={primary.thumb_url ?? ''} alt="" className="h-40 w-full object-cover" loading="lazy" />
+    <div
+      className={`relative w-full overflow-hidden rounded border ${selected ? 'border-[var(--charcoal-800,#1F1E1B)]' : 'border-[var(--border,#E1D3B9)]'} ${disabled ? 'opacity-60' : ''}`}
+    >
+      <img
+        src={primary.thumb_url ?? ''}
+        alt=""
+        className="h-40 w-full object-cover"
+        loading="lazy"
+      />
       <div className="p-3 text-left">
         <div className="truncate text-sm font-semibold">{primary.original_filename}</div>
         <div className="text-xs text-[var(--text-muted,#6B645B)]">{createdAt}</div>
@@ -812,13 +1001,22 @@ function AssetTile({ tile, selected, disabled, onToggle, viewMode }: AssetTilePr
         {tile.isPaired && secondary ? JPEG_RAW_OVERLAY : primary.type}
       </div>
       {selected && (
-        <span className="absolute right-2 top-2 inline-flex h-5 w-5 items-center justify-center rounded-full bg-[var(--charcoal-800,#1F1E1B)] text-[10px] text-white">✓</span>
+        <span className="absolute right-2 top-2 inline-flex h-5 w-5 items-center justify-center rounded-full bg-[var(--charcoal-800,#1F1E1B)] text-[10px] text-white">
+          ✓
+        </span>
       )}
     </div>
   )
   const listContent = (
-    <div className={`flex items-center gap-3 rounded border px-3 py-2 ${selected ? 'border-[var(--charcoal-800,#1F1E1B)]' : 'border-[var(--border,#E1D3B9)]'} ${disabled ? 'opacity-60' : ''}`}>
-      <img src={primary.thumb_url ?? ''} alt="" className="h-14 w-14 rounded object-cover" loading="lazy" />
+    <div
+      className={`flex items-center gap-3 rounded border px-3 py-2 ${selected ? 'border-[var(--charcoal-800,#1F1E1B)]' : 'border-[var(--border,#E1D3B9)]'} ${disabled ? 'opacity-60' : ''}`}
+    >
+      <img
+        src={primary.thumb_url ?? ''}
+        alt=""
+        className="h-14 w-14 rounded object-cover"
+        loading="lazy"
+      />
       <div className="flex-1">
         <div className="truncate text-sm font-semibold">{primary.original_filename}</div>
         <div className="text-xs text-[var(--text-muted,#6B645B)]">{createdAt}</div>
@@ -826,7 +1024,11 @@ function AssetTile({ tile, selected, disabled, onToggle, viewMode }: AssetTilePr
       <div className="text-xs font-medium text-[var(--text-muted,#6B645B)]">
         {tile.isPaired && secondary ? JPEG_RAW_OVERLAY : primary.type}
       </div>
-      {selected && <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[var(--charcoal-800,#1F1E1B)] text-[10px] text-white">✓</span>}
+      {selected && (
+        <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[var(--charcoal-800,#1F1E1B)] text-[10px] text-white">
+          ✓
+        </span>
+      )}
     </div>
   )
 

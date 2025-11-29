@@ -25,7 +25,8 @@ _MIME_OVERRIDES = {
 
 def detect_asset_format(filename: Optional[str], mime: Optional[str] = None) -> str:
     """
-    Derive a normalized display/processing format for an asset using filename + MIME hints.
+    Derive a normalized display/processing format for an asset using filename
+    + MIME hints.
     """
 
     ext = Path(filename or "").suffix.lower()

@@ -21,6 +21,7 @@ services:
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}
       LOGS_DIR: ${LOGS_DIR:-/data/logs}
       PORT: ${APP_PORT:-8000}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
     depends_on:
       postgres:
         condition: service_healthy
@@ -29,9 +30,9 @@ services:
     ports:
       - "${APP_PORT:-8000}:8000"
     volumes:
-      - arciva_media:/data/media
-      - arciva_logs:/data/logs
-      - arciva_sqlite:/data/db
+      - /media/jome/data/arciva/media:/data/media
+      - /media/jome/data/arciva/logs:/data/logs
+      - /media/jome/data/arciva/db:/data/db
     restart: unless-stopped
 
   worker:
@@ -39,7 +40,7 @@ services:
     build:
       context: ..
       dockerfile: Dockerfile
-    command: ["worker"]
+    command: [ "worker" ]
     env_file:
       - .env.arciva
     environment:
@@ -52,15 +53,16 @@ services:
       THUMB_SIZES: ${THUMB_SIZES:-[256]}
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}
       LOGS_DIR: ${LOGS_DIR:-/data/logs}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_started
     volumes:
-      - arciva_media:/data/media
-      - arciva_logs:/data/logs
-      - arciva_sqlite:/data/db
+      - /media/jome/data/arciva/media:/data/media
+      - /media/jome/data/arciva/logs:/data/logs
+      - /media/jome/data/arciva/db:/data/db
     restart: unless-stopped
 
   postgres:
@@ -74,7 +76,7 @@ services:
     volumes:
       - arciva_postgres:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-arciva}"]
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-arciva}" ]
       interval: 10s
       timeout: 5s
       retries: 6
@@ -82,11 +84,18 @@ services:
 
   redis:
     image: redis:7-alpine
-    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    command: [ "redis-server", "--save", "60", "1", "--loglevel", "warning" ]
+    restart: unless-stopped
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    ports:
+      - "16686:16686"
+      - "4317:4317"
+      - "4318:4318"
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
     restart: unless-stopped
 
 volumes:
-  arciva_media:
-  arciva_logs:
-  arciva_sqlite:
   arciva_postgres:

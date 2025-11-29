@@ -51,7 +51,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       queryClient.clear()
       setUser(nextUser)
     },
-    [queryClient],
+    [queryClient]
   )
 
   const handleSignup = useCallback(
@@ -60,7 +60,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       queryClient.clear()
       setUser(nextUser)
     },
-    [queryClient],
+    [queryClient]
   )
 
   const handleLogout = useCallback(async () => {
@@ -77,7 +77,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       signup: handleSignup,
       logout: handleLogout,
     }),
-    [user, initializing, handleLogin, handleSignup, handleLogout],
+    [user, initializing, handleLogin, handleSignup, handleLogout]
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

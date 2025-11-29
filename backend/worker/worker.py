@@ -48,8 +48,11 @@ def trace_job(func):
         if asset_id is None and args:
             asset_id = args[0]
 
-        with tracer.start_as_current_span(func.__name__, attributes={"asset.id": str(asset_id)}):
+        with tracer.start_as_current_span(
+            func.__name__, attributes={"asset.id": str(asset_id)}
+        ):
             return await func(ctx, *args, **kwargs)
+
     return wrapper
 
 

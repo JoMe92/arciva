@@ -39,6 +39,11 @@ jobs:
       - name: Enable pnpm
         run: corepack enable
 
+      - name: Ensure pnpm store directory exists
+        run: |
+          STORE_PATH=$(pnpm store path --silent)
+          mkdir -p "$STORE_PATH"
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --filter ./frontend
 

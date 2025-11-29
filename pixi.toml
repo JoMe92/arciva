@@ -1,5 +1,5 @@
 [workspace]
-name = "FilmCabinetFrontend"
+name = "arciva"
 version = "0.1.0"
 description = "FastAPI backend + Vite frontend dev environment"
 channels = ["conda-forge"]

@@ -39,6 +39,9 @@ jobs:
       - name: Enable pnpm
         run: corepack enable
 
+      - name: Configure pnpm store for caching
+        run: pnpm config set store-dir ~/.pnpm-store
+
       - name: Ensure pnpm store directory exists
         run: |
           STORE_PATH=$(pnpm store path --silent)

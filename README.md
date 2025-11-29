@@ -182,6 +182,15 @@ We use [Pixi](https://pixi.sh/) for a reproducible development environment.
   - Frontend: `pixi run dev-frontend`
   - Tests: `pixi run test-backend`
 
+## Release Automation
+
+Container publishing is handled by `.github/workflows/docker-release.yml`. The workflow authenticates to GHCR with either:
+
+- Repository secrets `GHCR_USERNAME` and `GHCR_TOKEN` (recommended). `GHCR_TOKEN` must be a PAT with `write:packages` + `repo` scopes and SSO enabled if required.
+- The default `GITHUB_TOKEN` when the explicit secrets are not present.
+
+Add the secrets in the repo settings so releases can always push the multi-architecture image list to `ghcr.io/jome92/arciva`.
+
 ## Documentation
 
 - [Documentation Index](docs/README.md)

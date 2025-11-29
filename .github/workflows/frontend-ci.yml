@@ -30,10 +30,9 @@ jobs:
           run_install: false
 
       - name: Configure pnpm store for caching
-        run: pnpm config set store-dir ~/.pnpm-store
-
-      - name: Create pnpm cache directory for setup-node
-        run: mkdir -p ~/.pnpm-store
+        run: |
+          pnpm config set store-dir ~/.pnpm-store
+          mkdir -p ~/.pnpm-store
 
       - name: Use Node.js 20.x with pnpm cache
         uses: actions/setup-node@v4

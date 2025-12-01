@@ -28,7 +28,7 @@ export function QuickFixPanel({
     selectionCount,
 }: QuickFixPanelProps) {
     return (
-        <div className="flex flex-1 min-h-0 flex-col gap-3 overflow-y-auto pr-4">
+        <div className="flex flex-1 min-h-0 flex-col gap-3 overflow-y-auto overflow-x-hidden pr-4">
             {hasSelection && selectionCount > 1 && (
                 <div className="flex items-center gap-2 rounded-lg bg-[var(--surface-muted,#F3EBDD)] px-3 py-2 text-xs text-[var(--text,#1F1E1B)]">
                     <span className="font-medium">

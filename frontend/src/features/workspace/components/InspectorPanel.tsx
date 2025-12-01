@@ -278,7 +278,7 @@ export function InspectorPanel({
               onToggle={() => setPreviewOpen((open) => !open)}
             />
             {activeTab === 'details' ? (
-              <div className="flex flex-1 min-h-0 flex-col gap-3 overflow-y-auto pr-1">
+              <div className="flex flex-1 min-h-0 flex-col gap-3 overflow-y-auto overflow-x-hidden pr-1">
                 <InspectorSection
                   id={RIGHT_KEY_SECTION_ID}
                   ref={keyDataSectionRef}
@@ -326,7 +326,6 @@ export function InspectorPanel({
                   label="Metadata"
                   open={metadataOpen}
                   onToggle={() => setMetadataOpen((open) => !open)}
-                  grow
                 >
                   {metadataLoading ? (
                     <p className="text-xs text-[var(--text-muted,#6B645B)]">Loading metadata…</p>
@@ -684,7 +683,7 @@ function KeyDataGrid({ rows }: { rows: KeyDataRow[] }) {
           <dt className="w-32 flex-shrink-0 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">
             {row.label}
           </dt>
-          <dd className="flex-1 text-right text-sm font-semibold text-[var(--text,#1F1E1B)]">
+          <dd className="flex-1 min-w-0 break-words text-right text-sm font-semibold text-[var(--text,#1F1E1B)]">
             {row.value}
           </dd>
         </div>

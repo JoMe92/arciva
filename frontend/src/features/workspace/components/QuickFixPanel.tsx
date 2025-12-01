@@ -39,8 +39,61 @@ export function QuickFixPanel({
 
             <QuickFixGroup title="Crop & Align" onAuto={() => { }}>
                 <div className="space-y-4">
-                    <SliderControl label="Angle" />
-                    <SliderControl label="Aspect Ratio" />
+                    {/* Aspect Ratio Grid */}
+                    <div className="space-y-2">
+                        <span className="text-xs font-medium text-[var(--text,#1F1E1B)]">Aspect Ratio</span>
+                        <div className="grid grid-cols-3 gap-2">
+                            {['Free', 'Original', '1:1', '4:3', '16:9', '2:1'].map((ratio) => (
+                                <button
+                                    key={ratio}
+                                    type="button"
+                                    className="rounded border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] px-2 py-1.5 text-xs font-medium text-[var(--text,#1F1E1B)] transition hover:border-[var(--text-muted,#6B645B)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)]"
+                                >
+                                    {ratio}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Orientation Toggle */}
+                    <div className="flex rounded-lg border border-[var(--border,#EDE1C6)] bg-[var(--surface-muted,#F3EBDD)] p-1">
+                        <button
+                            type="button"
+                            className="flex-1 rounded-md bg-[var(--surface,#FFFFFF)] py-1 text-xs font-medium text-[var(--text,#1F1E1B)] shadow-sm"
+                        >
+                            Horizontal
+                        </button>
+                        <button
+                            type="button"
+                            className="flex-1 rounded-md py-1 text-xs font-medium text-[var(--text-muted,#6B645B)] hover:text-[var(--text,#1F1E1B)]"
+                        >
+                            Vertical
+                        </button>
+                    </div>
+
+                    {/* Rotation Control */}
+                    <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                            <span className="text-xs font-medium text-[var(--text,#1F1E1B)]">Angle</span>
+                            <span className="text-xs text-[var(--text-muted,#6B645B)]">0.00°</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <input
+                                type="range"
+                                min="-45"
+                                max="45"
+                                step="0.1"
+                                defaultValue="0"
+                                className="h-1.5 flex-1 cursor-pointer appearance-none rounded-full bg-[var(--border,#EDE1C6)] accent-[var(--focus-ring,#1A73E8)]"
+                            />
+                            <button
+                                type="button"
+                                className="rounded border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] px-2 py-1 text-xs font-medium text-[var(--text,#1F1E1B)] hover:bg-[var(--surface-muted,#F3EBDD)]"
+                            >
+                                Auto
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </QuickFixGroup>
 

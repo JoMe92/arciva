@@ -483,6 +483,21 @@ export function DetailView({
       </div>
     )
   }, [cur])
+  const rotationScale = useMemo(() => {
+    if (!cropAngle || !baseSize.width || !baseSize.height) return 1
+    const radians = Math.abs((cropAngle * Math.PI) / 180)
+    const cos = Math.abs(Math.cos(radians))
+    const sin = Math.abs(Math.sin(radians))
+    if (!Number.isFinite(cos) || !Number.isFinite(sin)) return 1
+    const boundingWidth = baseSize.width * cos + baseSize.height * sin
+    const boundingHeight = baseSize.width * sin + baseSize.height * cos
+    if (!boundingWidth || !boundingHeight) return 1
+    const scaleX = baseSize.width / boundingWidth
+    const scaleY = baseSize.height / boundingHeight
+    const scale = Math.min(scaleX, scaleY)
+    if (!Number.isFinite(scale) || scale <= 0 || scale > 1) return 1
+    return scale
+  }, [baseSize.height, baseSize.width, cropAngle])
 
   useEffect(() => {
     if (!onViewportChange) return
@@ -592,24 +607,29 @@ export function DetailView({
                   }}
                   onWheel={handleWheelZoom}
                 >
-                  <div
-                    className="absolute left-1/2 top-1/2"
-                    style={{
-                      width: baseSize.width || undefined,
-                      height: baseSize.height || undefined,
-                      transform: `translate(-50%, -50%) translate3d(${pan.x}px, ${pan.y}px, 0) scale(${zoomValue})`,
-                      transition: isDragging ? 'none' : 'transform 120ms ease-out',
-                    }}
-                  >
-                    <div className="relative h-full w-full">
-                      <div
-                        className="absolute inset-0 pointer-events-none"
-                        style={{
-                          transform: cropAngle ? `rotate(${cropAngle}deg)` : undefined,
-                          transition: 'transform 120ms ease-out',
-                        }}
-                      >
-                        {detailImage}
+                <div
+                  className="absolute left-1/2 top-1/2"
+                  style={{
+                    width: baseSize.width || undefined,
+                    height: baseSize.height || undefined,
+                    transform: `translate(-50%, -50%) translate3d(${pan.x}px, ${pan.y}px, 0) scale(${zoomValue})`,
+                    transition: isDragging ? 'none' : 'transform 120ms ease-out',
+                  }}
+                >
+                    <div className="relative h-full w-full overflow-hidden rounded-xl bg-[rgba(15,15,15,0.85)]">
+                      <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+                        <div
+                          className="relative h-full w-full"
+                          style={{
+                            transform: cropAngle
+                              ? `rotate(${cropAngle}deg) scale(${rotationScale})`
+                              : `scale(${rotationScale})`,
+                            transformOrigin: 'center',
+                            transition: 'transform 120ms ease-out',
+                          }}
+                        >
+                          {detailImage}
+                        </div>
                       </div>
                       {canShowCropOverlay && cropSettings && onCropRectChange ? (
                         <CropOverlay
@@ -620,6 +640,8 @@ export function DetailView({
                           aspectRatio={overlayAspectRatio}
                           onChange={onCropRectChange}
                           active
+                          rotationAngle={cropAngle}
+                          rotationScale={rotationScale}
                         />
                       ) : null}
                     </div>

@@ -1,6 +1,6 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useMemo, useRef, useState, useEffect } from 'react'
 import type { CropRect } from '../types'
-import { clampCropRect, fitRectToAspect, MIN_CROP_EDGE } from '../cropUtils'
+import { clampCropRect, fitRectToAspect, MIN_CROP_EDGE, clamp } from '../cropUtils'
 
 type HandleType = 'move' | 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw'
 
@@ -12,6 +12,8 @@ type CropOverlayProps = {
   aspectRatio: number | null
   onChange: (rect: CropRect) => void
   active: boolean
+  rotationAngle: number
+  rotationScale: number
 }
 
 const HANDLE_CURSORS: Record<Exclude<HandleType, 'move'>, React.CSSProperties['cursor']> = {
@@ -57,6 +59,8 @@ export function CropOverlay({
   aspectRatio,
   onChange,
   active,
+  rotationAngle,
+  rotationScale,
 }: CropOverlayProps) {
   const dragRef = useRef<DragState | null>(null)
   const [activeHandle, setActiveHandle] = useState<HandleType | null>(null)
@@ -104,6 +108,25 @@ export function CropOverlay({
     [active, normalizedRect, scale, width, height]
   )
 
+  const clampWithRotation = useCallback(
+    (next: CropRect) => {
+      return clampRectToRotatedBounds(next, {
+        width,
+        height,
+        angle: rotationAngle,
+        scale: rotationScale,
+      })
+    },
+    [height, rotationAngle, rotationScale, width]
+  )
+
+  useEffect(() => {
+    const clamped = clampWithRotation(rect)
+    if (!rectEquals(clamped, rect)) {
+      onChange(clamped)
+    }
+  }, [clampWithRotation, onChange, rect])
+
   const updateDrag = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
       const drag = dragRef.current
@@ -112,13 +135,13 @@ export function CropOverlay({
       if (!width || !height) return
       const deltaX = drag.widthPx ? (event.clientX - drag.startX) / drag.widthPx : 0
       const deltaY = drag.heightPx ? (event.clientY - drag.startY) / drag.heightPx : 0
-      const nextRect =
+      const proposed =
         drag.type === 'move'
           ? moveRect(drag.startRect, deltaX, deltaY)
           : resizeRect(drag.type, drag.startRect, deltaX, deltaY, aspectRatio, containerRatio)
-      onChange(nextRect)
+      onChange(clampWithRotation(proposed))
     },
-    [aspectRatio, containerRatio, height, onChange, width]
+    [aspectRatio, clampWithRotation, containerRatio, height, onChange, width]
   )
 
   const endDrag = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
@@ -373,4 +396,99 @@ function clampValue(value: number, min: number, max: number) {
   if (value < min) return min
   if (value > max) return max
   return value
+}
+
+function clampRectToRotatedBounds(
+  rect: CropRect,
+  bounds: { width: number; height: number; angle: number; scale: number }
+): CropRect {
+  const { width, height, angle, scale } = bounds
+  if (!width || !height) return clampCropRect(rect)
+  const radians = ((angle ?? 0) * Math.PI) / 180
+  const sin = Math.sin(radians)
+  const cos = Math.cos(radians)
+  const centerX = width / 2
+  const centerY = height / 2
+  const halfImageWidth = (width * scale) / 2
+  const halfImageHeight = (height * scale) / 2
+
+  let next = clampCropRect(rect)
+  const applyScaleLimit = () => {
+    const rectWidthPx = next.width * width
+    const rectHeightPx = next.height * height
+    const boundingWidth = Math.abs(rectWidthPx * cos) + Math.abs(rectHeightPx * sin)
+    const boundingHeight = Math.abs(rectWidthPx * sin) + Math.abs(rectHeightPx * cos)
+    const maxWidth = halfImageWidth * 2
+    const maxHeight = halfImageHeight * 2
+    const scaleX = maxWidth / (boundingWidth || 1)
+    const scaleY = maxHeight / (boundingHeight || 1)
+    const limit = Math.min(scaleX, scaleY, 1)
+    if (limit >= 1 - 1e-4) return
+    const newWidth = next.width * limit
+    const newHeight = next.height * limit
+    const centerRectX = next.x + next.width / 2
+    const centerRectY = next.y + next.height / 2
+    next = clampCropRect({
+      x: centerRectX - newWidth / 2,
+      y: centerRectY - newHeight / 2,
+      width: newWidth,
+      height: newHeight,
+    })
+  }
+
+  applyScaleLimit()
+  for (let iteration = 0; iteration < 5; iteration += 1) {
+    const corners = getRectCorners(next, width, height)
+    let adjustX = 0
+    let adjustY = 0
+    let violations = 0
+    corners.forEach((corner) => {
+      const dx = corner.x - centerX
+      const dy = corner.y - centerY
+      const localX = dx * cos + dy * sin
+      const localY = -dx * sin + dy * cos
+      const clampedLocalX = clamp(localX, -halfImageWidth, halfImageWidth)
+      const clampedLocalY = clamp(localY, -halfImageHeight, halfImageHeight)
+      if (clampedLocalX !== localX || clampedLocalY !== localY) {
+        const correctedDx = clampedLocalX * cos - clampedLocalY * sin
+        const correctedDy = clampedLocalX * sin + clampedLocalY * cos
+        adjustX += correctedDx - dx
+        adjustY += correctedDy - dy
+        violations += 1
+      }
+    })
+    if (!violations) break
+    const offsetX = (adjustX / violations) / width
+    const offsetY = (adjustY / violations) / height
+    next = clampCropRect({
+      ...next,
+      x: next.x + offsetX,
+      y: next.y + offsetY,
+    })
+    applyScaleLimit()
+  }
+  return next
+}
+
+function getRectCorners(rect: CropRect, width: number, height: number) {
+  const px = rect.x * width
+  const py = rect.y * height
+  const rectWidth = rect.width * width
+  const rectHeight = rect.height * height
+  return [
+    { x: px, y: py },
+    { x: px + rectWidth, y: py },
+    { x: px + rectWidth, y: py + rectHeight },
+    { x: px, y: py + rectHeight },
+  ]
+}
+
+function rectEquals(a: CropRect, b: CropRect): boolean {
+  const epsilon = 0.0001
+  return (
+    Math.abs(a.x - b.x) < epsilon &&
+    Math.abs(a.y - b.y) < epsilon &&
+    Math.abs(a.width - b.width) < epsilon &&
+    Math.abs(a.height - b.height) < epsilon
+  )
 }

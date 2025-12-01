@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef } from 'react'
+import React, { useCallback, useMemo, useRef, useState } from 'react'
 import type { CropRect } from '../types'
 import { clampCropRect, fitRectToAspect, MIN_CROP_EDGE } from '../cropUtils'
 
@@ -59,6 +59,9 @@ export function CropOverlay({
   active,
 }: CropOverlayProps) {
   const dragRef = useRef<DragState | null>(null)
+  const [activeHandle, setActiveHandle] = useState<HandleType | null>(null)
+  const [isHoveringFrame, setIsHoveringFrame] = useState(false)
+  const [hoverHandle, setHoverHandle] = useState<HandleType | null>(null)
   const normalizedRect = useMemo(() => clampCropRect(rect), [rect])
   const left = normalizedRect.x * width
   const top = normalizedRect.y * height
@@ -79,10 +82,9 @@ export function CropOverlay({
     w: { x: 0, y: 0.5 },
     e: { x: 1, y: 0.5 },
   }
-
   const startDrag = useCallback(
     (type: HandleType, event: React.PointerEvent<HTMLDivElement>) => {
-      if (!active) return
+      if (!active || event.button !== 0) return
       event.preventDefault()
       event.stopPropagation()
       event.currentTarget.setPointerCapture(event.pointerId)
@@ -97,6 +99,7 @@ export function CropOverlay({
         widthPx,
         heightPx,
       }
+      setActiveHandle(type)
     },
     [active, normalizedRect, scale, width, height]
   )
@@ -125,7 +128,77 @@ export function CropOverlay({
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId)
     }
+    setActiveHandle(null)
+    setIsHoveringFrame(false)
+    setHoverHandle(null)
   }, [])
+
+  const renderCornerHandle = useCallback(
+    (type: Exclude<HandleType, 'move' | 'n' | 's' | 'e' | 'w'>, position: { x: number; y: number }) => {
+      const baseSize = 14
+      const size = Math.max(8, baseSize * handleScale)
+      return (
+        <div
+          key={type}
+          className="absolute z-10 rounded-full border border-white bg-[rgba(0,0,0,0.4)]"
+          style={{
+            width: size,
+            height: size,
+            left: `${position.x * 100}%`,
+            top: `${position.y * 100}%`,
+            transform: `translate(-50%, -50%) scale(${handleScale})`,
+            transformOrigin: 'center',
+            cursor: HANDLE_CURSORS[type],
+            pointerEvents: 'auto',
+          }}
+          onPointerDown={(event) => startDrag(type, event)}
+          onPointerMove={updateDrag}
+          onPointerUp={endDrag}
+          onPointerCancel={endDrag}
+          onPointerEnter={() => setHoverHandle(type)}
+          onPointerLeave={() =>
+            setHoverHandle((current) => (current === type ? null : current))
+          }
+        />
+      )
+    },
+    [endDrag, handleScale, setHoverHandle, startDrag, updateDrag]
+  )
+
+  const renderEdgeHandleNode = useCallback(
+    (type: Extract<HandleType, 'n' | 's' | 'e' | 'w'>, position: { x: number; y: number }) => {
+      const isHorizontal = type === 'n' || type === 's'
+      const baseWidth = isHorizontal ? 24 : 12
+      const baseHeight = isHorizontal ? 12 : 24
+      const width = Math.max(8, baseWidth * handleScale)
+      const height = Math.max(8, baseHeight * handleScale)
+      return (
+        <div
+          key={type}
+          className="absolute z-10 rounded-full border border-white bg-[rgba(0,0,0,0.4)]"
+          style={{
+            width,
+            height,
+            left: `${position.x * 100}%`,
+            top: `${position.y * 100}%`,
+            transform: `translate(-50%, -50%) scale(${handleScale})`,
+            transformOrigin: 'center',
+            cursor: HANDLE_CURSORS[type],
+            pointerEvents: 'auto',
+          }}
+          onPointerDown={(event) => startDrag(type, event)}
+          onPointerMove={updateDrag}
+          onPointerUp={endDrag}
+          onPointerCancel={endDrag}
+          onPointerEnter={() => setHoverHandle(type)}
+          onPointerLeave={() =>
+            setHoverHandle((current) => (current === type ? null : current))
+          }
+        />
+      )
+    },
+    [endDrag, handleScale, setHoverHandle, startDrag, updateDrag]
+  )
 
   if (!active || !width || !height) return null
 
@@ -156,12 +229,21 @@ export function CropOverlay({
           top,
           width: cropWidth,
           height: cropHeight,
-          cursor: 'move',
+          cursor:
+            activeHandle === 'move'
+              ? 'grabbing'
+              : hoverHandle && hoverHandle !== 'move'
+                ? HANDLE_CURSORS[hoverHandle as Exclude<HandleType, 'move'>]
+                : isHoveringFrame
+                  ? 'grab'
+                  : 'default',
         }}
         onPointerDown={(event) => startDrag('move', event)}
         onPointerMove={updateDrag}
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
+        onPointerEnter={() => setIsHoveringFrame(true)}
+        onPointerLeave={() => setIsHoveringFrame(false)}
       >
         <div className="absolute inset-0 pointer-events-none grid grid-cols-3 grid-rows-3">
           {Array.from({ length: 9 }).map((_, index) => (
@@ -179,85 +261,18 @@ export function CropOverlay({
         </div>
       </div>
 
-      <div className="absolute" style={{ left, top, width: cropWidth, height: cropHeight }}>
+      <div
+        className="absolute"
+        style={{ left, top, width: cropWidth, height: cropHeight, pointerEvents: 'none' }}
+      >
         {(['nw', 'ne', 'sw', 'se'] as const).map((key) =>
-          renderHandle(
-            key,
-            cornerPositions[key],
-            handleScale,
-            startDrag,
-            updateDrag,
-            endDrag
-          )
+          renderCornerHandle(key, cornerPositions[key])
         )}
         {(['n', 's', 'w', 'e'] as const).map((key) =>
-          renderEdgeHandle(key, edgePositions[key], handleScale, startDrag, updateDrag, endDrag)
+          renderEdgeHandleNode(key, edgePositions[key])
         )}
       </div>
     </div>
-  )
-}
-
-function renderHandle(
-  type: Exclude<HandleType, 'move' | 'n' | 's' | 'e' | 'w'>,
-  position: { x: number; y: number },
-  handleScale: number,
-  startDrag: (type: HandleType, event: React.PointerEvent<HTMLDivElement>) => void,
-  updateDrag: (event: React.PointerEvent<HTMLDivElement>) => void,
-  endDrag: (event: React.PointerEvent<HTMLDivElement>) => void
-) {
-  const baseSize = 14
-  const size = Math.max(8, baseSize * handleScale)
-  return (
-    <div
-      className="absolute z-10 rounded-full border border-white bg-[rgba(0,0,0,0.4)]"
-      style={{
-        width: size,
-        height: size,
-        left: `${position.x * 100}%`,
-        top: `${position.y * 100}%`,
-        transform: `translate(-50%, -50%) scale(${handleScale})`,
-        transformOrigin: 'center',
-        cursor: HANDLE_CURSORS[type],
-      }}
-      onPointerDown={(event) => startDrag(type, event)}
-      onPointerMove={updateDrag}
-      onPointerUp={endDrag}
-      onPointerCancel={endDrag}
-    />
-  )
-}
-
-function renderEdgeHandle(
-  type: Extract<HandleType, 'n' | 's' | 'e' | 'w'>,
-  position: { x: number; y: number },
-  handleScale: number,
-  startDrag: (type: HandleType, event: React.PointerEvent<HTMLDivElement>) => void,
-  updateDrag: (event: React.PointerEvent<HTMLDivElement>) => void,
-  endDrag: (event: React.PointerEvent<HTMLDivElement>) => void
-) {
-  const isHorizontal = type === 'n' || type === 's'
-  const baseWidth = isHorizontal ? 24 : 12
-  const baseHeight = isHorizontal ? 12 : 24
-  const width = Math.max(8, baseWidth * handleScale)
-  const height = Math.max(8, baseHeight * handleScale)
-  return (
-    <div
-      className="absolute z-10 rounded-full border border-white bg-[rgba(0,0,0,0.4)]"
-      style={{
-        width,
-        height,
-        left: `${position.x * 100}%`,
-        top: `${position.y * 100}%`,
-        transform: `translate(-50%, -50%) scale(${handleScale})`,
-        transformOrigin: 'center',
-        cursor: HANDLE_CURSORS[type],
-      }}
-      onPointerDown={(event) => startDrag(type, event)}
-      onPointerMove={updateDrag}
-      onPointerUp={endDrag}
-      onPointerCancel={endDrag}
-    />
   )
 }
 

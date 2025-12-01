@@ -237,7 +237,6 @@ export function CropOverlay({
       <div className="absolute inset-0 pointer-events-none">
         {maskSections.map((section, index) => (
           <div
-            // eslint-disable-next-line react/no-array-index-key
             key={index}
             className="absolute bg-[rgba(0,0,0,0.55)] pointer-events-none"
             style={section}
@@ -271,8 +270,7 @@ export function CropOverlay({
         <div className="absolute inset-0 pointer-events-none grid grid-cols-3 grid-rows-3">
           {Array.from({ length: 9 }).map((_, index) => (
             <div
-              // eslint-disable-next-line react/no-array-index-key
-              key={index}
+              key={`grid-${index}`}
               className="border border-white/20"
               aria-hidden="true"
             />

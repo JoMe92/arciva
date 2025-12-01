@@ -493,15 +493,15 @@ export default function ProjectWorkspace() {
         return prev.map((proj) =>
           proj.id === updated.id
             ? {
-                ...proj,
-                title: updated.title,
-                updated_at: updated.updated_at,
-                stack_pairs_enabled: updated.stack_pairs_enabled,
-                client: updated.client,
-                note: updated.note,
-                tags: updated.tags ?? proj.tags,
-                asset_count: updated.asset_count ?? proj.asset_count,
-              }
+              ...proj,
+              title: updated.title,
+              updated_at: updated.updated_at,
+              stack_pairs_enabled: updated.stack_pairs_enabled,
+              client: updated.client,
+              note: updated.note,
+              tags: updated.tags ?? proj.tags,
+              asset_count: updated.asset_count ?? proj.asset_count,
+            }
             : proj
         )
       })
@@ -1915,11 +1915,10 @@ export default function ProjectWorkspace() {
       {uploadBanner && (
         <div className="pointer-events-none fixed bottom-6 right-6 z-50">
           <div
-            className={`pointer-events-auto w-72 rounded-lg border px-4 py-3 shadow-lg ${
-              uploadBanner.status === 'error'
+            className={`pointer-events-auto w-72 rounded-lg border px-4 py-3 shadow-lg ${uploadBanner.status === 'error'
                 ? 'border-[#F7C9C9] bg-[#FDF2F2]'
                 : 'border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]'
-            }`}
+              }`}
           >
             {uploadBanner.status === 'running' && (
               <>
@@ -2000,8 +1999,8 @@ export default function ProjectWorkspace() {
                   selectedDay={selectedDayNode}
                   onClearDateFilter={clearDateFilter}
                   collapsed={false}
-                  onCollapse={() => {}}
-                  onExpand={() => {}}
+                  onCollapse={() => { }}
+                  onExpand={() => { }}
                   mode="mobile"
                 />
               </div>
@@ -2009,9 +2008,10 @@ export default function ProjectWorkspace() {
               <div className="h-full overflow-y-auto px-3">
                 <InspectorPanel
                   collapsed={false}
-                  onCollapse={() => {}}
-                  onExpand={() => {}}
+                  onCollapse={() => { }}
+                  onExpand={() => { }}
                   hasSelection={Boolean(currentPhoto)}
+                  selectionCount={selectedPhotoIds.size}
                   usedProjects={usedProjects}
                   usedProjectsLoading={assetProjectsLoading}
                   usedProjectsError={usedProjectsErrorMessage}
@@ -2144,6 +2144,7 @@ export default function ProjectWorkspace() {
             onCollapse={() => setRightPanelCollapsed(true)}
             onExpand={() => setRightPanelCollapsed(false)}
             hasSelection={Boolean(currentPhoto)}
+            selectionCount={selectedPhotoIds.size}
             usedProjects={usedProjects}
             usedProjectsLoading={assetProjectsLoading}
             usedProjectsError={usedProjectsErrorMessage}
@@ -2826,9 +2827,8 @@ function PendingMiniGrid({
                   <img src={item.previewUrl} alt={item.name} className="h-16 w-full object-cover" />
                 ) : (
                   <div
-                    className={`flex h-16 w-full items-center justify-center text-[10px] font-medium text-[var(--text-muted,#6B645B)] ${
-                      item.ready === false ? 'animate-pulse' : ''
-                    }`}
+                    className={`flex h-16 w-full items-center justify-center text-[10px] font-medium text-[var(--text-muted,#6B645B)] ${item.ready === false ? 'animate-pulse' : ''
+                      }`}
                   >
                     {item.ready === false ? (
                       <span className="inline-flex items-center gap-1 text-[var(--text-muted,#6B645B)]">
@@ -2956,7 +2956,7 @@ export function ImportSheet({
   }, [uploadTasks])
 
   useEffect(() => {
-    ;(document.getElementById('import-sheet') as HTMLDivElement | null)?.focus()
+    ; (document.getElementById('import-sheet') as HTMLDivElement | null)?.focus()
   }, [])
 
   useEffect(() => {

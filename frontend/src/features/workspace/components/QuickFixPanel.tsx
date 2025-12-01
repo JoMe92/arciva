@@ -26,6 +26,7 @@ type QuickFixPanelProps = {
     onAspectRatioChange: (ratio: CropAspectRatioId) => void
     onAngleChange: (angle: number) => void
     onReset: () => void
+    onOrientationChange: (orientation: 'horizontal' | 'vertical') => void
 }
 
 export function QuickFixPanel({
@@ -35,9 +36,11 @@ export function QuickFixPanel({
     onAspectRatioChange,
     onAngleChange,
     onReset,
+    onOrientationChange,
 }: QuickFixPanelProps) {
     const selectedRatio = cropSettings?.aspectRatioId ?? 'original'
     const angle = cropSettings?.angle ?? 0
+    const orientation = cropSettings?.orientation ?? 'horizontal'
     const formattedAngle = angle.toFixed(2)
     const controlsDisabled = !hasSelection
 
@@ -73,6 +76,30 @@ export function QuickFixPanel({
                                         className={`rounded border px-2 py-1.5 text-xs font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)] ${selected
                                             ? 'border-[var(--text,#1F1E1B)] bg-[var(--surface,#FFFFFF)] text-[var(--text,#1F1E1B)]'
                                             : 'border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] text-[var(--text,#1F1E1B)] hover:border-[var(--text-muted,#6B645B)]'} ${controlsDisabled ? 'opacity-60' : ''}`}
+                                    >
+                                        {label}
+                                    </button>
+                                )
+                            })}
+                        </div>
+                    </div>
+
+                    <div className="space-y-2">
+                        <span className="text-xs font-medium text-[var(--text,#1F1E1B)]">Orientation</span>
+                        <div className="flex rounded-lg border border-[var(--border,#EDE1C6)] bg-[var(--surface-muted,#F3EBDD)] p-1">
+                            {(['horizontal', 'vertical'] as const).map((opt) => {
+                                const selected = orientation === opt
+                                const label = opt === 'horizontal' ? 'Horizontal' : 'Vertical'
+                                return (
+                                    <button
+                                        key={opt}
+                                        type="button"
+                                        disabled={controlsDisabled}
+                                        aria-pressed={selected}
+                                        onClick={() => onOrientationChange(opt)}
+                                        className={`flex-1 rounded-md py-1 text-xs font-medium transition ${selected
+                                            ? 'bg-[var(--surface,#FFFFFF)] text-[var(--text,#1F1E1B)] shadow-sm'
+                                            : 'text-[var(--text-muted,#6B645B)] hover:text-[var(--text,#1F1E1B)]'} ${controlsDisabled ? 'opacity-60' : ''}`}
                                     >
                                         {label}
                                     </button>

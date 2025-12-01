@@ -170,8 +170,11 @@ export type CropRect = {
   height: number
 }
 
+export type CropOrientation = 'horizontal' | 'vertical'
+
 export type CropSettings = {
   rect: CropRect
   angle: number
   aspectRatioId: CropAspectRatioId
+  orientation: CropOrientation
 }

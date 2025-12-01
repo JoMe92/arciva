@@ -1,4 +1,4 @@
-import type { CropAspectRatioId, CropRect, CropSettings } from './types'
+import type { CropAspectRatioId, CropRect, CropSettings, CropOrientation } from './types'
 
 export type CropRatioOption = {
   id: CropAspectRatioId
@@ -35,6 +35,7 @@ export const DEFAULT_CROP_SETTINGS: CropSettings = {
   rect: { ...DEFAULT_CROP_RECT },
   angle: 0,
   aspectRatioId: 'original',
+  orientation: 'horizontal',
 }
 
 export function clamp(value: number, min: number, max: number): number {
@@ -110,5 +111,15 @@ export function createDefaultCropSettings(): CropSettings {
     rect: { ...DEFAULT_CROP_RECT },
     angle: DEFAULT_CROP_SETTINGS.angle,
     aspectRatioId: DEFAULT_CROP_SETTINGS.aspectRatioId,
+    orientation: DEFAULT_CROP_SETTINGS.orientation,
   }
+}
+
+export function applyOrientationToRatio(
+  ratio: number | null,
+  orientation: CropOrientation
+): number | null {
+  if (!ratio || orientation === 'horizontal') return ratio
+  if (ratio === 0) return null
+  return 1 / ratio
 }

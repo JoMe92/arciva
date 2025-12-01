@@ -296,9 +296,16 @@ export function DetailView({
     return fallbackRatio || 1
   }, [assetDimensions?.width, assetDimensions?.height, fallbackRatio])
   const cropAspectRatioPreference: CropAspectRatioId = cropSettings?.aspectRatioId ?? 'original'
+  const cropOrientation = cropSettings?.orientation ?? 'horizontal'
   const overlayAspectRatio = useMemo(() => {
-    return resolveAspectRatioValue(cropAspectRatioPreference, detailAspectRatio)
-  }, [cropAspectRatioPreference, detailAspectRatio])
+    const ratio = resolveAspectRatioValue(cropAspectRatioPreference, detailAspectRatio)
+    if (!ratio) return null
+    if (cropOrientation === 'vertical') {
+      if (ratio === 0) return null
+      return 1 / ratio
+    }
+    return ratio
+  }, [cropAspectRatioPreference, cropOrientation, detailAspectRatio])
 
   const baseSize = useMemo(() => {
     if (!containerSize.width || !containerSize.height) return { width: 0, height: 0 }

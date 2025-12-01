@@ -53,6 +53,7 @@ type QuickFixControlsProps = {
   onAspectRatioChange: (ratio: CropAspectRatioId) => void
   onAngleChange: (angle: number) => void
   onReset: () => void
+  onOrientationChange: (orientation: 'horizontal' | 'vertical') => void
 }
 
 export function InspectorPanel({
@@ -390,6 +391,7 @@ export function InspectorPanel({
                 cropSettings={quickFixControls?.cropSettings ?? null}
                 onAspectRatioChange={quickFixControls?.onAspectRatioChange ?? (() => { })}
                 onAngleChange={quickFixControls?.onAngleChange ?? (() => { })}
+                onOrientationChange={quickFixControls?.onOrientationChange ?? (() => { })}
                 onReset={quickFixControls?.onReset ?? (() => { })}
               />
             )}

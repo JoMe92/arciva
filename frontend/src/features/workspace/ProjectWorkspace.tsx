@@ -36,6 +36,7 @@ import type {
   CropSettings,
   CropAspectRatioId,
   CropRect,
+  CropOrientation,
 } from './types'
 import type { PendingItem } from './importTypes'
 import { TopBar } from './components/TopBar'
@@ -62,6 +63,7 @@ import {
   resolveAspectRatioValue,
   createDefaultCropSettings,
   clamp,
+  applyOrientationToRatio,
 } from './cropUtils'
 
 const COLOR_SHORTCUT_MAP = {
@@ -1805,9 +1807,10 @@ export default function ProjectWorkspace() {
       updateCropSettings((prev) => {
         if (prev.aspectRatioId === ratioId) return prev
         const ratioValue = resolveAspectRatioValue(ratioId, currentDetailAspectRatio)
+        const orientedRatio = applyOrientationToRatio(ratioValue, prev.orientation)
         const ratioBase = currentDetailAspectRatio || 1
-        const nextRect = ratioValue
-          ? fitRectToAspect(prev.rect, ratioValue, undefined, ratioBase)
+        const nextRect = orientedRatio
+          ? fitRectToAspect(prev.rect, orientedRatio, undefined, ratioBase)
           : clampCropRect(prev.rect)
         return {
           ...prev,
@@ -1818,14 +1821,40 @@ export default function ProjectWorkspace() {
     },
     [currentDetailAspectRatio, updateCropSettings]
   )
+  const handleCropOrientationChange = useCallback(
+    (orientation: CropOrientation) => {
+      updateCropSettings((prev) => {
+        if (prev.orientation === orientation) return prev
+        const ratioValue = resolveAspectRatioValue(prev.aspectRatioId, currentDetailAspectRatio)
+        const orientedRatio = applyOrientationToRatio(ratioValue, orientation)
+        const ratioBase = currentDetailAspectRatio || 1
+        const rect = orientedRatio
+          ? fitRectToAspect(prev.rect, orientedRatio, undefined, ratioBase)
+          : rotateRectDimensions(prev.rect)
+        return {
+          ...prev,
+          rect,
+          orientation,
+        }
+      })
+    },
+    [currentDetailAspectRatio, updateCropSettings]
+  )
   const quickFixControls = useMemo(
     () => ({
       cropSettings: currentCropSettings,
       onAspectRatioChange: handleCropAspectRatioChange,
       onAngleChange: handleCropAngleChange,
+      onOrientationChange: handleCropOrientationChange,
       onReset: handleCropReset,
     }),
-    [currentCropSettings, handleCropAngleChange, handleCropAspectRatioChange, handleCropReset]
+    [
+      currentCropSettings,
+      handleCropAngleChange,
+      handleCropAspectRatioChange,
+      handleCropOrientationChange,
+      handleCropReset,
+    ]
   )
   const inspectorPreviewAsset = useMemo(() => {
     if (!currentPhoto) return null
@@ -2342,6 +2371,16 @@ const RAW_LIKE_EXTENSIONS = new Set([
   'sr2',
   'pef',
 ])
+
+function rotateRectDimensions(rect: CropRect): CropRect {
+  const centerX = rect.x + rect.width / 2
+  const centerY = rect.y + rect.height / 2
+  const width = rect.height
+  const height = rect.width
+  const x = clamp(centerX - width / 2, 0, 1 - width)
+  const y = clamp(centerY - height / 2, 0, 1 - height)
+  return clampCropRect({ x, y, width, height })
+}
 
 function inferTypeFromName(name: string): ImgType {
   const ext = name.split('.').pop()?.toLowerCase()

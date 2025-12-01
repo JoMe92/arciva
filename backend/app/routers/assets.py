@@ -774,7 +774,10 @@ async def quick_fix_preview(
         raise HTTPException(500, f"preview generation failed: {e}")
 
 
-@router.patch("/projects/{project_id}/assets/{asset_id}/quick-fix", response_model=schemas.AssetDetail)
+@router.patch(
+    "/projects/{project_id}/assets/{asset_id}/quick-fix",
+    response_model=schemas.AssetDetail,
+)
 async def save_quick_fix(
     project_id: UUID,
     asset_id: UUID,
@@ -784,7 +787,7 @@ async def save_quick_fix(
 ):
     await ensure_project_access(db, project_id=project_id, user_id=current_user.id)
     await ensure_asset_metadata_column(db)
-    
+
     # Find the link
     link = (
         await db.execute(
@@ -795,22 +798,20 @@ async def save_quick_fix(
             )
         )
     ).scalar_one_or_none()
-    
+
     if not link:
         raise HTTPException(404, "asset not linked to project")
-        
+
     # Get or create metadata state
     metadata = (
         await db.execute(
-            select(models.MetadataState).where(
-                models.MetadataState.link_id == link.id
-            )
+            select(models.MetadataState).where(models.MetadataState.link_id == link.id)
         )
     ).scalar_one_or_none()
-    
+
     if metadata is None:
         metadata = await ensure_state_for_link(db, link)
-        
+
     try:
         current_edits = dict(metadata.edits or {})
         quick_fix_payload = body.model_dump(exclude_none=True)
@@ -833,7 +834,7 @@ async def save_quick_fix(
         )
         await db.rollback()
         raise HTTPException(500, "failed to save quick fix adjustments")
-    
+
     asset = await db.get(models.Asset, asset_id)
     if not asset or asset.user_id != current_user.id:
         raise HTTPException(404, "asset not found")

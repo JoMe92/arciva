@@ -115,10 +115,7 @@ async def test_quick_fix_preview_and_save(client, TestSessionLocal):
     )
     assert save_response.status_code == 200
     payload = save_response.json()
-    assert (
-        payload["metadata_state"]["edits"]["quick_fix"]["crop"]["rotation"]
-        == 15
-    )
+    assert payload["metadata_state"]["edits"]["quick_fix"]["crop"]["rotation"] == 15
 
     async with TestSessionLocal() as session:
         state = (

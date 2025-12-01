@@ -34,7 +34,9 @@ def apply_adjustments(
     return working
 
 
-def apply_crop_rotate(image: Image.Image, settings: schemas.CropSettings) -> Image.Image:
+def apply_crop_rotate(
+    image: Image.Image, settings: schemas.CropSettings
+) -> Image.Image:
     result = image
     if settings.rotation:
         # Keep canvas size stable (expand=False) but use bicubic resampling for a smooth rotate.
@@ -60,7 +62,9 @@ def apply_crop_rotate(image: Image.Image, settings: schemas.CropSettings) -> Ima
     return result
 
 
-def _apply_highlights_shadows(arr: np.ndarray, settings: schemas.ExposureSettings) -> np.ndarray:
+def _apply_highlights_shadows(
+    arr: np.ndarray, settings: schemas.ExposureSettings
+) -> np.ndarray:
     result = arr
     if settings.highlights:
         highlight_mask = np.clip((result - 0.5) * 2.0, 0.0, 1.0)
@@ -71,7 +75,9 @@ def _apply_highlights_shadows(arr: np.ndarray, settings: schemas.ExposureSetting
     return result
 
 
-def apply_exposure(image: Image.Image, settings: schemas.ExposureSettings) -> Image.Image:
+def apply_exposure(
+    image: Image.Image, settings: schemas.ExposureSettings
+) -> Image.Image:
     arr = np.asarray(image).astype(np.float32) / 255.0
 
     if settings.exposure:
@@ -86,7 +92,9 @@ def apply_exposure(image: Image.Image, settings: schemas.ExposureSettings) -> Im
     return Image.fromarray((arr * 255).astype(np.uint8))
 
 
-def apply_color_balance(image: Image.Image, settings: schemas.ColorSettings) -> Image.Image:
+def apply_color_balance(
+    image: Image.Image, settings: schemas.ColorSettings
+) -> Image.Image:
     if not settings.temperature and not settings.tint:
         return image
 
@@ -128,7 +136,7 @@ def apply_grain(image: Image.Image, settings: schemas.GrainSettings) -> Image.Im
         noise = np.repeat(noise, scale, axis=0)
         noise = np.repeat(noise, scale, axis=1)
 
-    noise = noise[: height, : width]
+    noise = noise[:height, :width]
 
     img_arr = np.asarray(image).astype(np.float32)
     img_arr = img_arr + noise[..., None]
@@ -136,7 +144,9 @@ def apply_grain(image: Image.Image, settings: schemas.GrainSettings) -> Image.Im
     return Image.fromarray(img_arr.astype(np.uint8))
 
 
-def apply_geometry(image: Image.Image, settings: schemas.GeometrySettings) -> Image.Image:
+def apply_geometry(
+    image: Image.Image, settings: schemas.GeometrySettings
+) -> Image.Image:
     if not settings.vertical and not settings.horizontal:
         return image
 

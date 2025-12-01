@@ -31,8 +31,12 @@ import {
   CURRENT_CONFIG_SOURCE_ID,
   ColorTag,
   InspectorViewportRect,
+  CropSettings,
+  CropAspectRatioId,
 } from '../types'
 import { COLOR_MAP } from '../utils'
+
+import { QuickFixPanel } from './QuickFixPanel'
 
 const RIGHT_PANEL_ID = 'workspace-image-details-panel'
 const RIGHT_PANEL_CONTENT_ID = `${RIGHT_PANEL_ID}-content`
@@ -42,11 +46,22 @@ const RIGHT_METADATA_SECTION_ID = `${RIGHT_PANEL_ID}-metadata`
 
 type RightPanelTarget = 'keyData' | 'projects' | 'metadata'
 
+export type InspectorTab = 'details' | 'quick-fix'
+
+type QuickFixControlsProps = {
+  cropSettings: CropSettings | null
+  onAspectRatioChange: (ratio: CropAspectRatioId) => void
+  onAngleChange: (angle: number) => void
+  onReset: () => void
+  onOrientationChange: (orientation: 'horizontal' | 'vertical') => void
+}
+
 export function InspectorPanel({
   collapsed,
   onCollapse,
   onExpand,
   hasSelection,
+  selectionCount,
   usedProjects,
   usedProjectsLoading,
   usedProjectsError,
@@ -70,11 +85,15 @@ export function InspectorPanel({
   detailViewport,
   onPreviewPan,
   mode = 'sidebar',
+  quickFixControls,
+  activeTab: activeTabProp,
+  onActiveTabChange,
 }: {
   collapsed: boolean
   onCollapse: () => void
   onExpand: () => void
   hasSelection: boolean
+  selectionCount: number
   usedProjects: UsedProjectLink[]
   usedProjectsLoading: boolean
   usedProjectsError: string | null
@@ -98,7 +117,21 @@ export function InspectorPanel({
   detailViewport: InspectorViewportRect | null
   onPreviewPan?: (position: { x: number; y: number }) => void
   mode?: 'sidebar' | 'mobile'
+  quickFixControls?: QuickFixControlsProps | null
+  activeTab?: InspectorTab
+  onActiveTabChange?: (tab: InspectorTab) => void
 }) {
+  const [internalActiveTab, setInternalActiveTab] = useState<InspectorTab>('details')
+  const activeTab = activeTabProp ?? internalActiveTab
+  const setActiveTab = useCallback(
+    (next: InspectorTab) => {
+      if (activeTabProp === undefined) {
+        setInternalActiveTab(next)
+      }
+      onActiveTabChange?.(next)
+    },
+    [activeTabProp, onActiveTabChange]
+  )
   const keyDataSectionRef = useRef<HTMLDivElement | null>(null)
   const projectsSectionRef = useRef<HTMLDivElement | null>(null)
   const metadataSectionRef = useRef<HTMLDivElement | null>(null)
@@ -126,7 +159,7 @@ export function InspectorPanel({
     : 'flex h-full min-h-0 flex-col overflow-hidden rounded-[var(--r-lg,20px)] border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] p-4 shadow-[0_30px_80px_rgba(31,30,27,0.16)]'
   const panelContentClass = isMobilePanel
     ? 'flex flex-1 min-h-0 flex-col gap-3 pb-4'
-    : 'flex flex-1 min-h-0 flex-col gap-3 overflow-y-auto pr-4'
+    : 'flex flex-1 min-h-0 flex-col gap-3 pr-4'
   const mergedInspectorFields = useMemo(() => {
     const map = new Map<string, string>()
     generalFields.forEach((field) => {
@@ -211,7 +244,7 @@ export function InspectorPanel({
         <div className={panelShellClass}>
           {!isMobilePanel ? (
             <header className="sticky top-0 z-10 border-b border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] pb-3">
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 mb-3">
                 <button
                   type="button"
                   aria-label="Collapse Image Details panel"
@@ -225,6 +258,28 @@ export function InspectorPanel({
                 <span className="text-sm font-semibold text-[var(--text,#1F1E1B)]">
                   Image Details
                 </span>
+              </div>
+              <div className="grid grid-cols-2 rounded-lg bg-[var(--surface-muted,#F3EBDD)] p-1">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('details')}
+                  className={`rounded-md py-1.5 text-xs font-semibold transition-all ${activeTab === 'details'
+                    ? 'bg-[var(--surface,#FFFFFF)] text-[var(--text,#1F1E1B)] shadow-sm'
+                    : 'text-[var(--text-muted,#6B645B)] hover:text-[var(--text,#1F1E1B)]'
+                    }`}
+                >
+                  Details
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('quick-fix')}
+                  className={`rounded-md py-1.5 text-xs font-semibold transition-all ${activeTab === 'quick-fix'
+                    ? 'bg-[var(--surface,#FFFFFF)] text-[var(--text,#1F1E1B)] shadow-sm'
+                    : 'text-[var(--text-muted,#6B645B)] hover:text-[var(--text,#1F1E1B)]'
+                    }`}
+                >
+                  Quick Fix
+                </button>
               </div>
             </header>
           ) : (
@@ -248,85 +303,98 @@ export function InspectorPanel({
               open={previewOpen}
               onToggle={() => setPreviewOpen((open) => !open)}
             />
-            <InspectorSection
-              id={RIGHT_KEY_SECTION_ID}
-              ref={keyDataSectionRef}
-              icon={<InfoIcon className="h-4 w-4" aria-hidden="true" />}
-              label="Key Data"
-              open={keyDataOpen}
-              onToggle={() => setKeyDataOpen((open) => !open)}
-            >
-              {hasSelection ? (
-                <KeyDataGrid rows={keyDataRows} />
-              ) : (
-                <p className="text-sm text-[var(--text-muted,#6B645B)]">
-                  Select a photo from the gallery to inspect its details.
-                </p>
-              )}
-            </InspectorSection>
-            <InspectorSection
-              id={RIGHT_PROJECT_SECTION_ID}
-              ref={projectsSectionRef}
-              icon={<FolderIcon className="h-4 w-4" aria-hidden="true" />}
-              label="Used in Projects"
-              open={projectsOpen}
-              onToggle={() => setProjectsOpen((open) => !open)}
-            >
-              {hasSelection ? (
-                <UsedProjectsSection
-                  projects={usedProjects}
-                  loading={usedProjectsLoading}
-                  error={usedProjectsError}
-                  metadataSourceId={metadataSourceId}
-                  onChangeMetadataSource={onChangeMetadataSource}
-                  metadataSourceBusy={metadataSourceBusy}
-                  actionError={metadataSourceError}
-                />
-              ) : (
-                <p className="text-sm text-[var(--text-muted,#6B645B)]">
-                  Select a photo to see where it is used.
-                </p>
-              )}
-            </InspectorSection>
-            <InspectorSection
-              id={RIGHT_METADATA_SECTION_ID}
-              ref={metadataSectionRef}
-              icon={<CameraIcon className="h-4 w-4" aria-hidden="true" />}
-              label="Metadata"
-              open={metadataOpen}
-              onToggle={() => setMetadataOpen((open) => !open)}
-              grow
-            >
-              {metadataLoading ? (
-                <p className="text-xs text-[var(--text-muted,#6B645B)]">Loading metadata…</p>
-              ) : null}
-              {metadataError ? <p className="text-xs text-[#B42318]">{metadataError}</p> : null}
-              {metadataWarnings.length ? (
-                <ul className="space-y-1 rounded-[12px] border border-[#F59E0B]/40 bg-[#FFF7ED] px-3 py-2 text-[11px] text-[#B45309]">
-                  {metadataWarnings.map((warning) => (
-                    <li key={warning} className="flex items-start gap-2">
-                      <span className="mt-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full border border-[#F59E0B] text-[10px]">
-                        !
-                      </span>
-                      <span className="flex-1 break-words">{warning}</span>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-              {hasSelection ? (
-                metadataRows.length ? (
-                  <KeyDataGrid rows={metadataRows} />
-                ) : (
-                  <p className="text-sm text-[var(--text-muted,#6B645B)]">
-                    No metadata available for this asset.
-                  </p>
-                )
-              ) : (
-                <p className="text-sm text-[var(--text-muted,#6B645B)]">
-                  Select a photo to review metadata.
-                </p>
-              )}
-            </InspectorSection>
+            {activeTab === 'details' ? (
+              <div className="flex flex-1 min-h-0 flex-col gap-3 overflow-y-auto overflow-x-hidden pr-1">
+                <InspectorSection
+                  id={RIGHT_KEY_SECTION_ID}
+                  ref={keyDataSectionRef}
+                  icon={<InfoIcon className="h-4 w-4" aria-hidden="true" />}
+                  label="Key Data"
+                  open={keyDataOpen}
+                  onToggle={() => setKeyDataOpen((open) => !open)}
+                >
+                  {hasSelection ? (
+                    <KeyDataGrid rows={keyDataRows} />
+                  ) : (
+                    <p className="text-sm text-[var(--text-muted,#6B645B)]">
+                      Select a photo from the gallery to inspect its details.
+                    </p>
+                  )}
+                </InspectorSection>
+                <InspectorSection
+                  id={RIGHT_PROJECT_SECTION_ID}
+                  ref={projectsSectionRef}
+                  icon={<FolderIcon className="h-4 w-4" aria-hidden="true" />}
+                  label="Used in Projects"
+                  open={projectsOpen}
+                  onToggle={() => setProjectsOpen((open) => !open)}
+                >
+                  {hasSelection ? (
+                    <UsedProjectsSection
+                      projects={usedProjects}
+                      loading={usedProjectsLoading}
+                      error={usedProjectsError}
+                      metadataSourceId={metadataSourceId}
+                      onChangeMetadataSource={onChangeMetadataSource}
+                      metadataSourceBusy={metadataSourceBusy}
+                      actionError={metadataSourceError}
+                    />
+                  ) : (
+                    <p className="text-sm text-[var(--text-muted,#6B645B)]">
+                      Select a photo to see where it is used.
+                    </p>
+                  )}
+                </InspectorSection>
+                <InspectorSection
+                  id={RIGHT_METADATA_SECTION_ID}
+                  ref={metadataSectionRef}
+                  icon={<CameraIcon className="h-4 w-4" aria-hidden="true" />}
+                  label="Metadata"
+                  open={metadataOpen}
+                  onToggle={() => setMetadataOpen((open) => !open)}
+                >
+                  {metadataLoading ? (
+                    <p className="text-xs text-[var(--text-muted,#6B645B)]">Loading metadata…</p>
+                  ) : null}
+                  {metadataError ? <p className="text-xs text-[#B42318]">{metadataError}</p> : null}
+                  {metadataWarnings.length ? (
+                    <ul className="space-y-1 rounded-[12px] border border-[#F59E0B]/40 bg-[#FFF7ED] px-3 py-2 text-[11px] text-[#B45309]">
+                      {metadataWarnings.map((warning) => (
+                        <li key={warning} className="flex items-start gap-2">
+                          <span className="mt-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full border border-[#F59E0B] text-[10px]">
+                            !
+                          </span>
+                          <span className="flex-1 break-words">{warning}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  {hasSelection ? (
+                    metadataRows.length ? (
+                      <KeyDataGrid rows={metadataRows} />
+                    ) : (
+                      <p className="text-sm text-[var(--text-muted,#6B645B)]">
+                        No metadata available for this asset.
+                      </p>
+                    )
+                  ) : (
+                    <p className="text-sm text-[var(--text-muted,#6B645B)]">
+                      Select a photo to review metadata.
+                    </p>
+                  )}
+                </InspectorSection>
+              </div>
+            ) : (
+              <QuickFixPanel
+                hasSelection={hasSelection}
+                selectionCount={selectionCount}
+                cropSettings={quickFixControls?.cropSettings ?? null}
+                onAspectRatioChange={quickFixControls?.onAspectRatioChange ?? (() => { })}
+                onAngleChange={quickFixControls?.onAngleChange ?? (() => { })}
+                onOrientationChange={quickFixControls?.onOrientationChange ?? (() => { })}
+                onReset={quickFixControls?.onReset ?? (() => { })}
+              />
+            )}
           </div>
         </div>
       </div>
@@ -365,7 +433,7 @@ type InspectorPreviewCardProps = {
   onToggle: () => void
 }
 
-function InspectorPreviewCard({
+export function InspectorPreviewCard({
   preview,
   hasSelection,
   zoomLevel,
@@ -641,12 +709,12 @@ type KeyDataRow = { label: string; value: React.ReactNode }
 function KeyDataGrid({ rows }: { rows: KeyDataRow[] }) {
   return (
     <dl className="space-y-3">
-      {rows.map((row) => (
-        <div key={row.label} className="flex items-start gap-4 text-sm">
+      {rows.map((row, index) => (
+        <div key={`${row.label}-${index}`} className="flex items-start gap-4 text-sm">
           <dt className="w-32 flex-shrink-0 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">
             {row.label}
           </dt>
-          <dd className="flex-1 text-right text-sm font-semibold text-[var(--text,#1F1E1B)]">
+          <dd className="flex-1 min-w-0 break-words text-right text-sm font-semibold text-[var(--text,#1F1E1B)]">
             {row.value}
           </dd>
         </div>

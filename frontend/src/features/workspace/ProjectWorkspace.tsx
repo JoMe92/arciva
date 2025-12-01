@@ -29,11 +29,19 @@ import {
 } from '../../shared/api/projects'
 import { initUpload, putUpload, completeUpload } from '../../shared/api/uploads'
 import { placeholderRatioForAspect, RATIO_DIMENSIONS } from '../../shared/placeholder'
-import type { Photo, ImgType, ColorTag } from './types'
+import type {
+  Photo,
+  ImgType,
+  ColorTag,
+  CropSettings,
+  CropAspectRatioId,
+  CropRect,
+  CropOrientation,
+} from './types'
 import type { PendingItem } from './importTypes'
 import { TopBar } from './components/TopBar'
 import { Sidebar } from './components/Sidebar'
-import { InspectorPanel } from './components/InspectorPanel'
+import { InspectorPanel, type InspectorTab } from './components/InspectorPanel'
 import { GridView, DetailView } from './components/Views'
 import { MobileBottomBar, MobilePhotosModeToggle } from './components/MobileComponents'
 import { EmptyState, NoResults, StarRow } from './components/Common'
@@ -49,6 +57,14 @@ import {
   type InspectorPreviewPanCommand,
   type MobileWorkspacePanel,
 } from './types'
+import {
+  clampCropRect,
+  fitRectToAspect,
+  resolveAspectRatioValue,
+  createDefaultCropSettings,
+  clamp,
+  applyOrientationToRatio,
+} from './cropUtils'
 
 const COLOR_SHORTCUT_MAP = {
   '6': 'Red',
@@ -493,15 +509,15 @@ export default function ProjectWorkspace() {
         return prev.map((proj) =>
           proj.id === updated.id
             ? {
-                ...proj,
-                title: updated.title,
-                updated_at: updated.updated_at,
-                stack_pairs_enabled: updated.stack_pairs_enabled,
-                client: updated.client,
-                note: updated.note,
-                tags: updated.tags ?? proj.tags,
-                asset_count: updated.asset_count ?? proj.asset_count,
-              }
+              ...proj,
+              title: updated.title,
+              updated_at: updated.updated_at,
+              stack_pairs_enabled: updated.stack_pairs_enabled,
+              client: updated.client,
+              note: updated.note,
+              tags: updated.tags ?? proj.tags,
+              asset_count: updated.asset_count ?? proj.asset_count,
+            }
             : proj
         )
       })
@@ -567,6 +583,11 @@ export default function ProjectWorkspace() {
   const [current, setCurrent] = useState(0)
   const [detailZoom, setDetailZoom] = useState(1)
   const [detailViewportRect, setDetailViewportRect] = useState<InspectorViewportRect | null>(null)
+  const [cropSettingsByPhoto, setCropSettingsByPhoto] = useState<Record<string, CropSettings>>({})
+  const [activeInspectorTab, setActiveInspectorTab] = useState<InspectorTab>('details')
+  const handleInspectorTabChange = useCallback((tab: InspectorTab) => {
+    setActiveInspectorTab(tab)
+  }, [])
   const [isMobileLayout, setIsMobileLayout] = useState(false)
   const [activeMobilePanel, setActiveMobilePanel] = useState<MobileWorkspacePanel>('photos')
   const mobileViewInitializedRef = useRef(false)
@@ -1534,6 +1555,13 @@ export default function ProjectWorkspace() {
       setActiveMobilePanel('photos')
     }
   }, [activeMobilePanel, currentPhoto])
+  useEffect(() => {
+    if (!currentPhoto?.id) return
+    setCropSettingsByPhoto((prev) => {
+      if (prev[currentPhoto.id]) return prev
+      return { ...prev, [currentPhoto.id]: createDefaultCropSettings() }
+    })
+  }, [currentPhoto?.id])
 
   const handlePhotoSelect = useCallback(
     (idx: number, options?: GridSelectOptions) => {
@@ -1729,6 +1757,105 @@ export default function ProjectWorkspace() {
     }
     return null
   }, [currentAssetDetail?.width, currentAssetDetail?.height, currentPhoto?.placeholderRatio])
+  const currentDetailAspectRatio = useMemo(() => {
+    const width = currentAssetDimensions?.width
+    const height = currentAssetDimensions?.height
+    if (Number.isFinite(width) && Number.isFinite(height) && width && height) {
+      const ratio = width / height
+      if (ratio > 0) return ratio
+    }
+    return 1
+  }, [currentAssetDimensions?.width, currentAssetDimensions?.height])
+  const currentCropSettings = currentPhoto?.id ? cropSettingsByPhoto[currentPhoto.id] ?? null : null
+  const cropModeActive = activeInspectorTab === 'quick-fix'
+  const updateCropSettings = useCallback(
+    (updater: (prev: CropSettings) => CropSettings) => {
+      const photoId = currentPhoto?.id
+      if (!photoId) return
+      setCropSettingsByPhoto((prev) => {
+        const prevValue = prev[photoId] ?? createDefaultCropSettings()
+        const nextValue = updater(prevValue)
+        if (nextValue === prevValue) return prev
+        return { ...prev, [photoId]: nextValue }
+      })
+    },
+    [currentPhoto?.id]
+  )
+  const handleCropRectChange = useCallback(
+    (nextRect: CropRect) => {
+      updateCropSettings((prev) => ({
+        ...prev,
+        rect: clampCropRect(nextRect),
+      }))
+    },
+    [updateCropSettings]
+  )
+  const handleCropAngleChange = useCallback(
+    (nextAngle: number) => {
+      updateCropSettings((prev) => ({
+        ...prev,
+        angle: clamp(nextAngle, -45, 45),
+      }))
+    },
+    [updateCropSettings]
+  )
+  const handleCropReset = useCallback(() => {
+    updateCropSettings(() => createDefaultCropSettings())
+  }, [updateCropSettings])
+  const handleCropAspectRatioChange = useCallback(
+    (ratioId: CropAspectRatioId) => {
+      updateCropSettings((prev) => {
+        if (prev.aspectRatioId === ratioId) return prev
+        const ratioValue = resolveAspectRatioValue(ratioId, currentDetailAspectRatio)
+        const orientedRatio = applyOrientationToRatio(ratioValue, prev.orientation)
+        const ratioBase = currentDetailAspectRatio || 1
+        const nextRect = orientedRatio
+          ? fitRectToAspect(prev.rect, orientedRatio, undefined, ratioBase)
+          : clampCropRect(prev.rect)
+        return {
+          ...prev,
+          rect: nextRect,
+          aspectRatioId: ratioId,
+        }
+      })
+    },
+    [currentDetailAspectRatio, updateCropSettings]
+  )
+  const handleCropOrientationChange = useCallback(
+    (orientation: CropOrientation) => {
+      updateCropSettings((prev) => {
+        if (prev.orientation === orientation) return prev
+        const ratioValue = resolveAspectRatioValue(prev.aspectRatioId, currentDetailAspectRatio)
+        const orientedRatio = applyOrientationToRatio(ratioValue, orientation)
+        const ratioBase = currentDetailAspectRatio || 1
+        const rect = orientedRatio
+          ? fitRectToAspect(prev.rect, orientedRatio, undefined, ratioBase)
+          : rotateRectDimensions(prev.rect)
+        return {
+          ...prev,
+          rect,
+          orientation,
+        }
+      })
+    },
+    [currentDetailAspectRatio, updateCropSettings]
+  )
+  const quickFixControls = useMemo(
+    () => ({
+      cropSettings: currentCropSettings,
+      onAspectRatioChange: handleCropAspectRatioChange,
+      onAngleChange: handleCropAngleChange,
+      onOrientationChange: handleCropOrientationChange,
+      onReset: handleCropReset,
+    }),
+    [
+      currentCropSettings,
+      handleCropAngleChange,
+      handleCropAspectRatioChange,
+      handleCropOrientationChange,
+      handleCropReset,
+    ]
+  )
   const inspectorPreviewAsset = useMemo(() => {
     if (!currentPhoto) return null
     const detailPreviewUrl = withBase(currentAssetDetail?.preview_url ?? null)
@@ -1862,6 +1989,9 @@ export default function ProjectWorkspace() {
       previewPanRequest={previewPanRequest}
       showFilmstrip={!isMobileLayout}
       enableSwipeNavigation={isMobileLayout}
+      cropSettings={currentCropSettings}
+      onCropRectChange={handleCropRectChange}
+      cropModeActive={cropModeActive && Boolean(currentPhoto)}
     />
   )
 
@@ -1915,11 +2045,10 @@ export default function ProjectWorkspace() {
       {uploadBanner && (
         <div className="pointer-events-none fixed bottom-6 right-6 z-50">
           <div
-            className={`pointer-events-auto w-72 rounded-lg border px-4 py-3 shadow-lg ${
-              uploadBanner.status === 'error'
+            className={`pointer-events-auto w-72 rounded-lg border px-4 py-3 shadow-lg ${uploadBanner.status === 'error'
                 ? 'border-[#F7C9C9] bg-[#FDF2F2]'
                 : 'border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]'
-            }`}
+              }`}
           >
             {uploadBanner.status === 'running' && (
               <>
@@ -2000,8 +2129,8 @@ export default function ProjectWorkspace() {
                   selectedDay={selectedDayNode}
                   onClearDateFilter={clearDateFilter}
                   collapsed={false}
-                  onCollapse={() => {}}
-                  onExpand={() => {}}
+                  onCollapse={() => { }}
+                  onExpand={() => { }}
                   mode="mobile"
                 />
               </div>
@@ -2009,9 +2138,10 @@ export default function ProjectWorkspace() {
               <div className="h-full overflow-y-auto px-3">
                 <InspectorPanel
                   collapsed={false}
-                  onCollapse={() => {}}
-                  onExpand={() => {}}
+                  onCollapse={() => { }}
+                  onExpand={() => { }}
                   hasSelection={Boolean(currentPhoto)}
+                  selectionCount={selectedPhotoIds.size}
                   usedProjects={usedProjects}
                   usedProjectsLoading={assetProjectsLoading}
                   usedProjectsError={usedProjectsErrorMessage}
@@ -2038,6 +2168,9 @@ export default function ProjectWorkspace() {
                   detailViewport={detailViewportRect}
                   onPreviewPan={handlePreviewPan}
                   mode="mobile"
+                  quickFixControls={quickFixControls}
+                  activeTab={activeInspectorTab}
+                  onActiveTabChange={handleInspectorTabChange}
                 />
               </div>
             ) : (
@@ -2144,6 +2277,7 @@ export default function ProjectWorkspace() {
             onCollapse={() => setRightPanelCollapsed(true)}
             onExpand={() => setRightPanelCollapsed(false)}
             hasSelection={Boolean(currentPhoto)}
+            selectionCount={selectedPhotoIds.size}
             usedProjects={usedProjects}
             usedProjectsLoading={assetProjectsLoading}
             usedProjectsError={usedProjectsErrorMessage}
@@ -2169,6 +2303,9 @@ export default function ProjectWorkspace() {
             onDetailZoomReset={handleDetailZoomReset}
             detailViewport={detailViewportRect}
             onPreviewPan={handlePreviewPan}
+            quickFixControls={quickFixControls}
+            activeTab={activeInspectorTab}
+            onActiveTabChange={handleInspectorTabChange}
           />
         </div>
       )}
@@ -2234,6 +2371,16 @@ const RAW_LIKE_EXTENSIONS = new Set([
   'sr2',
   'pef',
 ])
+
+function rotateRectDimensions(rect: CropRect): CropRect {
+  const centerX = rect.x + rect.width / 2
+  const centerY = rect.y + rect.height / 2
+  const width = rect.height
+  const height = rect.width
+  const x = clamp(centerX - width / 2, 0, 1 - width)
+  const y = clamp(centerY - height / 2, 0, 1 - height)
+  return clampCropRect({ x, y, width, height })
+}
 
 function inferTypeFromName(name: string): ImgType {
   const ext = name.split('.').pop()?.toLowerCase()
@@ -2826,9 +2973,8 @@ function PendingMiniGrid({
                   <img src={item.previewUrl} alt={item.name} className="h-16 w-full object-cover" />
                 ) : (
                   <div
-                    className={`flex h-16 w-full items-center justify-center text-[10px] font-medium text-[var(--text-muted,#6B645B)] ${
-                      item.ready === false ? 'animate-pulse' : ''
-                    }`}
+                    className={`flex h-16 w-full items-center justify-center text-[10px] font-medium text-[var(--text-muted,#6B645B)] ${item.ready === false ? 'animate-pulse' : ''
+                      }`}
                   >
                     {item.ready === false ? (
                       <span className="inline-flex items-center gap-1 text-[var(--text-muted,#6B645B)]">
@@ -2956,7 +3102,7 @@ export function ImportSheet({
   }, [uploadTasks])
 
   useEffect(() => {
-    ;(document.getElementById('import-sheet') as HTMLDivElement | null)?.focus()
+    ; (document.getElementById('import-sheet') as HTMLDivElement | null)?.focus()
   }, [])
 
   useEffect(() => {

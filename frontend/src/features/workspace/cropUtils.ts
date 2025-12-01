@@ -123,3 +123,29 @@ export function applyOrientationToRatio(
   if (ratio === 0) return null
   return 1 / ratio
 }
+
+export function inferAspectRatioSelection(
+  value: number | null,
+  originalRatio: number | null
+): { id: CropAspectRatioId; orientation: CropOrientation } {
+  if (!value || value <= 0) {
+    return { id: 'free', orientation: 'horizontal' }
+  }
+  let orientation: CropOrientation = 'horizontal'
+  let target = value
+  if (value < 1) {
+    orientation = 'vertical'
+    target = 1 / value
+  }
+  const tolerance = 0.01
+  if (originalRatio && Math.abs(target - originalRatio) <= tolerance) {
+    return { id: 'original', orientation }
+  }
+  for (const option of CROP_RATIO_OPTIONS) {
+    if (!option.ratio) continue
+    if (Math.abs(target - option.ratio) <= tolerance) {
+      return { id: option.id, orientation }
+    }
+  }
+  return { id: 'free', orientation }
+}

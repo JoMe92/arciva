@@ -33,10 +33,12 @@ import {
   InspectorViewportRect,
   CropSettings,
   CropAspectRatioId,
+  CropOrientation,
 } from '../types'
 import { COLOR_MAP } from '../utils'
 
 import { QuickFixPanel } from './QuickFixPanel'
+import type { QuickFixGroupKey, QuickFixState } from '../quickFixState'
 
 const RIGHT_PANEL_ID = 'workspace-image-details-panel'
 const RIGHT_PANEL_CONTENT_ID = `${RIGHT_PANEL_ID}-content`
@@ -53,7 +55,14 @@ type QuickFixControlsProps = {
   onAspectRatioChange: (ratio: CropAspectRatioId) => void
   onAngleChange: (angle: number) => void
   onReset: () => void
-  onOrientationChange: (orientation: 'horizontal' | 'vertical') => void
+  onOrientationChange: (orientation: CropOrientation) => void
+  quickFixState: QuickFixState | null
+  onQuickFixChange: (updater: (prev: QuickFixState) => QuickFixState) => void
+  onQuickFixGroupReset: (group: QuickFixGroupKey) => void
+  onQuickFixGlobalReset: () => void
+  previewBusy: boolean
+  saving: boolean
+  errorMessage: string | null
 }
 
 export function InspectorPanel({
@@ -393,6 +402,13 @@ export function InspectorPanel({
                 onAngleChange={quickFixControls?.onAngleChange ?? (() => { })}
                 onOrientationChange={quickFixControls?.onOrientationChange ?? (() => { })}
                 onReset={quickFixControls?.onReset ?? (() => { })}
+                quickFixState={quickFixControls?.quickFixState ?? null}
+                onQuickFixChange={quickFixControls?.onQuickFixChange ?? (() => { })}
+                onQuickFixGroupReset={quickFixControls?.onQuickFixGroupReset ?? (() => { })}
+                onQuickFixGlobalReset={quickFixControls?.onQuickFixGlobalReset ?? (() => { })}
+                previewBusy={quickFixControls?.previewBusy ?? false}
+                saving={quickFixControls?.saving ?? false}
+                errorMessage={quickFixControls?.errorMessage ?? null}
               />
             )}
           </div>

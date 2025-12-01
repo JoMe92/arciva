@@ -20,15 +20,27 @@ from .routers import (
 from .logging_utils import setup_logging
 from .schema_utils import ensure_base_schema
 
-# OpenTelemetry Imports
-from opentelemetry import trace
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
-from opentelemetry.instrumentation.logging import LoggingInstrumentor
+try:  # Optional OpenTelemetry integration
+    from opentelemetry import trace
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+    from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+    from opentelemetry.instrumentation.logging import LoggingInstrumentor
+    from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
+    from opentelemetry.sdk.resources import Resource
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+    _OTEL_AVAILABLE = True
+except ModuleNotFoundError:  # pragma: no cover - optional dependency
+    trace = None  # type: ignore[assignment]
+    OTLPSpanExporter = None  # type: ignore[assignment]
+    FastAPIInstrumentor = None  # type: ignore[assignment]
+    LoggingInstrumentor = None  # type: ignore[assignment]
+    SQLAlchemyInstrumentor = None  # type: ignore[assignment]
+    Resource = None  # type: ignore[assignment]
+    TracerProvider = None  # type: ignore[assignment]
+    BatchSpanProcessor = None  # type: ignore[assignment]
+    _OTEL_AVAILABLE = False
 
 api_logger = logging.getLogger("arciva.api")
 startup_logger = logging.getLogger("arciva.startup")
@@ -61,19 +73,25 @@ def create_app() -> FastAPI:
         "CORS allow_origins: %s", ", ".join(s.allowed_origins) or "<none>"
     )
 
-    # OpenTelemetry Setup
-    resource = Resource.create(attributes={"service.name": "arciva-backend"})
-    tracer_provider = TracerProvider(resource=resource)
-    otlp_exporter = OTLPSpanExporter()  # Defaults to localhost:4317 or env var
-    span_processor = BatchSpanProcessor(otlp_exporter)
-    tracer_provider.add_span_processor(span_processor)
-    trace.set_tracer_provider(tracer_provider)
+    tracer_provider = None
+    if _OTEL_AVAILABLE:
+        resource = Resource.create(attributes={"service.name": "arciva-backend"})
+        tracer_provider = TracerProvider(resource=resource)
+        otlp_exporter = OTLPSpanExporter()  # Defaults to localhost:4317 or env var
+        span_processor = BatchSpanProcessor(otlp_exporter)
+        tracer_provider.add_span_processor(span_processor)
+        trace.set_tracer_provider(tracer_provider)
 
-    LoggingInstrumentor().instrument(set_logging_format=True)
-    SQLAlchemyInstrumentor().instrument()
+        LoggingInstrumentor().instrument(set_logging_format=True)
+        SQLAlchemyInstrumentor().instrument()
+    else:  # pragma: no cover - exercised implicitly during tests
+        startup_logger.info(
+            "OpenTelemetry not installed; skipping tracing instrumentation"
+        )
 
     app = FastAPI(title="Arciva API", version="0.1.0")
-    FastAPIInstrumentor.instrument_app(app, tracer_provider=tracer_provider)
+    if _OTEL_AVAILABLE and tracer_provider:
+        FastAPIInstrumentor.instrument_app(app, tracer_provider=tracer_provider)
 
     app.add_middleware(
         CORSMiddleware,

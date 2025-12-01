@@ -263,3 +263,76 @@ export async function loadMetadataFromProject(
   }
   return (await res.json()) as LoadMetadataFromProjectResponse
 }
+
+export type QuickFixCropSettingsPayload = {
+  aspect_ratio?: number | null
+  rotation?: number | null
+}
+
+export type QuickFixExposureSettingsPayload = {
+  exposure?: number | null
+  contrast?: number | null
+  highlights?: number | null
+  shadows?: number | null
+}
+
+export type QuickFixColorSettingsPayload = {
+  temperature?: number | null
+  tint?: number | null
+}
+
+export type QuickFixGrainSettingsPayload = {
+  amount?: number | null
+  size?: 'fine' | 'medium' | 'coarse'
+}
+
+export type QuickFixGeometrySettingsPayload = {
+  vertical?: number | null
+  horizontal?: number | null
+}
+
+export type QuickFixAdjustmentsPayload = {
+  crop?: QuickFixCropSettingsPayload | null
+  exposure?: QuickFixExposureSettingsPayload | null
+  color?: QuickFixColorSettingsPayload | null
+  grain?: QuickFixGrainSettingsPayload | null
+  geometry?: QuickFixGeometrySettingsPayload | null
+}
+
+export async function previewQuickFix(
+  assetId: string,
+  payload: QuickFixAdjustmentsPayload,
+  options: { signal?: AbortSignal } = {}
+): Promise<Blob> {
+  const res = await fetch(withBase(`/v1/assets/${assetId}/quick-fix/preview`)!, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(payload ?? {}),
+    signal: options.signal,
+  })
+  if (!res.ok) {
+    throw new Error(await res.text())
+  }
+  return await res.blob()
+}
+
+export async function saveQuickFixAdjustments(
+  projectId: string,
+  assetId: string,
+  payload: QuickFixAdjustmentsPayload
+): Promise<AssetDetail> {
+  const res = await fetch(
+    withBase(`/v1/projects/${projectId}/assets/${assetId}/quick-fix`)!,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(payload ?? {}),
+    }
+  )
+  if (!res.ok) {
+    throw new Error(await res.text())
+  }
+  return (await res.json()) as AssetDetail
+}

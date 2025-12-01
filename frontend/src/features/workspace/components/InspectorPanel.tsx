@@ -31,6 +31,8 @@ import {
   CURRENT_CONFIG_SOURCE_ID,
   ColorTag,
   InspectorViewportRect,
+  CropSettings,
+  CropAspectRatioId,
 } from '../types'
 import { COLOR_MAP } from '../utils'
 
@@ -44,7 +46,14 @@ const RIGHT_METADATA_SECTION_ID = `${RIGHT_PANEL_ID}-metadata`
 
 type RightPanelTarget = 'keyData' | 'projects' | 'metadata'
 
-type InspectorTab = 'details' | 'quick-fix'
+export type InspectorTab = 'details' | 'quick-fix'
+
+type QuickFixControlsProps = {
+  cropSettings: CropSettings | null
+  onAspectRatioChange: (ratio: CropAspectRatioId) => void
+  onAngleChange: (angle: number) => void
+  onReset: () => void
+}
 
 export function InspectorPanel({
   collapsed,
@@ -75,6 +84,9 @@ export function InspectorPanel({
   detailViewport,
   onPreviewPan,
   mode = 'sidebar',
+  quickFixControls,
+  activeTab: activeTabProp,
+  onActiveTabChange,
 }: {
   collapsed: boolean
   onCollapse: () => void
@@ -104,8 +116,21 @@ export function InspectorPanel({
   detailViewport: InspectorViewportRect | null
   onPreviewPan?: (position: { x: number; y: number }) => void
   mode?: 'sidebar' | 'mobile'
+  quickFixControls?: QuickFixControlsProps | null
+  activeTab?: InspectorTab
+  onActiveTabChange?: (tab: InspectorTab) => void
 }) {
-  const [activeTab, setActiveTab] = useState<InspectorTab>('details')
+  const [internalActiveTab, setInternalActiveTab] = useState<InspectorTab>('details')
+  const activeTab = activeTabProp ?? internalActiveTab
+  const setActiveTab = useCallback(
+    (next: InspectorTab) => {
+      if (activeTabProp === undefined) {
+        setInternalActiveTab(next)
+      }
+      onActiveTabChange?.(next)
+    },
+    [activeTabProp, onActiveTabChange]
+  )
   const keyDataSectionRef = useRef<HTMLDivElement | null>(null)
   const projectsSectionRef = useRef<HTMLDivElement | null>(null)
   const metadataSectionRef = useRef<HTMLDivElement | null>(null)
@@ -362,6 +387,10 @@ export function InspectorPanel({
               <QuickFixPanel
                 hasSelection={hasSelection}
                 selectionCount={selectionCount}
+                cropSettings={quickFixControls?.cropSettings ?? null}
+                onAspectRatioChange={quickFixControls?.onAspectRatioChange ?? (() => { })}
+                onAngleChange={quickFixControls?.onAngleChange ?? (() => { })}
+                onReset={quickFixControls?.onReset ?? (() => { })}
               />
             )}
           </div>

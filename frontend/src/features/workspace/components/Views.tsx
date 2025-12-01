@@ -4,11 +4,16 @@ import {
   GridSelectOptions,
   InspectorViewportRect,
   InspectorPreviewPanCommand,
+  CropSettings,
+  CropRect,
+  CropAspectRatioId,
 } from '../types'
 import { computeCols, COLOR_MAP } from '../utils'
+import { resolveAspectRatioValue } from '../cropUtils'
 import { RawPlaceholder, RawPlaceholderFrame } from '../../../components/RawPlaceholder'
 import { ChevronLeftIcon, ChevronRightIcon } from './icons'
 import { StarRow, ColorSwatch, Badge, BadgeConfig } from './Common'
+import { CropOverlay } from './CropOverlay'
 
 export function GridView({
   items,
@@ -96,6 +101,9 @@ export function DetailView({
   previewPanRequest,
   showFilmstrip = true,
   enableSwipeNavigation = false,
+  cropSettings,
+  onCropRectChange,
+  cropModeActive = false,
 }: {
   items: Photo[]
   index: number
@@ -115,6 +123,9 @@ export function DetailView({
   previewPanRequest?: InspectorPreviewPanCommand | null
   showFilmstrip?: boolean
   enableSwipeNavigation?: boolean
+  cropSettings?: CropSettings | null
+  onCropRectChange?: (rect: CropRect) => void
+  cropModeActive?: boolean
 }) {
   const cur = items[index]
   const canPrev = index > 0
@@ -182,19 +193,20 @@ export function DetailView({
   const zoomValue = useMemo(() => {
     return clampZoomValue(zoom)
   }, [zoom, clampZoomValue])
+  const cropAngle = cropSettings?.angle ?? 0
   const SWIPE_DISTANCE = 40
   const SWIPE_MAX_DURATION = 800
 
   const handleSwipePointerDown = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
-      if (!enableSwipeNavigation || zoomValue > 1) return
+      if (!enableSwipeNavigation || zoomValue > 1 || cropModeActive) return
       swipeStateRef.current = {
         pointerId: event.pointerId,
         startX: event.clientX,
         startTime: event.timeStamp,
       }
     },
-    [enableSwipeNavigation, zoomValue]
+    [cropModeActive, enableSwipeNavigation, zoomValue]
   )
 
   const cancelSwipeTracking = useCallback((pointerId?: number) => {
@@ -221,7 +233,7 @@ export function DetailView({
 
   const handleSwipePointerUp = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
-      if (!enableSwipeNavigation || zoomValue > 1) return
+      if (!enableSwipeNavigation || zoomValue > 1 || cropModeActive) return
       const state = swipeStateRef.current
       if (!state || state.pointerId !== event.pointerId) return
       const deltaX = event.clientX - state.startX
@@ -232,7 +244,7 @@ export function DetailView({
       }
       swipeStateRef.current = null
     },
-    [enableSwipeNavigation, triggerSwipeNavigation, zoomValue]
+    [cropModeActive, enableSwipeNavigation, triggerSwipeNavigation, zoomValue]
   )
   const handleSwipePointerCancel = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
@@ -283,6 +295,10 @@ export function DetailView({
     }
     return fallbackRatio || 1
   }, [assetDimensions?.width, assetDimensions?.height, fallbackRatio])
+  const cropAspectRatioPreference: CropAspectRatioId = cropSettings?.aspectRatioId ?? 'original'
+  const overlayAspectRatio = useMemo(() => {
+    return resolveAspectRatioValue(cropAspectRatioPreference, detailAspectRatio)
+  }, [cropAspectRatioPreference, detailAspectRatio])
 
   const baseSize = useMemo(() => {
     if (!containerSize.width || !containerSize.height) return { width: 0, height: 0 }
@@ -297,6 +313,9 @@ export function DetailView({
     const width = height * ratio
     return { width, height }
   }, [containerSize.width, containerSize.height, detailAspectRatio])
+  const canShowCropOverlay =
+    cropModeActive &&
+    Boolean(cropSettings && onCropRectChange && baseSize.width && baseSize.height)
 
   const scaledWidth = baseSize.width * zoomValue
   const scaledHeight = baseSize.height * zoomValue
@@ -373,7 +392,7 @@ export function DetailView({
 
   const handlePointerDown = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
-      if (zoomValue <= 1) return
+      if (cropModeActive || zoomValue <= 1) return
       event.preventDefault()
       event.currentTarget.setPointerCapture(event.pointerId)
       dragStateRef.current = {
@@ -383,11 +402,12 @@ export function DetailView({
       }
       setIsDragging(true)
     },
-    [zoomValue]
+    [cropModeActive, zoomValue]
   )
 
   const handlePointerMove = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
+      if (cropModeActive) return
       const state = dragStateRef.current
       if (!state || state.pointerId !== event.pointerId) return
       event.preventDefault()
@@ -397,7 +417,7 @@ export function DetailView({
       state.lastY = event.clientY
       setPan((prev) => clampPanState({ x: prev.x + dx, y: prev.y + dy }))
     },
-    [clampPanState]
+    [clampPanState, cropModeActive]
   )
 
   const endPointerInteraction = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
@@ -410,17 +430,18 @@ export function DetailView({
     }
   }, [])
 
-  const interactionCursor = zoomValue > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default'
+  const interactionCursor =
+    cropModeActive || zoomValue <= 1 ? 'default' : isDragging ? 'grabbing' : 'grab'
   const handleWheelZoom = useCallback(
     (event: React.WheelEvent<HTMLDivElement>) => {
-      if (!onZoomChange || !cur) return
+      if (!onZoomChange || !cur || cropModeActive) return
       event.preventDefault()
       const direction = event.deltaY < 0 ? zoomStep : 1 / zoomStep
       const nextZoom = clampZoomValue(zoomValue * direction)
       if (nextZoom === zoomValue) return
       onZoomChange(() => nextZoom)
     },
-    [clampZoomValue, cur, onZoomChange, zoomStep, zoomValue]
+    [clampZoomValue, cropModeActive, cur, onZoomChange, zoomStep, zoomValue]
   )
 
   const detailImage = useMemo(() => {
@@ -542,7 +563,8 @@ export function DetailView({
                   className="absolute inset-0"
                   style={{
                     cursor: interactionCursor,
-                    touchAction: zoomValue > 1 || enableSwipeNavigation ? 'none' : 'auto',
+                    touchAction:
+                      cropModeActive || zoomValue > 1 || enableSwipeNavigation ? 'none' : 'auto',
                   }}
                   onPointerDown={(event) => {
                     handlePointerDown(event)
@@ -572,7 +594,28 @@ export function DetailView({
                       transition: isDragging ? 'none' : 'transform 120ms ease-out',
                     }}
                   >
-                    {detailImage}
+                    <div className="relative h-full w-full">
+                      <div
+                        className="absolute inset-0 pointer-events-none"
+                        style={{
+                          transform: cropAngle ? `rotate(${cropAngle}deg)` : undefined,
+                          transition: 'transform 120ms ease-out',
+                        }}
+                      >
+                        {detailImage}
+                      </div>
+                      {canShowCropOverlay && cropSettings && onCropRectChange ? (
+                        <CropOverlay
+                          width={baseSize.width}
+                          height={baseSize.height}
+                          scale={zoomValue}
+                          rect={cropSettings.rect}
+                          aspectRatio={overlayAspectRatio}
+                          onChange={onCropRectChange}
+                          active
+                        />
+                      ) : null}
+                    </div>
                   </div>
                 </div>
               </div>

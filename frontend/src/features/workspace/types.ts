@@ -160,3 +160,18 @@ export type ProjectOverviewData = {
   assetCount: number
   createdAt: string | null
 }
+
+export type CropAspectRatioId = 'free' | 'original' | '1:1' | '4:3' | '16:9' | '2:1'
+
+export type CropRect = {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+export type CropSettings = {
+  rect: CropRect
+  angle: number
+  aspectRatioId: CropAspectRatioId
+}

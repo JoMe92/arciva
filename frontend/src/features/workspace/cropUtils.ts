@@ -55,11 +55,14 @@ export function clampCropRect(rect: CropRect, minSize = MIN_CROP_EDGE): CropRect
 export function fitRectToAspect(
   rect: CropRect,
   ratio: number,
-  minSize = MIN_CROP_EDGE
+  minSize = MIN_CROP_EDGE,
+  containerRatio = 1
 ): CropRect {
   if (!Number.isFinite(ratio) || ratio <= 0) {
     return clampCropRect(rect, minSize)
   }
+  const normalizedRatio =
+    Number.isFinite(containerRatio) && containerRatio > 0 ? ratio / containerRatio : ratio
   const centerX = rect.x + rect.width / 2
   const centerY = rect.y + rect.height / 2
   let width = rect.width
@@ -70,10 +73,10 @@ export function fitRectToAspect(
   }
   const currentRatio = width / height
   if (Number.isFinite(currentRatio)) {
-    if (currentRatio > ratio) {
-      width = height * ratio
-    } else if (currentRatio < ratio) {
-      height = width / ratio
+    if (currentRatio > normalizedRatio) {
+      width = height * normalizedRatio
+    } else if (currentRatio < normalizedRatio) {
+      height = width / normalizedRatio
     }
   }
   if (width > 1) {

@@ -64,6 +64,21 @@ export function CropOverlay({
   const top = normalizedRect.y * height
   const cropWidth = normalizedRect.width * width
   const cropHeight = normalizedRect.height * height
+  const containerRatio =
+    Number.isFinite(width) && Number.isFinite(height) && height > 0 ? width / height : 1
+  const handleScale = scale && scale > 0 ? 1 / scale : 1
+  const cornerPositions: Record<'nw' | 'ne' | 'sw' | 'se', { x: number; y: number }> = {
+    nw: { x: 0, y: 0 },
+    ne: { x: 1, y: 0 },
+    sw: { x: 0, y: 1 },
+    se: { x: 1, y: 1 },
+  }
+  const edgePositions: Record<'n' | 's' | 'w' | 'e', { x: number; y: number }> = {
+    n: { x: 0.5, y: 0 },
+    s: { x: 0.5, y: 1 },
+    w: { x: 0, y: 0.5 },
+    e: { x: 1, y: 0.5 },
+  }
 
   const startDrag = useCallback(
     (type: HandleType, event: React.PointerEvent<HTMLDivElement>) => {
@@ -97,10 +112,10 @@ export function CropOverlay({
       const nextRect =
         drag.type === 'move'
           ? moveRect(drag.startRect, deltaX, deltaY)
-          : resizeRect(drag.type, drag.startRect, deltaX, deltaY, aspectRatio)
+          : resizeRect(drag.type, drag.startRect, deltaX, deltaY, aspectRatio, containerRatio)
       onChange(nextRect)
     },
-    [aspectRatio, height, onChange, width]
+    [aspectRatio, containerRatio, height, onChange, width]
   )
 
   const endDrag = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
@@ -165,14 +180,19 @@ export function CropOverlay({
       </div>
 
       <div className="absolute" style={{ left, top, width: cropWidth, height: cropHeight }}>
-        {renderHandle('nw', left, top, startDrag, updateDrag, endDrag)}
-        {renderHandle('ne', left + cropWidth, top, startDrag, updateDrag, endDrag)}
-        {renderHandle('sw', left, top + cropHeight, startDrag, updateDrag, endDrag)}
-        {renderHandle('se', left + cropWidth, top + cropHeight, startDrag, updateDrag, endDrag)}
-        {renderEdgeHandle('n', left + cropWidth / 2, top, startDrag, updateDrag, endDrag)}
-        {renderEdgeHandle('s', left + cropWidth / 2, top + cropHeight, startDrag, updateDrag, endDrag)}
-        {renderEdgeHandle('w', left, top + cropHeight / 2, startDrag, updateDrag, endDrag)}
-        {renderEdgeHandle('e', left + cropWidth, top + cropHeight / 2, startDrag, updateDrag, endDrag)}
+        {(['nw', 'ne', 'sw', 'se'] as const).map((key) =>
+          renderHandle(
+            key,
+            cornerPositions[key],
+            handleScale,
+            startDrag,
+            updateDrag,
+            endDrag
+          )
+        )}
+        {(['n', 's', 'w', 'e'] as const).map((key) =>
+          renderEdgeHandle(key, edgePositions[key], handleScale, startDrag, updateDrag, endDrag)
+        )}
       </div>
     </div>
   )
@@ -180,21 +200,24 @@ export function CropOverlay({
 
 function renderHandle(
   type: Exclude<HandleType, 'move' | 'n' | 's' | 'e' | 'w'>,
-  x: number,
-  y: number,
+  position: { x: number; y: number },
+  handleScale: number,
   startDrag: (type: HandleType, event: React.PointerEvent<HTMLDivElement>) => void,
   updateDrag: (event: React.PointerEvent<HTMLDivElement>) => void,
   endDrag: (event: React.PointerEvent<HTMLDivElement>) => void
 ) {
-  const size = 14
+  const baseSize = 14
+  const size = Math.max(8, baseSize * handleScale)
   return (
     <div
       className="absolute z-10 rounded-full border border-white bg-[rgba(0,0,0,0.4)]"
       style={{
         width: size,
         height: size,
-        left: x - size / 2,
-        top: y - size / 2,
+        left: `${position.x * 100}%`,
+        top: `${position.y * 100}%`,
+        transform: `translate(-50%, -50%) scale(${handleScale})`,
+        transformOrigin: 'center',
         cursor: HANDLE_CURSORS[type],
       }}
       onPointerDown={(event) => startDrag(type, event)}
@@ -207,23 +230,27 @@ function renderHandle(
 
 function renderEdgeHandle(
   type: Extract<HandleType, 'n' | 's' | 'e' | 'w'>,
-  x: number,
-  y: number,
+  position: { x: number; y: number },
+  handleScale: number,
   startDrag: (type: HandleType, event: React.PointerEvent<HTMLDivElement>) => void,
   updateDrag: (event: React.PointerEvent<HTMLDivElement>) => void,
   endDrag: (event: React.PointerEvent<HTMLDivElement>) => void
 ) {
   const isHorizontal = type === 'n' || type === 's'
-  const width = isHorizontal ? 24 : 12
-  const height = isHorizontal ? 12 : 24
+  const baseWidth = isHorizontal ? 24 : 12
+  const baseHeight = isHorizontal ? 12 : 24
+  const width = Math.max(8, baseWidth * handleScale)
+  const height = Math.max(8, baseHeight * handleScale)
   return (
     <div
       className="absolute z-10 rounded-full border border-white bg-[rgba(0,0,0,0.4)]"
       style={{
         width,
         height,
-        left: x - width / 2,
-        top: y - height / 2,
+        left: `${position.x * 100}%`,
+        top: `${position.y * 100}%`,
+        transform: `translate(-50%, -50%) scale(${handleScale})`,
+        transformOrigin: 'center',
         cursor: HANDLE_CURSORS[type],
       }}
       onPointerDown={(event) => startDrag(type, event)}
@@ -250,11 +277,12 @@ function resizeRect(
   rect: CropRect,
   dx: number,
   dy: number,
-  aspectRatio: number | null
+  aspectRatio: number | null,
+  containerRatio: number
 ): CropRect {
   const next = resizeFree(type, rect, dx, dy)
   if (!aspectRatio) return next
-  return fitToRatio(type, next, aspectRatio)
+  return fitToRatio(type, next, aspectRatio, containerRatio)
 }
 
 function resizeFree(type: Exclude<HandleType, 'move'>, rect: CropRect, dx: number, dy: number) {
@@ -282,12 +310,14 @@ function resizeFree(type: Exclude<HandleType, 'move'>, rect: CropRect, dx: numbe
 function fitToRatio(
   type: Exclude<HandleType, 'move'>,
   rect: CropRect,
-  aspectRatio: number
+  aspectRatio: number,
+  containerRatio: number
 ): CropRect {
   const anchor = HANDLE_ANCHORS[type]
   const width = rect.width
   const height = rect.height
-  const target = fitRectToAspect({ ...rect, width, height }, aspectRatio)
+  const ratioBase = containerRatio > 0 ? containerRatio : 1
+  const target = fitRectToAspect({ ...rect, width, height }, aspectRatio, MIN_CROP_EDGE, ratioBase)
   const anchored = applyAnchor(rect, target.width, target.height, anchor)
   return clampCropRect(anchored)
 }

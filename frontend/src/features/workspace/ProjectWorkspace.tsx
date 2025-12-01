@@ -1805,7 +1805,10 @@ export default function ProjectWorkspace() {
       updateCropSettings((prev) => {
         if (prev.aspectRatioId === ratioId) return prev
         const ratioValue = resolveAspectRatioValue(ratioId, currentDetailAspectRatio)
-        const nextRect = ratioValue ? fitRectToAspect(prev.rect, ratioValue) : clampCropRect(prev.rect)
+        const ratioBase = currentDetailAspectRatio || 1
+        const nextRect = ratioValue
+          ? fitRectToAspect(prev.rect, ratioValue, undefined, ratioBase)
+          : clampCropRect(prev.rect)
         return {
           ...prev,
           rect: nextRect,

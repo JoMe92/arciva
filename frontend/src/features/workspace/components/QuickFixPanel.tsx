@@ -1,7 +1,6 @@
 import React from 'react'
 import { InspectorPreviewData, InspectorViewportRect } from '../types'
 import { QuickFixGroup } from './QuickFixGroup'
-import { InspectorPreviewCard } from './InspectorPanel' // We will need to export this from InspectorPanel or move it
 
 // Temporary placeholder for controls
 function SliderControl({ label }: { label: string }) {
@@ -20,59 +19,20 @@ function SliderControl({ label }: { label: string }) {
 }
 
 type QuickFixPanelProps = {
-    previewAsset: InspectorPreviewData | null
     hasSelection: boolean
     selectionCount: number
-    detailZoom: number
-    detailMinZoom: number
-    detailMaxZoom: number
-    detailViewport: InspectorViewportRect | null
-    onDetailZoomIn: () => void
-    onDetailZoomOut: () => void
-    onDetailZoomReset: () => void
-    onPreviewPan?: (position: { x: number; y: number }) => void
-    previewOpen: boolean
-    setPreviewOpen: (open: boolean) => void
 }
 
 export function QuickFixPanel({
-    previewAsset,
     hasSelection,
     selectionCount,
-    detailZoom,
-    detailMinZoom,
-    detailMaxZoom,
-    detailViewport,
-    onDetailZoomIn,
-    onDetailZoomOut,
-    onDetailZoomReset,
-    onPreviewPan,
-    previewOpen,
-    setPreviewOpen,
 }: QuickFixPanelProps) {
     return (
         <div className="flex flex-1 min-h-0 flex-col gap-3 overflow-y-auto pr-4">
-            <InspectorPreviewCard
-                preview={previewAsset}
-                hasSelection={hasSelection}
-                zoomLevel={detailZoom}
-                minZoom={detailMinZoom}
-                maxZoom={detailMaxZoom}
-                viewport={detailViewport}
-                onZoomIn={onDetailZoomIn}
-                onZoomOut={onDetailZoomOut}
-                onZoomReset={onDetailZoomReset}
-                onPanPreview={onPreviewPan}
-                open={previewOpen}
-                onToggle={() => setPreviewOpen(!previewOpen)}
-            />
-
-            {hasSelection && (
+            {hasSelection && selectionCount > 1 && (
                 <div className="flex items-center gap-2 rounded-lg bg-[var(--surface-muted,#F3EBDD)] px-3 py-2 text-xs text-[var(--text,#1F1E1B)]">
                     <span className="font-medium">
-                        {selectionCount > 1
-                            ? `Changes will apply to ${selectionCount} selected images.`
-                            : 'Changes are shown live in the main image.'}
+                        {`Changes will apply to ${selectionCount} selected images.`}
                     </span>
                 </div>
             )}

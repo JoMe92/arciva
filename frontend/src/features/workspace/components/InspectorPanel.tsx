@@ -133,7 +133,7 @@ export function InspectorPanel({
     : 'flex h-full min-h-0 flex-col overflow-hidden rounded-[var(--r-lg,20px)] border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] p-4 shadow-[0_30px_80px_rgba(31,30,27,0.16)]'
   const panelContentClass = isMobilePanel
     ? 'flex flex-1 min-h-0 flex-col gap-3 pb-4'
-    : 'flex flex-1 min-h-0 flex-col gap-3 overflow-y-auto pr-4'
+    : 'flex flex-1 min-h-0 flex-col gap-3 pr-4'
   const mergedInspectorFields = useMemo(() => {
     const map = new Map<string, string>()
     generalFields.forEach((field) => {
@@ -263,22 +263,22 @@ export function InspectorPanel({
             </div>
           )}
           <div id={RIGHT_PANEL_CONTENT_ID} className={panelContentClass}>
+            <InspectorPreviewCard
+              preview={previewAsset}
+              hasSelection={hasSelection}
+              zoomLevel={detailZoom}
+              minZoom={detailMinZoom}
+              maxZoom={detailMaxZoom}
+              viewport={detailViewport}
+              onZoomIn={onDetailZoomIn}
+              onZoomOut={onDetailZoomOut}
+              onZoomReset={onDetailZoomReset}
+              onPanPreview={onPreviewPan}
+              open={previewOpen}
+              onToggle={() => setPreviewOpen((open) => !open)}
+            />
             {activeTab === 'details' ? (
-              <>
-                <InspectorPreviewCard
-                  preview={previewAsset}
-                  hasSelection={hasSelection}
-                  zoomLevel={detailZoom}
-                  minZoom={detailMinZoom}
-                  maxZoom={detailMaxZoom}
-                  viewport={detailViewport}
-                  onZoomIn={onDetailZoomIn}
-                  onZoomOut={onDetailZoomOut}
-                  onZoomReset={onDetailZoomReset}
-                  onPanPreview={onPreviewPan}
-                  open={previewOpen}
-                  onToggle={() => setPreviewOpen((open) => !open)}
-                />
+              <div className="flex flex-1 min-h-0 flex-col gap-3 overflow-y-auto pr-1">
                 <InspectorSection
                   id={RIGHT_KEY_SECTION_ID}
                   ref={keyDataSectionRef}
@@ -358,22 +358,11 @@ export function InspectorPanel({
                     </p>
                   )}
                 </InspectorSection>
-              </>
+              </div>
             ) : (
               <QuickFixPanel
-                previewAsset={previewAsset}
                 hasSelection={hasSelection}
                 selectionCount={selectionCount}
-                detailZoom={detailZoom}
-                detailMinZoom={detailMinZoom}
-                detailMaxZoom={detailMaxZoom}
-                detailViewport={detailViewport}
-                onDetailZoomIn={onDetailZoomIn}
-                onDetailZoomOut={onDetailZoomOut}
-                onDetailZoomReset={onDetailZoomReset}
-                onPreviewPan={onPreviewPan}
-                previewOpen={previewOpen}
-                setPreviewOpen={setPreviewOpen}
               />
             )}
           </div>

@@ -1979,7 +1979,7 @@ export default function ProjectWorkspace() {
   }, [currentAssetDetail?.metadata_state?.edits?.quick_fix, currentAssetId, currentDetailAspectRatio, requestQuickFixPreview])
   const currentCropSettings = currentPhoto?.id ? cropSettingsByPhoto[currentPhoto.id] ?? null : null
   const currentQuickFixState = currentAssetId ? quickFixStateByPhoto[currentAssetId] ?? null : null
-  const cropModeActive = activeInspectorTab === 'quick-fix'
+  const cropModeActive = activeInspectorTab === 'quick-fix' && !(currentCropSettings?.applied ?? false)
   const applyQuickFixChange = useCallback(
     (updater: (prev: QuickFixState) => QuickFixState) => {
       if (!currentAssetId) return
@@ -2012,6 +2012,7 @@ export default function ProjectWorkspace() {
       updateCropSettings((prev) => ({
         ...prev,
         rect: clampCropRect(nextRect),
+        applied: false,
       }))
     },
     [updateCropSettings]
@@ -2022,6 +2023,7 @@ export default function ProjectWorkspace() {
       updateCropSettings((prev) => ({
         ...prev,
         angle: clampedAngle,
+        applied: false,
       }))
       applyQuickFixChange((prev) => ({
         ...prev,
@@ -2055,6 +2057,7 @@ export default function ProjectWorkspace() {
           ...prev,
           rect: nextRect,
           aspectRatioId: ratioId,
+          applied: false,
         }
       })
     },
@@ -2078,10 +2081,20 @@ export default function ProjectWorkspace() {
           ...prev,
           rect,
           orientation,
+          applied: false,
         }
       })
     },
     [applyQuickFixChange, currentDetailAspectRatio, updateCropSettings]
+  )
+  const handleCropApplyChange = useCallback(
+    (applied: boolean) => {
+      updateCropSettings((prev) => {
+        if (prev.applied === applied) return prev
+        return { ...prev, applied }
+      })
+    },
+    [updateCropSettings]
   )
   const handleQuickFixGroupReset = useCallback(
     (group: QuickFixGroupKey) => {
@@ -2129,6 +2142,7 @@ export default function ProjectWorkspace() {
       onAngleChange: handleCropAngleChange,
       onOrientationChange: handleCropOrientationChange,
       onReset: handleCropReset,
+      onCropApplyChange: handleCropApplyChange,
       quickFixState: currentQuickFixState,
       onQuickFixChange: applyQuickFixChange,
       onQuickFixGroupReset: handleQuickFixGroupReset,
@@ -2143,6 +2157,7 @@ export default function ProjectWorkspace() {
       currentQuickFixState,
       handleCropAngleChange,
       handleCropAspectRatioChange,
+      handleCropApplyChange,
       handleCropOrientationChange,
       handleCropReset,
       handleQuickFixGlobalReset,

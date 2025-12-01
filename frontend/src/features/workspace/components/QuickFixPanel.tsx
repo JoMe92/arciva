@@ -50,6 +50,7 @@ type QuickFixPanelProps = {
   onAngleChange: (angle: number) => void
   onReset: () => void
   onOrientationChange: (orientation: CropOrientation) => void
+  onCropApplyChange: (applied: boolean) => void
   quickFixState: QuickFixState | null
   onQuickFixChange: (updater: (prev: QuickFixState) => QuickFixState) => void
   onQuickFixGroupReset: (group: QuickFixGroupKey) => void
@@ -69,6 +70,7 @@ export function QuickFixPanel({
   onAngleChange,
   onReset,
   onOrientationChange,
+  onCropApplyChange,
   quickFixState,
   onQuickFixChange,
   onQuickFixGroupReset,
@@ -81,7 +83,9 @@ export function QuickFixPanel({
   const selectedRatio = cropSettings?.aspectRatioId ?? 'original'
   const angle = cropSettings?.angle ?? 0
   const orientation = cropSettings?.orientation ?? 'horizontal'
+  const cropApplied = cropSettings?.applied ?? false
   const controlsDisabled = !hasSelection || selectionCount !== 1 || !quickFixState
+  const cropControlsDisabled = controlsDisabled || !cropSettings || cropApplied
   const disableMessage = !hasSelection
     ? 'Select a photo to start adjusting it.'
     : selectionCount > 1
@@ -129,14 +133,14 @@ export function QuickFixPanel({
                   <button
                     key={id}
                     type="button"
-                    disabled={controlsDisabled}
+                    disabled={cropControlsDisabled}
                     aria-pressed={selected}
                     onClick={() => onAspectRatioChange(id)}
                     className={`rounded border px-2 py-1.5 text-xs font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)] ${
                       selected
                         ? 'border-[var(--text,#1F1E1B)] bg-[var(--surface,#FFFFFF)] text-[var(--text,#1F1E1B)]'
                         : 'border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] text-[var(--text,#1F1E1B)] hover:border-[var(--text-muted,#6B645B)]'
-                    } ${controlsDisabled ? 'opacity-60' : ''}`}
+                    } ${cropControlsDisabled ? 'opacity-60' : ''}`}
                   >
                     {label}
                   </button>
@@ -154,14 +158,14 @@ export function QuickFixPanel({
                   <button
                     key={opt}
                     type="button"
-                    disabled={controlsDisabled}
+                    disabled={cropControlsDisabled}
                     aria-pressed={selected}
                     onClick={() => onOrientationChange(opt)}
                     className={`flex-1 rounded-md py-1 text-xs font-medium transition ${
                       selected
                         ? 'bg-[var(--surface,#FFFFFF)] text-[var(--text,#1F1E1B)] shadow-sm'
                         : 'text-[var(--text-muted,#6B645B)] hover:text-[var(--text,#1F1E1B)]'
-                    } ${controlsDisabled ? 'opacity-60' : ''}`}
+                    } ${cropControlsDisabled ? 'opacity-60' : ''}`}
                   >
                     {label}
                   </button>
@@ -181,19 +185,34 @@ export function QuickFixPanel({
                 max="45"
                 step="0.1"
                 value={angle}
-                disabled={controlsDisabled}
+                disabled={cropControlsDisabled}
                 onChange={(event) => onAngleChange(Number(event.target.value))}
                 className="h-1.5 flex-1 cursor-pointer appearance-none rounded-full bg-[var(--border,#EDE1C6)] accent-[var(--focus-ring,#1A73E8)]"
               />
               <button
                 type="button"
-                disabled={controlsDisabled}
+                disabled={cropControlsDisabled}
                 onClick={onReset}
                 className="rounded border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] px-2 py-1 text-xs font-medium text-[var(--text,#1F1E1B)] transition hover:bg-[var(--surface-muted,#F3EBDD)] disabled:opacity-60"
               >
                 Reset
               </button>
             </div>
+          </div>
+          <div className="space-y-2">
+            {cropApplied ? (
+              <p className="text-xs text-[var(--text-muted,#6B645B)]">
+                Crop applied. Choose Re-Crop to adjust the original frame again.
+              </p>
+            ) : null}
+            <button
+              type="button"
+              disabled={controlsDisabled || !cropSettings}
+              onClick={() => onCropApplyChange(!cropApplied)}
+              className="w-full rounded border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] px-3 py-2 text-xs font-semibold text-[var(--text,#1F1E1B)] transition hover:bg-[var(--surface-muted,#F3EBDD)] disabled:opacity-60"
+            >
+              {cropApplied ? 'Re-Crop' : 'Apply Crop'}
+            </button>
           </div>
         </div>
       </QuickFixGroup>

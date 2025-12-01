@@ -36,6 +36,7 @@ export const DEFAULT_CROP_SETTINGS: CropSettings = {
   angle: 0,
   aspectRatioId: 'original',
   orientation: 'horizontal',
+  applied: false,
 }
 
 export function clamp(value: number, min: number, max: number): number {
@@ -112,6 +113,7 @@ export function createDefaultCropSettings(): CropSettings {
     angle: DEFAULT_CROP_SETTINGS.angle,
     aspectRatioId: DEFAULT_CROP_SETTINGS.aspectRatioId,
     orientation: DEFAULT_CROP_SETTINGS.orientation,
+    applied: DEFAULT_CROP_SETTINGS.applied,
   }
 }
 

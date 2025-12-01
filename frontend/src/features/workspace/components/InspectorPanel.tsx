@@ -56,6 +56,7 @@ type QuickFixControlsProps = {
   onAngleChange: (angle: number) => void
   onReset: () => void
   onOrientationChange: (orientation: CropOrientation) => void
+  onCropApplyChange: (applied: boolean) => void
   quickFixState: QuickFixState | null
   onQuickFixChange: (updater: (prev: QuickFixState) => QuickFixState) => void
   onQuickFixGroupReset: (group: QuickFixGroupKey) => void
@@ -402,6 +403,7 @@ export function InspectorPanel({
                 onAngleChange={quickFixControls?.onAngleChange ?? (() => { })}
                 onOrientationChange={quickFixControls?.onOrientationChange ?? (() => { })}
                 onReset={quickFixControls?.onReset ?? (() => { })}
+                onCropApplyChange={quickFixControls?.onCropApplyChange ?? (() => { })}
                 quickFixState={quickFixControls?.quickFixState ?? null}
                 onQuickFixChange={quickFixControls?.onQuickFixChange ?? (() => { })}
                 onQuickFixGroupReset={quickFixControls?.onQuickFixGroupReset ?? (() => { })}

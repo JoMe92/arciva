@@ -610,6 +610,7 @@ export default function ProjectWorkspace() {
   const quickFixSaveSeqRef = useRef(0)
   const [quickFixSaving, setQuickFixSaving] = useState(false)
   const [quickFixError, setQuickFixError] = useState<string | null>(null)
+  const quickFixAdjustingRef = useRef(false)
   const quickFixServerHashRef = useRef<{ assetId: string | null; hash: string | null }>({
     assetId: null,
     hash: null,
@@ -1650,6 +1651,9 @@ export default function ProjectWorkspace() {
     setQuickFixPreviewBusy(false)
     setQuickFixError(null)
   }, [currentAssetId])
+  useEffect(() => {
+    quickFixAdjustingRef.current = false
+  }, [currentAssetId])
 
   const handlePhotoSelect = useCallback(
     (idx: number, options?: GridSelectOptions) => {
@@ -1779,10 +1783,11 @@ export default function ProjectWorkspace() {
       if (quickFixPreviewTimeoutRef.current !== null) {
         window.clearTimeout(quickFixPreviewTimeoutRef.current)
       }
+      const delay = quickFixAdjustingRef.current ? 500 : 150
       quickFixPreviewTimeoutRef.current = window.setTimeout(() => {
         quickFixPreviewTimeoutRef.current = null
         requestQuickFixPreview(assetId, state)
-      }, 150)
+      }, delay)
     },
     [requestQuickFixPreview]
   )
@@ -1980,6 +1985,9 @@ export default function ProjectWorkspace() {
   const currentCropSettings = currentPhoto?.id ? cropSettingsByPhoto[currentPhoto.id] ?? null : null
   const currentQuickFixState = currentAssetId ? quickFixStateByPhoto[currentAssetId] ?? null : null
   const cropModeActive = activeInspectorTab === 'quick-fix' && !(currentCropSettings?.applied ?? false)
+  const handleQuickFixAdjustingChange = useCallback((isAdjusting: boolean) => {
+    quickFixAdjustingRef.current = isAdjusting
+  }, [])
   const applyQuickFixChange = useCallback(
     (updater: (prev: QuickFixState) => QuickFixState) => {
       if (!currentAssetId) return
@@ -2150,6 +2158,7 @@ export default function ProjectWorkspace() {
       previewBusy: quickFixPreviewBusy,
       saving: quickFixSaving,
       errorMessage: quickFixError,
+      onAdjustingChange: handleQuickFixAdjustingChange,
     }),
     [
       applyQuickFixChange,
@@ -2162,6 +2171,7 @@ export default function ProjectWorkspace() {
       handleCropReset,
       handleQuickFixGlobalReset,
       handleQuickFixGroupReset,
+      handleQuickFixAdjustingChange,
       quickFixError,
       quickFixPreviewBusy,
       quickFixSaving,

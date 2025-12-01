@@ -1,10 +1,12 @@
-import React, { useMemo } from 'react'
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CropAspectRatioId, CropOrientation, CropSettings } from '../types'
 import { CROP_RATIO_OPTIONS } from '../cropUtils'
 import { QuickFixGroup } from './QuickFixGroup'
 import {
   QuickFixGroupKey,
   QuickFixState,
+  areQuickFixStatesEqual,
+  cloneQuickFixState,
   createDefaultQuickFixState,
   hasQuickFixAdjustments,
 } from '../quickFixState'
@@ -18,9 +20,26 @@ type SliderControlProps = {
   disabled: boolean
   onChange: (value: number) => void
   format?: (value: number) => string
+  onPointerDown?: (event: React.PointerEvent<HTMLInputElement>) => void
+  onPointerUp?: (event: React.PointerEvent<HTMLInputElement>) => void
+  onPointerCancel?: (event: React.PointerEvent<HTMLInputElement>) => void
+  onBlur?: () => void
 }
 
-function SliderControl({ label, value, min, max, step, disabled, onChange, format }: SliderControlProps) {
+function SliderControl({
+  label,
+  value,
+  min,
+  max,
+  step,
+  disabled,
+  onChange,
+  format,
+  onPointerDown,
+  onPointerUp,
+  onPointerCancel,
+  onBlur,
+}: SliderControlProps) {
   const displayValue = format ? format(value) : value.toFixed(2)
   return (
     <div className="space-y-2">
@@ -36,6 +55,10 @@ function SliderControl({ label, value, min, max, step, disabled, onChange, forma
         value={value}
         disabled={disabled}
         onChange={(event) => onChange(Number(event.target.value))}
+        onPointerDown={onPointerDown}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerCancel}
+        onBlur={onBlur}
         className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-[var(--border,#EDE1C6)] accent-[var(--focus-ring,#1A73E8)]"
       />
     </div>
@@ -58,11 +81,13 @@ type QuickFixPanelProps = {
   previewBusy: boolean
   saving: boolean
   errorMessage: string | null
+  onLiveStateChange?: (state: QuickFixState | null) => void
+  onAdjustingChange?: (isAdjusting: boolean) => void
 }
 
 const formatSigned = (value: number, digits = 2) => `${value >= 0 ? '+' : ''}${value.toFixed(digits)}`
 
-export function QuickFixPanel({
+function QuickFixPanelComponent({
   hasSelection,
   selectionCount,
   cropSettings,
@@ -78,8 +103,15 @@ export function QuickFixPanel({
   previewBusy,
   saving,
   errorMessage,
+  onLiveStateChange,
+  onAdjustingChange,
 }: QuickFixPanelProps) {
   const quickFix = useMemo(() => quickFixState ?? createDefaultQuickFixState(), [quickFixState])
+  const [liveState, setLiveState] = useState<QuickFixState | null>(null)
+  const liveStateRef = useRef<QuickFixState | null>(null)
+  useEffect(() => {
+    liveStateRef.current = liveState
+  }, [liveState])
   const selectedRatio = cropSettings?.aspectRatioId ?? 'original'
   const angle = cropSettings?.angle ?? 0
   const orientation = cropSettings?.orientation ?? 'horizontal'
@@ -92,11 +124,156 @@ export function QuickFixPanel({
       ? 'Quick Fix adjusts one image at a time.'
       : null
   const hasAdjustments = quickFixState ? hasQuickFixAdjustments(quickFixState) : false
+  const displayedState = liveState ?? quickFix
+  const commitTimeoutRef = useRef<number | null>(null)
+  const activePointerRef = useRef<number | null>(null)
 
   const handleQuickFixValueChange = (updater: (state: QuickFixState) => QuickFixState) => {
     if (controlsDisabled) return
     onQuickFixChange(updater)
   }
+
+  const clearCommitTimeout = useCallback(() => {
+    if (commitTimeoutRef.current !== null) {
+      window.clearTimeout(commitTimeoutRef.current)
+      commitTimeoutRef.current = null
+    }
+  }, [])
+
+  const commitLiveState = useCallback(
+    (resetDraft: boolean) => {
+      if (controlsDisabled) return
+      const draft = liveStateRef.current
+      if (!draft || !quickFixState) {
+        if (resetDraft) setLiveState(null)
+        return
+      }
+      if (areQuickFixStatesEqual(draft, quickFixState)) {
+        if (resetDraft) setLiveState(null)
+        return
+      }
+      handleQuickFixValueChange(() => cloneQuickFixState(draft))
+      if (resetDraft) setLiveState(null)
+    },
+    [controlsDisabled, handleQuickFixValueChange, quickFixState]
+  )
+
+  const scheduleLiveCommit = useCallback(() => {
+    if (controlsDisabled) return
+    clearCommitTimeout()
+    commitTimeoutRef.current = window.setTimeout(() => {
+      commitTimeoutRef.current = null
+      commitLiveState(activePointerRef.current === null)
+    }, 350)
+  }, [clearCommitTimeout, commitLiveState, controlsDisabled])
+
+  useEffect(
+    () => () => {
+      clearCommitTimeout()
+    },
+    [clearCommitTimeout]
+  )
+
+  const updateLiveState = useCallback(
+    (updater: (draft: QuickFixState) => QuickFixState) => {
+      if (controlsDisabled) return
+      setLiveState((prev) => {
+        const base = prev ? cloneQuickFixState(prev) : cloneQuickFixState(quickFix)
+        return updater(base)
+      })
+      scheduleLiveCommit()
+    },
+    [controlsDisabled, quickFix, scheduleLiveCommit]
+  )
+
+  const handleSliderPointerDown = useCallback(
+    (event: React.PointerEvent<HTMLInputElement>) => {
+      if (controlsDisabled) return
+      activePointerRef.current = event.pointerId
+      try {
+        event.currentTarget.setPointerCapture(event.pointerId)
+      } catch {
+        // Ignore if the browser does not support pointer capture on range inputs
+      }
+    },
+    [controlsDisabled]
+  )
+
+  const releasePointer = useCallback(
+    (event?: React.PointerEvent<HTMLInputElement>) => {
+      const pointerId = event?.pointerId
+      if (typeof pointerId === 'number' && activePointerRef.current !== pointerId) return
+      const target = event?.currentTarget
+      if (typeof pointerId === 'number' && target?.hasPointerCapture?.(pointerId)) {
+        target.releasePointerCapture(pointerId)
+      }
+      activePointerRef.current = null
+      clearCommitTimeout()
+      commitLiveState(true)
+    },
+    [clearCommitTimeout, commitLiveState]
+  )
+
+  const handleSliderBlur = useCallback(() => {
+    if (activePointerRef.current !== null) return
+    clearCommitTimeout()
+    commitLiveState(true)
+  }, [clearCommitTimeout, commitLiveState])
+
+  const adjusting = Boolean(liveState && quickFixState)
+
+  useEffect(() => {
+    onAdjustingChange?.(adjusting)
+  }, [adjusting, onAdjustingChange])
+
+  useEffect(() => {
+    if (!onLiveStateChange) return
+    if (!quickFixState || !liveState) {
+      onLiveStateChange(null)
+      return
+    }
+    if (areQuickFixStatesEqual(liveState, quickFixState)) {
+      onLiveStateChange(null)
+    } else {
+      onLiveStateChange(liveState)
+    }
+  }, [liveState, onLiveStateChange, quickFixState])
+
+  useEffect(() => {
+    if (!quickFixState) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Drop any in-progress slider draft when the selection changes.
+      setLiveState(null)
+      return
+    }
+    const draft = liveStateRef.current
+    if (draft && areQuickFixStatesEqual(draft, quickFixState)) {
+      return
+    }
+    if (activePointerRef.current !== null) return
+    setLiveState(null)
+  }, [quickFixState])
+
+  useEffect(() => {
+    if (!controlsDisabled) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Controls are disabled, so discard any stale draft values.
+    setLiveState(null)
+    onLiveStateChange?.(null)
+  }, [controlsDisabled, onLiveStateChange])
+
+  const sliderEvents = {
+    onPointerDown: handleSliderPointerDown,
+    onPointerUp: (event: React.PointerEvent<HTMLInputElement>) => releasePointer(event),
+    onPointerCancel: (event: React.PointerEvent<HTMLInputElement>) => releasePointer(event),
+    onBlur: handleSliderBlur,
+  }
+
+  useEffect(
+    () => () => {
+      onLiveStateChange?.(null)
+      onAdjustingChange?.(false)
+    },
+    [onAdjustingChange, onLiveStateChange]
+  )
 
   return (
     <div className="flex flex-1 min-h-0 flex-col gap-3 overflow-y-auto overflow-x-hidden pr-4">
@@ -221,63 +398,67 @@ export function QuickFixPanel({
         <div className="space-y-4">
           <SliderControl
             label="Exposure"
-            value={quickFix.exposure.exposure}
+            value={displayedState.exposure.exposure}
             min={-2}
             max={2}
             step={0.05}
             disabled={controlsDisabled}
             onChange={(value) =>
-              handleQuickFixValueChange((prev) => ({
+              updateLiveState((prev) => ({
                 ...prev,
                 exposure: { ...prev.exposure, exposure: value },
               }))
             }
             format={(value) => `${formatSigned(value, 2)} EV`}
+            {...sliderEvents}
           />
           <SliderControl
             label="Contrast"
-            value={quickFix.exposure.contrast}
+            value={displayedState.exposure.contrast}
             min={0.2}
             max={2.5}
             step={0.05}
             disabled={controlsDisabled}
             onChange={(value) =>
-              handleQuickFixValueChange((prev) => ({
+              updateLiveState((prev) => ({
                 ...prev,
                 exposure: { ...prev.exposure, contrast: value },
               }))
             }
             format={(value) => value.toFixed(2)}
+            {...sliderEvents}
           />
           <SliderControl
             label="Highlights"
-            value={quickFix.exposure.highlights}
+            value={displayedState.exposure.highlights}
             min={-1}
             max={1}
             step={0.05}
             disabled={controlsDisabled}
             onChange={(value) =>
-              handleQuickFixValueChange((prev) => ({
+              updateLiveState((prev) => ({
                 ...prev,
                 exposure: { ...prev.exposure, highlights: value },
               }))
             }
             format={(value) => formatSigned(value)}
+            {...sliderEvents}
           />
           <SliderControl
             label="Shadows"
-            value={quickFix.exposure.shadows}
+            value={displayedState.exposure.shadows}
             min={-1}
             max={1}
             step={0.05}
             disabled={controlsDisabled}
             onChange={(value) =>
-              handleQuickFixValueChange((prev) => ({
+              updateLiveState((prev) => ({
                 ...prev,
                 exposure: { ...prev.exposure, shadows: value },
               }))
             }
             format={(value) => formatSigned(value)}
+            {...sliderEvents}
           />
           <div className="flex justify-end">
             <button
@@ -296,33 +477,35 @@ export function QuickFixPanel({
         <div className="space-y-4">
           <SliderControl
             label="Temperature"
-            value={quickFix.color.temperature}
+            value={displayedState.color.temperature}
             min={-1}
             max={1}
             step={0.05}
             disabled={controlsDisabled}
             onChange={(value) =>
-              handleQuickFixValueChange((prev) => ({
+              updateLiveState((prev) => ({
                 ...prev,
                 color: { ...prev.color, temperature: value },
               }))
             }
             format={(value) => formatSigned(value)}
+            {...sliderEvents}
           />
           <SliderControl
             label="Tint"
-            value={quickFix.color.tint}
+            value={displayedState.color.tint}
             min={-1}
             max={1}
             step={0.05}
             disabled={controlsDisabled}
             onChange={(value) =>
-              handleQuickFixValueChange((prev) => ({
+              updateLiveState((prev) => ({
                 ...prev,
                 color: { ...prev.color, tint: value },
               }))
             }
             format={(value) => formatSigned(value)}
+            {...sliderEvents}
           />
           <div className="flex justify-end">
             <button
@@ -341,18 +524,19 @@ export function QuickFixPanel({
         <div className="space-y-4">
           <SliderControl
             label="Amount"
-            value={quickFix.grain.amount}
+            value={displayedState.grain.amount}
             min={0}
             max={1}
             step={0.05}
             disabled={controlsDisabled}
             onChange={(value) =>
-              handleQuickFixValueChange((prev) => ({
+              updateLiveState((prev) => ({
                 ...prev,
                 grain: { ...prev.grain, amount: value },
               }))
             }
             format={(value) => `${Math.round(value * 100)}%`}
+            {...sliderEvents}
           />
           <div className="space-y-2">
             <span className="text-xs font-medium text-[var(--text,#1F1E1B)]">Size</span>
@@ -401,33 +585,35 @@ export function QuickFixPanel({
         <div className="space-y-4">
           <SliderControl
             label="Vertical"
-            value={quickFix.geometry.vertical}
+            value={displayedState.geometry.vertical}
             min={-1}
             max={1}
             step={0.05}
             disabled={controlsDisabled}
             onChange={(value) =>
-              handleQuickFixValueChange((prev) => ({
+              updateLiveState((prev) => ({
                 ...prev,
                 geometry: { ...prev.geometry, vertical: value },
               }))
             }
             format={(value) => formatSigned(value)}
+            {...sliderEvents}
           />
           <SliderControl
             label="Horizontal"
-            value={quickFix.geometry.horizontal}
+            value={displayedState.geometry.horizontal}
             min={-1}
             max={1}
             step={0.05}
             disabled={controlsDisabled}
             onChange={(value) =>
-              handleQuickFixValueChange((prev) => ({
+              updateLiveState((prev) => ({
                 ...prev,
                 geometry: { ...prev.geometry, horizontal: value },
               }))
             }
             format={(value) => formatSigned(value)}
+            {...sliderEvents}
           />
           <div className="flex justify-end">
             <button
@@ -462,3 +648,5 @@ export function QuickFixPanel({
     </div>
   )
 }
+
+export const QuickFixPanel = memo(QuickFixPanelComponent)

@@ -64,6 +64,7 @@ type QuickFixControlsProps = {
   previewBusy: boolean
   saving: boolean
   errorMessage: string | null
+  onAdjustingChange?: (adjusting: boolean) => void
 }
 
 export function InspectorPanel({
@@ -149,6 +150,9 @@ export function InspectorPanel({
   const [keyDataOpen, setKeyDataOpen] = useState(true)
   const [projectsOpen, setProjectsOpen] = useState(true)
   const [metadataOpen, setMetadataOpen] = useState(true)
+  const [liveQuickFixState, setLiveQuickFixState] = useState<QuickFixState | null>(null)
+  const liveQuickFixDraftRef = useRef<QuickFixState | null>(null)
+  const lastPreviewBusyRef = useRef(quickFixControls?.previewBusy ?? false)
   const pendingTargetRef = useRef<RightPanelTarget | null>(null)
   const generalFields = keyMetadataSections?.general ?? []
   const captureFields = keyMetadataSections?.capture ?? []
@@ -170,6 +174,7 @@ export function InspectorPanel({
   const panelContentClass = isMobilePanel
     ? 'flex flex-1 min-h-0 flex-col gap-3 pb-4'
     : 'flex flex-1 min-h-0 flex-col gap-3 pr-4'
+  const quickFixPreviewBusy = quickFixControls?.previewBusy ?? false
   const mergedInspectorFields = useMemo(() => {
     const map = new Map<string, string>()
     generalFields.forEach((field) => {
@@ -200,6 +205,40 @@ export function InspectorPanel({
     else if (target === 'projects') setProjectsOpen(true)
     else setMetadataOpen(true)
   }, [])
+
+  useEffect(() => {
+    if (!hasSelection) {
+      liveQuickFixDraftRef.current = null
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Reset optimistic preview immediately when there is no selection.
+      setLiveQuickFixState(null)
+    }
+  }, [hasSelection])
+
+  const handleLiveQuickFixState = useCallback(
+    (state: QuickFixState | null) => {
+      if (state) {
+        liveQuickFixDraftRef.current = state
+        setLiveQuickFixState(state)
+        return
+      }
+      if (quickFixPreviewBusy) {
+        setLiveQuickFixState(liveQuickFixDraftRef.current)
+      } else {
+        liveQuickFixDraftRef.current = null
+        setLiveQuickFixState(null)
+      }
+    },
+    [quickFixPreviewBusy]
+  )
+
+  useEffect(() => {
+    if (lastPreviewBusyRef.current && !quickFixPreviewBusy) {
+      liveQuickFixDraftRef.current = null
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Clear optimistic layer once server preview catches up.
+      setLiveQuickFixState(null)
+    }
+    lastPreviewBusyRef.current = quickFixPreviewBusy
+  }, [quickFixPreviewBusy])
 
   const scrollToTarget = useCallback((target: RightPanelTarget) => {
     const refMap: Record<RightPanelTarget, React.RefObject<HTMLDivElement | null>> = {
@@ -312,6 +351,8 @@ export function InspectorPanel({
               onPanPreview={onPreviewPan}
               open={previewOpen}
               onToggle={() => setPreviewOpen((open) => !open)}
+              optimisticQuickFix={liveQuickFixState}
+              committedQuickFix={quickFixControls?.quickFixState ?? null}
             />
             {activeTab === 'details' ? (
               <div className="flex flex-1 min-h-0 flex-col gap-3 overflow-y-auto overflow-x-hidden pr-1">
@@ -411,6 +452,8 @@ export function InspectorPanel({
                 previewBusy={quickFixControls?.previewBusy ?? false}
                 saving={quickFixControls?.saving ?? false}
                 errorMessage={quickFixControls?.errorMessage ?? null}
+                onLiveStateChange={handleLiveQuickFixState}
+                onAdjustingChange={quickFixControls?.onAdjustingChange}
               />
             )}
           </div>
@@ -449,6 +492,88 @@ type InspectorPreviewCardProps = {
   onPanPreview?: (position: { x: number; y: number }) => void
   open: boolean
   onToggle: () => void
+  optimisticQuickFix?: QuickFixState | null
+  committedQuickFix?: QuickFixState | null
+}
+
+type PreviewEffectStyle = {
+  filter?: string
+  overlayColor?: string
+  overlayOpacity?: number
+  transform?: string
+}
+
+const clampPreviewValue = (value: number, min: number, max: number) =>
+  Math.min(max, Math.max(min, value))
+
+function buildQuickFixPreviewEffect(
+  committed: QuickFixState | null | undefined,
+  optimistic: QuickFixState | null | undefined
+): PreviewEffectStyle | null {
+  if (!committed || !optimistic) return null
+  const exposureDelta = optimistic.exposure.exposure - committed.exposure.exposure
+  const contrastDelta = optimistic.exposure.contrast - committed.exposure.contrast
+  const highlightsDelta = optimistic.exposure.highlights - committed.exposure.highlights
+  const shadowsDelta = optimistic.exposure.shadows - committed.exposure.shadows
+  const temperatureDelta = optimistic.color.temperature - committed.color.temperature
+  const tintDelta = optimistic.color.tint - committed.color.tint
+  const verticalDelta = optimistic.geometry.vertical - committed.geometry.vertical
+  const horizontalDelta = optimistic.geometry.horizontal - committed.geometry.horizontal
+  const filters: string[] = []
+  let hasEffect = false
+
+  const brightness = clampPreviewValue(1 + exposureDelta * 0.35 + highlightsDelta * 0.2 - shadowsDelta * 0.2, 0.2, 3)
+  if (Math.abs(brightness - 1) > 0.01) {
+    filters.push(`brightness(${brightness.toFixed(3)})`)
+    hasEffect = true
+  }
+
+  if (Math.abs(contrastDelta) > 0.01) {
+    const contrast = clampPreviewValue(1 + contrastDelta * 0.6, 0.2, 3)
+    filters.push(`contrast(${contrast.toFixed(3)})`)
+    hasEffect = true
+  }
+
+  if (Math.abs(tintDelta) > 0.01) {
+    filters.push(`hue-rotate(${(tintDelta * 30).toFixed(2)}deg)`)
+    hasEffect = true
+  }
+
+  if (Math.abs(temperatureDelta) > 0.01) {
+    const saturation = clampPreviewValue(1 + temperatureDelta * 0.35, 0.2, 2.5)
+    filters.push(`saturate(${saturation.toFixed(3)})`)
+    hasEffect = true
+  }
+
+  const colorIntensity = Math.max(Math.abs(temperatureDelta), Math.abs(tintDelta))
+  let overlayColor: string | undefined
+  let overlayOpacity: number | undefined
+  if (colorIntensity > 0.01) {
+    const warm = clampPreviewValue(temperatureDelta, -1, 1)
+    const tint = clampPreviewValue(tintDelta, -1, 1)
+    const red = clampPreviewValue(Math.round(200 + warm * 40 + tint * 30), 120, 255)
+    const green = clampPreviewValue(Math.round(200 - tint * 35 - warm * 30), 120, 255)
+    const blue = clampPreviewValue(Math.round(200 - warm * 40 + tint * 30), 120, 255)
+    overlayColor = `rgb(${red}, ${green}, ${blue})`
+    overlayOpacity = clampPreviewValue(colorIntensity * 0.45, 0, 0.35)
+    hasEffect = true
+  }
+
+  let transform: string | undefined
+  if (Math.abs(verticalDelta) > 0.01 || Math.abs(horizontalDelta) > 0.01) {
+    const tiltX = clampPreviewValue(verticalDelta * -5, -8, 8)
+    const tiltY = clampPreviewValue(horizontalDelta * 5, -8, 8)
+    transform = `perspective(1200px) rotateX(${tiltX.toFixed(2)}deg) rotateY(${tiltY.toFixed(2)}deg)`
+    hasEffect = true
+  }
+
+  if (!hasEffect) return null
+  return {
+    filter: filters.join(' '),
+    overlayColor,
+    overlayOpacity,
+    transform,
+  }
 }
 
 export function InspectorPreviewCard({
@@ -464,6 +589,8 @@ export function InspectorPreviewCard({
   onPanPreview,
   open,
   onToggle,
+  optimisticQuickFix,
+  committedQuickFix,
 }: InspectorPreviewCardProps) {
   const contentId = useId()
   const imageSrc = preview?.src ?? preview?.thumbSrc ?? null
@@ -475,6 +602,19 @@ export function InspectorPreviewCard({
   const previewMessage = hasSelection
     ? 'Preview unavailable for this asset.'
     : 'Select a photo to see it here.'
+
+  const optimisticEffect = useMemo(
+    () => buildQuickFixPreviewEffect(committedQuickFix, optimisticQuickFix),
+    [committedQuickFix, optimisticQuickFix]
+  )
+  const previewEffectStyle =
+    optimisticEffect && (optimisticEffect.filter || optimisticEffect.transform)
+      ? {
+          filter: optimisticEffect.filter,
+          transform: optimisticEffect.transform,
+          transition: 'filter 120ms ease, transform 160ms ease',
+        }
+      : undefined
 
   const handleWheel = useCallback(
     (event: React.WheelEvent<HTMLDivElement>) => {
@@ -592,19 +732,27 @@ export function InspectorPreviewCard({
           >
             <div className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-[12px] border border-[var(--border,#EDE1C6)] bg-[var(--placeholder-bg-beige,#F3EBDD)]">
               {preview ? (
-                imageSrc ? (
-                  <img
-                    src={imageSrc}
-                    alt={preview.alt}
-                    className="max-h-full max-w-full object-contain"
-                  />
-                ) : (
-                  <RawPlaceholder
-                    ratio={preview.placeholderRatio}
-                    title={preview.alt}
-                    fit="contain"
-                  />
-                )
+                <div
+                  className="relative flex h-full w-full items-center justify-center"
+                  style={previewEffectStyle}
+                >
+                  {imageSrc ? (
+                    <img src={imageSrc} alt={preview.alt} className="max-h-full max-w-full object-contain" />
+                  ) : (
+                    <RawPlaceholder ratio={preview.placeholderRatio} title={preview.alt} fit="contain" />
+                  )}
+                  {optimisticEffect?.overlayColor ? (
+                    <span
+                      className="pointer-events-none absolute inset-0 rounded-[12px]"
+                      style={{
+                        backgroundColor: optimisticEffect.overlayColor,
+                        opacity: optimisticEffect.overlayOpacity ?? 0,
+                        mixBlendMode: 'soft-light',
+                        transition: 'opacity 160ms ease',
+                      }}
+                    />
+                  ) : null}
+                </div>
               ) : (
                 <p className="px-4 text-center text-sm text-[var(--text-muted,#6B645B)]">
                   {previewMessage}

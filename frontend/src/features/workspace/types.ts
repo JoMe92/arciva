@@ -177,4 +177,5 @@ export type CropSettings = {
   angle: number
   aspectRatioId: CropAspectRatioId
   orientation: CropOrientation
+  applied: boolean
 }

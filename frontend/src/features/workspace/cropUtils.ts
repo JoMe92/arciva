@@ -36,6 +36,7 @@ export const DEFAULT_CROP_SETTINGS: CropSettings = {
   angle: 0,
   aspectRatioId: 'original',
   orientation: 'horizontal',
+  applied: false,
 }
 
 export function clamp(value: number, min: number, max: number): number {
@@ -112,6 +113,7 @@ export function createDefaultCropSettings(): CropSettings {
     angle: DEFAULT_CROP_SETTINGS.angle,
     aspectRatioId: DEFAULT_CROP_SETTINGS.aspectRatioId,
     orientation: DEFAULT_CROP_SETTINGS.orientation,
+    applied: DEFAULT_CROP_SETTINGS.applied,
   }
 }
 
@@ -122,4 +124,30 @@ export function applyOrientationToRatio(
   if (!ratio || orientation === 'horizontal') return ratio
   if (ratio === 0) return null
   return 1 / ratio
+}
+
+export function inferAspectRatioSelection(
+  value: number | null,
+  originalRatio: number | null
+): { id: CropAspectRatioId; orientation: CropOrientation } {
+  if (!value || value <= 0) {
+    return { id: 'free', orientation: 'horizontal' }
+  }
+  let orientation: CropOrientation = 'horizontal'
+  let target = value
+  if (value < 1) {
+    orientation = 'vertical'
+    target = 1 / value
+  }
+  const tolerance = 0.01
+  if (originalRatio && Math.abs(target - originalRatio) <= tolerance) {
+    return { id: 'original', orientation }
+  }
+  for (const option of CROP_RATIO_OPTIONS) {
+    if (!option.ratio) continue
+    if (Math.abs(target - option.ratio) <= tolerance) {
+      return { id: option.id, orientation }
+    }
+  }
+  return { id: 'free', orientation }
 }

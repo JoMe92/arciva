@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc, func
 from uuid import UUID
@@ -16,6 +16,9 @@ from ..services.annotations import write_annotations_for_assets
 from ..services.metadata_states import ensure_state_for_link
 from ..services.links import link_asset_to_project
 from ..services import assets as assets_service
+from ..services import adjustments as adjustments_service
+from io import BytesIO
+from PIL import Image
 from ..utils.projects import ensure_project_access
 
 router = APIRouter(prefix="/v1", tags=["assets"])
@@ -701,3 +704,141 @@ async def update_preview_flag(
         metadata = await ensure_state_for_link(db, link)
     storage = PosixStorage.from_env()
     return assets_service.serialize_asset_item(asset, link, pair, storage, metadata)
+
+
+@router.post("/assets/{asset_id}/quick-fix/preview")
+async def quick_fix_preview(
+    asset_id: UUID,
+    body: schemas.QuickFixAdjustments,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    # For preview, we want speed. Use the "preview_raw" or "thumb_256" if available.
+    # Ideally "preview_raw" which is usually a decent sized JPEG.
+
+    await ensure_asset_metadata_column(db)
+    asset = (
+        await db.execute(
+            select(models.Asset).where(
+                models.Asset.id == asset_id,
+                models.Asset.user_id == current_user.id,
+            )
+        )
+    ).scalar_one_or_none()
+
+    if not asset or not asset.sha256:
+        raise HTTPException(404, "asset not ready")
+
+    storage = PosixStorage.from_env()
+
+    # Try to find a source image to work on
+    # 1. Preview (best balance)
+    # 2. Original (if JPEG and small enough? No, might be huge RAW)
+    # 3. Thumbnail (too small?)
+
+    path = storage.find_derivative(asset.sha256, "preview_raw", "jpg")
+
+    def _is_jpeg(asset_obj: models.Asset) -> bool:
+        fmt = (asset_obj.format or "").upper()
+        mime = (asset_obj.mime or "").lower()
+        return fmt in {"JPEG", "JPG"} or mime in {"image/jpeg", "image/jpg"}
+
+    if (path is None or not path.exists()) and asset.storage_uri and _is_jpeg(asset):
+        try:
+            original_path = storage.path_from_key(asset.storage_uri)
+        except ValueError:
+            original_path = None
+        if original_path and original_path.exists():
+            path = original_path
+
+    if path is None or not path.exists():
+        fallback = storage.find_derivative(asset.sha256, "thumb_256", "jpg")
+        if fallback and fallback.exists():
+            path = fallback
+
+    if not path or not path.exists():
+        raise HTTPException(404, "source image for preview not found")
+
+    try:
+        with Image.open(path) as img:
+            # Apply adjustments
+            result_img = adjustments_service.apply_adjustments(img, body)
+
+            # Save to buffer
+            buf = BytesIO()
+            result_img.save(buf, format="JPEG", quality=80)
+            buf.seek(0)
+            return Response(content=buf.getvalue(), media_type="image/jpeg")
+    except Exception as e:
+        logger.exception("quick_fix_preview failed")
+        raise HTTPException(500, f"preview generation failed: {e}")
+
+
+@router.patch(
+    "/projects/{project_id}/assets/{asset_id}/quick-fix",
+    response_model=schemas.AssetDetail,
+)
+async def save_quick_fix(
+    project_id: UUID,
+    asset_id: UUID,
+    body: schemas.QuickFixAdjustments,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    await ensure_project_access(db, project_id=project_id, user_id=current_user.id)
+    await ensure_asset_metadata_column(db)
+
+    # Find the link
+    link = (
+        await db.execute(
+            select(models.ProjectAsset).where(
+                models.ProjectAsset.project_id == project_id,
+                models.ProjectAsset.asset_id == asset_id,
+                models.ProjectAsset.user_id == current_user.id,
+            )
+        )
+    ).scalar_one_or_none()
+
+    if not link:
+        raise HTTPException(404, "asset not linked to project")
+
+    # Get or create metadata state
+    metadata = (
+        await db.execute(
+            select(models.MetadataState).where(models.MetadataState.link_id == link.id)
+        )
+    ).scalar_one_or_none()
+
+    if metadata is None:
+        metadata = await ensure_state_for_link(db, link)
+
+    try:
+        current_edits = dict(metadata.edits or {})
+        quick_fix_payload = body.model_dump(exclude_none=True)
+        if quick_fix_payload:
+            current_edits["quick_fix"] = quick_fix_payload
+        else:
+            current_edits.pop("quick_fix", None)
+
+        metadata.edits = current_edits or None
+        await db.commit()
+        await db.refresh(metadata)
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception(
+            "save_quick_fix failed: project=%s asset=%s user=%s",
+            project_id,
+            asset_id,
+            current_user.id,
+        )
+        await db.rollback()
+        raise HTTPException(500, "failed to save quick fix adjustments")
+
+    asset = await db.get(models.Asset, asset_id)
+    if not asset or asset.user_id != current_user.id:
+        raise HTTPException(404, "asset not found")
+    storage = PosixStorage.from_env()
+    return await assets_service.asset_detail(
+        asset, db, storage, link=link, metadata=metadata
+    )

@@ -2,7 +2,7 @@ name: Docker Build Check
 
 on:
   pull_request:
-    branches: [ develop ]
+    branches: [ main ]
   push:
     branches: [ main, develop ]
 

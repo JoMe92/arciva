@@ -105,6 +105,7 @@ type QuickFixPanelProps = {
   errorMessage: string | null
   onLiveStateChange?: (state: QuickFixState | null) => void
   onAdjustingChange?: (isAdjusting: boolean) => void
+  viewMode?: 'grid' | 'detail'
 }
 
 const formatSigned = (value: number, digits = 2) => `${value >= 0 ? '+' : ''}${value.toFixed(digits)}`
@@ -127,6 +128,7 @@ function QuickFixPanelComponent({
   errorMessage,
   onLiveStateChange,
   onAdjustingChange,
+  viewMode = 'grid',
 }: QuickFixPanelProps) {
   const quickFix = useMemo(() => quickFixState ?? createDefaultQuickFixState(), [quickFixState])
   const [liveState, setLiveState] = useState<QuickFixState | null>(null)
@@ -139,7 +141,8 @@ function QuickFixPanelComponent({
   const orientation = cropSettings?.orientation ?? 'horizontal'
   const cropApplied = cropSettings?.applied ?? false
   const controlsDisabled = !hasSelection || !quickFixState
-  const cropControlsDisabled = controlsDisabled || !cropSettings || cropApplied
+  const isGridMode = viewMode === 'grid'
+  const cropControlsDisabled = controlsDisabled || !cropSettings || cropApplied || isGridMode
   const disableMessage = !hasSelection
     ? 'Select a photo to start adjusting it.'
     : null
@@ -334,8 +337,8 @@ function QuickFixPanelComponent({
                     aria-pressed={selected}
                     onClick={() => onAspectRatioChange(id)}
                     className={`rounded border px-2 py-1.5 text-xs font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)] ${selected
-                        ? 'border-[var(--text,#1F1E1B)] bg-[var(--surface,#FFFFFF)] text-[var(--text,#1F1E1B)]'
-                        : 'border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] text-[var(--text,#1F1E1B)] hover:border-[var(--text-muted,#6B645B)]'
+                      ? 'border-[var(--text,#1F1E1B)] bg-[var(--surface,#FFFFFF)] text-[var(--text,#1F1E1B)]'
+                      : 'border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] text-[var(--text,#1F1E1B)] hover:border-[var(--text-muted,#6B645B)]'
                       } ${cropControlsDisabled ? 'opacity-60' : ''}`}
                   >
                     {label}
@@ -358,8 +361,8 @@ function QuickFixPanelComponent({
                     aria-pressed={selected}
                     onClick={() => onOrientationChange(opt)}
                     className={`flex-1 rounded-md py-1 text-xs font-medium transition ${selected
-                        ? 'bg-[var(--surface,#FFFFFF)] text-[var(--text,#1F1E1B)] shadow-sm'
-                        : 'text-[var(--text-muted,#6B645B)] hover:text-[var(--text,#1F1E1B)]'
+                      ? 'bg-[var(--surface,#FFFFFF)] text-[var(--text,#1F1E1B)] shadow-sm'
+                      : 'text-[var(--text-muted,#6B645B)] hover:text-[var(--text,#1F1E1B)]'
                       } ${cropControlsDisabled ? 'opacity-60' : ''}`}
                   >
                     {label}
@@ -398,6 +401,10 @@ function QuickFixPanelComponent({
             {cropApplied ? (
               <p className="text-xs text-[var(--text-muted,#6B645B)]">
                 Crop applied. Choose Re-Crop to adjust the original frame again.
+              </p>
+            ) : isGridMode ? (
+              <p className="text-xs text-[var(--text-muted,#6B645B)]">
+                Switch to Detail view to use crop tools.
               </p>
             ) : null}
             <button
@@ -575,8 +582,8 @@ function QuickFixPanelComponent({
                       }))
                     }
                     className={`rounded border px-2 py-1.5 text-xs font-medium ${selected
-                        ? 'border-[var(--text,#1F1E1B)] bg-[var(--surface,#FFFFFF)] text-[var(--text,#1F1E1B)]'
-                        : 'border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] text-[var(--text,#1F1E1B)] hover:border-[var(--text-muted,#6B645B)]'
+                      ? 'border-[var(--text,#1F1E1B)] bg-[var(--surface,#FFFFFF)] text-[var(--text,#1F1E1B)]'
+                      : 'border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] text-[var(--text,#1F1E1B)] hover:border-[var(--text-muted,#6B645B)]'
                       } ${controlsDisabled ? 'opacity-60' : ''}`}
                   >
                     {label}

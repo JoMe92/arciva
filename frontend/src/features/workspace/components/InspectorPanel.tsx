@@ -99,6 +99,7 @@ export function InspectorPanel({
   quickFixControls,
   activeTab: activeTabProp,
   onActiveTabChange,
+  viewMode = 'grid',
 }: {
   collapsed: boolean
   onCollapse: () => void
@@ -131,6 +132,7 @@ export function InspectorPanel({
   quickFixControls?: QuickFixControlsProps | null
   activeTab?: InspectorTab
   onActiveTabChange?: (tab: InspectorTab) => void
+  viewMode?: 'grid' | 'detail'
 }) {
   const [internalActiveTab, setInternalActiveTab] = useState<InspectorTab>('details')
   const activeTab = activeTabProp ?? internalActiveTab
@@ -454,6 +456,7 @@ export function InspectorPanel({
                 errorMessage={quickFixControls?.errorMessage ?? null}
                 onLiveStateChange={handleLiveQuickFixState}
                 onAdjustingChange={quickFixControls?.onAdjustingChange}
+                viewMode={viewMode}
               />
             )}
           </div>
@@ -610,10 +613,10 @@ export function InspectorPreviewCard({
   const previewEffectStyle =
     optimisticEffect && (optimisticEffect.filter || optimisticEffect.transform)
       ? {
-          filter: optimisticEffect.filter,
-          transform: optimisticEffect.transform,
-          transition: 'filter 120ms ease, transform 160ms ease',
-        }
+        filter: optimisticEffect.filter,
+        transform: optimisticEffect.transform,
+        transition: 'filter 120ms ease, transform 160ms ease',
+      }
       : undefined
 
   const handleWheel = useCallback(

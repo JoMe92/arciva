@@ -30,6 +30,7 @@ export type Photo = {
   displayType?: string
   isStacked?: boolean
   metadataSourceProjectId?: string | null
+  hasEdits?: boolean
 }
 
 export type DateTreeDayNode = {

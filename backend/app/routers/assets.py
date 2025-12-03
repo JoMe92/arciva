@@ -842,3 +842,94 @@ async def save_quick_fix(
     return await assets_service.asset_detail(
         asset, db, storage, link=link, metadata=metadata
     )
+
+
+@router.post(
+    "/projects/{project_id}/assets/quick-fix:apply",
+    response_model=schemas.AssetInteractionUpdateOut,
+)
+async def apply_quick_fix_batch(
+    project_id: UUID,
+    body: schemas.QuickFixBatchApply,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if not body.asset_ids:
+        raise HTTPException(400, "asset_ids required")
+
+    await ensure_project_access(db, project_id=project_id, user_id=current_user.id)
+    await ensure_asset_metadata_column(db)
+
+    # Fetch assets and links
+    base_ids = list(dict.fromkeys(body.asset_ids))
+    query = (
+        select(
+            models.Asset,
+            models.ProjectAsset,
+            models.MetadataState,
+        )
+        .join(
+            models.ProjectAsset,
+            models.ProjectAsset.asset_id == models.Asset.id,
+        )
+        .outerjoin(
+            models.MetadataState,
+            models.MetadataState.link_id == models.ProjectAsset.id,
+        )
+        .where(
+            models.ProjectAsset.project_id == project_id,
+            models.ProjectAsset.asset_id.in_(base_ids),
+            models.ProjectAsset.user_id == current_user.id,
+        )
+    )
+    rows = (await db.execute(query)).all()
+
+    # Map for easy access
+    assets_map = {asset.id: (asset, link, metadata) for asset, link, metadata in rows}
+
+    touched_pairs: list[tuple[models.Asset, models.MetadataState]] = []
+
+    for asset_id in base_ids:
+        if asset_id not in assets_map:
+            continue
+
+        asset, link, metadata = assets_map[asset_id]
+        state = metadata or await ensure_state_for_link(db, link)
+
+        current_edits = dict(state.edits or {})
+        quick_fix = current_edits.get("quick_fix", {})
+
+        # Apply auto adjustments
+        # Note: In a real implementation, this would analyze the image.
+        # For now, we apply safe defaults/heuristics.
+
+        if body.auto_exposure:
+            # Heuristic: Slight contrast boost and brightness
+            exposure = quick_fix.get("exposure", {})
+            exposure["exposure"] = 0.2
+            exposure["contrast"] = 1.1
+            quick_fix["exposure"] = exposure
+
+        if body.auto_white_balance:
+            # Heuristic: Warm it up slightly
+            color = quick_fix.get("color", {})
+            color["temperature"] = 0.1
+            quick_fix["color"] = color
+
+        if body.auto_crop:
+            # Heuristic: Reset rotation, maybe set 1:1 if we were bold
+            crop = quick_fix.get("crop", {})
+            crop["rotation"] = 0.0
+            quick_fix["crop"] = crop
+
+        current_edits["quick_fix"] = quick_fix
+        state.edits = current_edits
+        touched_pairs.append((asset, state))
+
+    await db.commit()
+
+    # Return updated items
+    items = await assets_service.load_asset_items(
+        db, project_id, base_ids, user_id=current_user.id
+    )
+    return schemas.AssetInteractionUpdateOut(items=items)

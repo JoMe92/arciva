@@ -470,3 +470,10 @@ class QuickFixAdjustments(BaseModel):
     color: Optional[ColorSettings] = None
     grain: Optional[GrainSettings] = None
     geometry: Optional[GeometrySettings] = None
+
+
+class QuickFixBatchApply(BaseModel):
+    asset_ids: List[UUID] = Field(..., min_length=1)
+    auto_exposure: bool = False
+    auto_white_balance: bool = False
+    auto_crop: bool = False

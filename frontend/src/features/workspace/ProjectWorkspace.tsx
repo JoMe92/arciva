@@ -82,6 +82,7 @@ import {
   resetQuickFixGroup,
   type QuickFixGroupKey,
 } from './quickFixState'
+import { useHistory } from '../../shared/hooks/useHistory'
 
 const COLOR_SHORTCUT_MAP = {
   '6': 'Red',
@@ -630,6 +631,7 @@ export default function ProjectWorkspace() {
   const handleInspectorTabChange = useCallback((tab: InspectorTab) => {
     setActiveInspectorTab(tab)
   }, [])
+  const history = useHistory<void>()
   const [isMobileLayout, setIsMobileLayout] = useState(false)
   const [activeMobilePanel, setActiveMobilePanel] = useState<MobileWorkspacePanel>('photos')
   const mobileViewInitializedRef = useRef(false)
@@ -809,19 +811,55 @@ export default function ProjectWorkspace() {
     async (action: QuickFixAction) => {
       if (!id || selectedPhotoIds.size === 0) return
       const assetIds = Array.from(selectedPhotoIds)
-      try {
-        await applyQuickFixBatch(id, {
-          assetIds,
-          autoExposure: action === 'auto_exposure' || action === 'all',
-          autoWhiteBalance: action === 'auto_white_balance' || action === 'all',
-          autoCrop: action === 'auto_crop' || action === 'all',
-        })
-        await refreshAssets()
-      } catch (err) {
-        console.error('Failed to apply quick fix batch', err)
+
+      // Capture state for undo
+      const undoStateMap: Record<string, QuickFixState> = {}
+      assetIds.forEach((assetId) => {
+        undoStateMap[assetId] = quickFixStateByPhoto[assetId] ?? createDefaultQuickFixState()
+      })
+
+      const performAction = async () => {
+        try {
+          await applyQuickFixBatch(id, {
+            assetIds,
+            autoExposure: action === 'auto_exposure' || action === 'all',
+            autoWhiteBalance: action === 'auto_white_balance' || action === 'all',
+            autoCrop: action === 'auto_crop' || action === 'all',
+          })
+          await refreshAssets()
+          queryClient.invalidateQueries({ queryKey: ['asset-detail'] })
+        } catch (err) {
+          console.error('Failed to apply quick fix batch', err)
+        }
       }
+
+      const restoreState = async () => {
+        try {
+          // Restore previous states
+          // We can use applyQuickFixBatch if we had a way to pass state, but we don't.
+          // We have to save individually or use a bulk update if available.
+          // For now, iterate and save.
+          for (const assetId of assetIds) {
+            const state = undoStateMap[assetId]
+            const payload = quickFixStateToPayload(state) ?? {}
+            await saveQuickFixAdjustments(id, assetId, payload)
+          }
+          await refreshAssets()
+          queryClient.invalidateQueries({ queryKey: ['asset-detail'] })
+        } catch (err) {
+          console.error('Failed to undo quick fix batch', err)
+        }
+      }
+
+      history.push({
+        description: `Auto Quick Fix: ${action}`,
+        undo: restoreState,
+        redo: performAction,
+      })
+
+      await performAction()
     },
-    [id, selectedPhotoIds, refreshAssets]
+    [id, selectedPhotoIds, refreshAssets, quickFixStateByPhoto, queryClient, history]
   )
 
   const interactionMutation = useMutation({
@@ -1418,8 +1456,25 @@ export default function ProjectWorkspace() {
         applyChanges()
         return
       }
+      if ((event.metaKey || event.ctrlKey) && normalizedKey === 'z') {
+        event.preventDefault()
+        if (event.shiftKey) {
+          history.redo()
+        } else {
+          history.undo()
+        }
+        return
+      }
       if (isTextInputTarget(event.target)) return
       if (event.metaKey || event.ctrlKey || event.altKey) return
+      if (normalizedKey === 'q') {
+        if (view === 'detail') {
+          setActiveInspectorTab('quick-fix')
+        } else if (view === 'grid' && event.shiftKey) {
+          handleQuickFix('all')
+        }
+        return
+      }
       if (normalizedKey === 'g') {
         setView('grid')
         return
@@ -2072,25 +2127,48 @@ export default function ProjectWorkspace() {
           ? Array.from(selectedPhotoIds)
           : [currentAssetId]
 
-      setQuickFixStateByPhoto((prev) => {
-        const currentPrevState = prev[currentAssetId] ?? createDefaultQuickFixState()
-        const nextState = updater(currentPrevState)
-        if (areQuickFixStatesEqual(currentPrevState, nextState)) return prev
+      const currentPrevState = quickFixStateByPhoto[currentAssetId] ?? createDefaultQuickFixState()
+      const nextState = updater(currentPrevState)
+      if (areQuickFixStatesEqual(currentPrevState, nextState)) return
 
-        const nextMap = { ...prev }
-        targetIds.forEach((id) => {
-          nextMap[id] = nextState
-        })
-
-        scheduleQuickFixPreview(currentAssetId, nextState)
-
-        if (targetIds.length > 1) {
-          scheduleQuickFixBatchSave(targetIds, nextState)
-        } else {
-          scheduleQuickFixSave(currentAssetId, nextState)
-        }
-        return nextMap
+      // Capture undo state
+      const undoStateMap: Record<string, QuickFixState> = {}
+      targetIds.forEach((id) => {
+        undoStateMap[id] = quickFixStateByPhoto[id] ?? createDefaultQuickFixState()
       })
+
+      // Capture redo state
+      const redoStateMap: Record<string, QuickFixState> = {}
+      targetIds.forEach((id) => {
+        redoStateMap[id] = nextState
+      })
+
+      const applyStateMap = (stateMap: Record<string, QuickFixState>) => {
+        setQuickFixStateByPhoto((prev) => ({ ...prev, ...stateMap }))
+
+        if (stateMap[currentAssetId]) {
+          scheduleQuickFixPreview(currentAssetId, stateMap[currentAssetId])
+        }
+
+        const ids = Object.keys(stateMap)
+        // Check if all states are the same for batch optimization
+        const firstState = stateMap[ids[0]]
+        const allSame = ids.every(id => areQuickFixStatesEqual(stateMap[id], firstState))
+
+        if (allSame && ids.length > 1) {
+          scheduleQuickFixBatchSave(ids, firstState)
+        } else {
+          ids.forEach(id => scheduleQuickFixSave(id, stateMap[id]))
+        }
+      }
+
+      history.push({
+        description: 'Quick Fix Adjustment',
+        undo: () => applyStateMap(undoStateMap),
+        redo: () => applyStateMap(redoStateMap),
+      })
+
+      applyStateMap(redoStateMap)
     },
     [
       currentAssetId,
@@ -2099,6 +2177,8 @@ export default function ProjectWorkspace() {
       scheduleQuickFixPreview,
       scheduleQuickFixSave,
       scheduleQuickFixBatchSave,
+      quickFixStateByPhoto,
+      history,
     ]
   )
   const updateCropSettings = useCallback(
@@ -2210,40 +2290,63 @@ export default function ProjectWorkspace() {
         applyToSelection && selectedPhotoIds.size > 1 && selectedPhotoIds.has(currentAssetId)
           ? Array.from(selectedPhotoIds)
           : [currentAssetId]
-      let shouldResetCrop = false
 
-      setQuickFixStateByPhoto((prev) => {
-        const currentPrevState = prev[currentAssetId] ?? createDefaultQuickFixState()
-        const nextState = resetQuickFixGroup(currentPrevState, group)
-        if (areQuickFixStatesEqual(currentPrevState, nextState)) return prev
+      const undoStateMap: Record<string, QuickFixState> = {}
+      targetIds.forEach((id) => {
+        undoStateMap[id] = quickFixStateByPhoto[id] ?? createDefaultQuickFixState()
+      })
 
+      const currentPrevState = quickFixStateByPhoto[currentAssetId] ?? createDefaultQuickFixState()
+      const nextState = resetQuickFixGroup(currentPrevState, group)
+      if (areQuickFixStatesEqual(currentPrevState, nextState)) return
+
+      const redoStateMap: Record<string, QuickFixState> = {}
+      targetIds.forEach((id) => {
+        redoStateMap[id] = nextState
+      })
+
+      const applyStateMap = (stateMap: Record<string, QuickFixState>) => {
+        let shouldResetCrop = false
         if (group === 'crop') {
+          // Check if we are resetting crop, we need to reset UI crop settings too
+          // But wait, resetQuickFixGroup resets the state.
           shouldResetCrop = true
         }
 
-        const nextMap = { ...prev }
-        targetIds.forEach((id) => {
-          nextMap[id] = nextState
-        })
+        setQuickFixStateByPhoto((prev) => ({ ...prev, ...stateMap }))
 
-        scheduleQuickFixPreview(currentAssetId, nextState)
-        if (targetIds.length > 1) {
-          scheduleQuickFixBatchSave(targetIds, nextState)
-        } else {
-          scheduleQuickFixSave(currentAssetId, nextState)
+        if (stateMap[currentAssetId]) {
+          scheduleQuickFixPreview(currentAssetId, stateMap[currentAssetId])
         }
-        return nextMap
+
+        const ids = Object.keys(stateMap)
+        const firstState = stateMap[ids[0]]
+        const allSame = ids.every(id => areQuickFixStatesEqual(stateMap[id], firstState))
+
+        if (allSame && ids.length > 1) {
+          scheduleQuickFixBatchSave(ids, firstState)
+        } else {
+          ids.forEach(id => scheduleQuickFixSave(id, stateMap[id]))
+        }
+
+        if (shouldResetCrop) {
+          setCropSettingsByPhoto((prev) => {
+            const nextMap = { ...prev }
+            ids.forEach((id) => {
+              nextMap[id] = createDefaultCropSettings()
+            })
+            return nextMap
+          })
+        }
+      }
+
+      history.push({
+        description: `Reset ${group}`,
+        undo: () => applyStateMap(undoStateMap),
+        redo: () => applyStateMap(redoStateMap),
       })
 
-      if (group === 'crop' && shouldResetCrop) {
-        setCropSettingsByPhoto((prev) => {
-          const nextMap = { ...prev }
-          targetIds.forEach((id) => {
-            nextMap[id] = createDefaultCropSettings()
-          })
-          return nextMap
-        })
-      }
+      applyStateMap(redoStateMap)
     },
     [
       currentAssetId,
@@ -2252,6 +2355,8 @@ export default function ProjectWorkspace() {
       scheduleQuickFixPreview,
       scheduleQuickFixSave,
       scheduleQuickFixBatchSave,
+      quickFixStateByPhoto,
+      history,
     ]
   )
   const handleQuickFixGlobalReset = useCallback(() => {
@@ -2262,31 +2367,52 @@ export default function ProjectWorkspace() {
         : [currentAssetId]
     const defaults = createDefaultQuickFixState()
 
-    setQuickFixStateByPhoto((prev) => {
-      const currentPrevState = prev[currentAssetId] ?? defaults
-      if (areQuickFixStatesEqual(currentPrevState, defaults)) return prev
+    const undoStateMap: Record<string, QuickFixState> = {}
+    targetIds.forEach((id) => {
+      undoStateMap[id] = quickFixStateByPhoto[id] ?? createDefaultQuickFixState()
+    })
 
-      const nextMap = { ...prev }
-      targetIds.forEach((id) => {
-        nextMap[id] = defaults
-      })
+    const currentPrevState = quickFixStateByPhoto[currentAssetId] ?? defaults
+    if (areQuickFixStatesEqual(currentPrevState, defaults)) return
 
-      scheduleQuickFixPreview(currentAssetId, defaults)
-      if (targetIds.length > 1) {
-        scheduleQuickFixBatchSave(targetIds, defaults)
-      } else {
-        scheduleQuickFixSave(currentAssetId, defaults)
+    const redoStateMap: Record<string, QuickFixState> = {}
+    targetIds.forEach((id) => {
+      redoStateMap[id] = defaults
+    })
+
+    const applyStateMap = (stateMap: Record<string, QuickFixState>) => {
+      setQuickFixStateByPhoto((prev) => ({ ...prev, ...stateMap }))
+
+      if (stateMap[currentAssetId]) {
+        scheduleQuickFixPreview(currentAssetId, stateMap[currentAssetId])
       }
-      return nextMap
+
+      const ids = Object.keys(stateMap)
+      const firstState = stateMap[ids[0]]
+      const allSame = ids.every(id => areQuickFixStatesEqual(stateMap[id], firstState))
+
+      if (allSame && ids.length > 1) {
+        scheduleQuickFixBatchSave(ids, firstState)
+      } else {
+        ids.forEach(id => scheduleQuickFixSave(id, stateMap[id]))
+      }
+
+      setCropSettingsByPhoto((prev) => {
+        const nextMap = { ...prev }
+        ids.forEach((id) => {
+          nextMap[id] = createDefaultCropSettings()
+        })
+        return nextMap
+      })
+    }
+
+    history.push({
+      description: 'Reset Quick Fix',
+      undo: () => applyStateMap(undoStateMap),
+      redo: () => applyStateMap(redoStateMap),
     })
 
-    setCropSettingsByPhoto((prev) => {
-      const nextMap = { ...prev }
-      targetIds.forEach((id) => {
-        nextMap[id] = createDefaultCropSettings()
-      })
-      return nextMap
-    })
+    applyStateMap(redoStateMap)
   }, [
     currentAssetId,
     applyToSelection,
@@ -2294,6 +2420,8 @@ export default function ProjectWorkspace() {
     scheduleQuickFixPreview,
     scheduleQuickFixSave,
     scheduleQuickFixBatchSave,
+    quickFixStateByPhoto,
+    history,
   ])
   const quickFixControls = useMemo(
     () => ({
@@ -2313,6 +2441,10 @@ export default function ProjectWorkspace() {
       onAdjustingChange: handleQuickFixAdjustingChange,
       applyToSelection,
       onApplyToSelectionChange: setApplyToSelection,
+      canUndo: history.canUndo,
+      canRedo: history.canRedo,
+      onUndo: history.undo,
+      onRedo: history.redo,
     }),
     [
       applyQuickFixChange,
@@ -2330,6 +2462,10 @@ export default function ProjectWorkspace() {
       quickFixPreviewBusy,
       quickFixSaving,
       applyToSelection,
+      history.canUndo,
+      history.canRedo,
+      history.undo,
+      history.redo,
     ]
   )
   const inspectorPreviewAsset = useMemo(() => {

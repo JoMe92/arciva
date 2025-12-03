@@ -79,7 +79,7 @@ function SliderControl({
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerCancel}
           onBlur={onBlur}
-          className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-[var(--border,#EDE1C6)] accent-[var(--focus-ring,#1A73E8)]"
+          className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-[var(--border,#EDE1C6)] accent-[var(--focus-ring,#1A73E8)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring,#1A73E8)] focus-visible:ring-offset-2"
           style={trackBackground ? { backgroundImage: trackBackground } : undefined}
         />
       </div>
@@ -108,6 +108,10 @@ type QuickFixPanelProps = {
   viewMode?: 'grid' | 'detail'
   applyToSelection?: boolean
   onApplyToSelectionChange?: (apply: boolean) => void
+  canUndo?: boolean
+  canRedo?: boolean
+  onUndo?: () => void
+  onRedo?: () => void
 }
 
 const formatSigned = (value: number, digits = 2) => `${value >= 0 ? '+' : ''}${value.toFixed(digits)}`
@@ -133,10 +137,23 @@ function QuickFixPanelComponent({
   viewMode = 'grid',
   applyToSelection = false,
   onApplyToSelectionChange,
+  canUndo,
+  canRedo,
+  onUndo,
+  onRedo,
 }: QuickFixPanelProps) {
   const quickFix = useMemo(() => quickFixState ?? createDefaultQuickFixState(), [quickFixState])
   const [liveState, setLiveState] = useState<QuickFixState | null>(null)
   const liveStateRef = useRef<QuickFixState | null>(null)
+  const firstControlRef = useRef<HTMLButtonElement | null>(null)
+
+  useEffect(() => {
+    // Focus the first control when the panel mounts
+    if (firstControlRef.current) {
+      firstControlRef.current.focus({ preventScroll: true })
+    }
+  }, [])
+
   useEffect(() => {
     liveStateRef.current = liveState
   }, [liveState])
@@ -310,27 +327,59 @@ function QuickFixPanelComponent({
         </div>
       ) : null}
 
-      {!disableMessage && selectionCount > 1 ? (
+      {!disableMessage && (selectionCount > 1 || onUndo || onRedo) ? (
         <div className="rounded-lg border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] px-3 py-2">
-          <div className="flex items-start gap-2">
-            <div className="flex-1">
-              <p className="text-xs font-medium text-[var(--text,#1F1E1B)]">
-                {selectionCount} images selected
-              </p>
-              <p className="text-[11px] text-[var(--text-muted,#6B645B)]">
-                Changes will be applied to {selectionCount} selected images.
-              </p>
-            </div>
-            {onApplyToSelectionChange ? (
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={applyToSelection}
-                  onChange={(e) => onApplyToSelectionChange(e.target.checked)}
-                  className="h-4 w-4 rounded border-[var(--border,#EDE1C6)] text-[var(--focus-ring,#1A73E8)] focus:ring-[var(--focus-ring,#1A73E8)]"
-                />
-                <span className="text-xs font-medium text-[var(--text,#1F1E1B)]">Batch</span>
-              </label>
+          <div className="flex items-center justify-between gap-2">
+            {selectionCount > 1 ? (
+              <div className="flex-1">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-medium text-[var(--text,#1F1E1B)]">
+                    {selectionCount} images selected
+                  </p>
+                  {onApplyToSelectionChange ? (
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={applyToSelection}
+                        onChange={(e) => onApplyToSelectionChange(e.target.checked)}
+                        className="h-4 w-4 rounded border-[var(--border,#EDE1C6)] text-[var(--focus-ring,#1A73E8)] focus:ring-[var(--focus-ring,#1A73E8)]"
+                      />
+                      <span className="text-xs font-medium text-[var(--text,#1F1E1B)]">Batch</span>
+                    </label>
+                  ) : null}
+                </div>
+                <p className="text-[11px] text-[var(--text-muted,#6B645B)]">
+                  Changes will be applied to {selectionCount} selected images.
+                </p>
+              </div>
+            ) : null}
+
+            {onUndo || onRedo ? (
+              <div className={`flex items-center gap-1 ${selectionCount > 1 ? 'border-l border-[var(--border,#EDE1C6)] pl-2' : 'w-full justify-end'}`}>
+                {onUndo ? (
+                  <button
+                    type="button"
+                    ref={firstControlRef}
+                    disabled={!canUndo}
+                    onClick={onUndo}
+                    title="Undo (Ctrl+Z)"
+                    className="inline-flex h-7 w-7 items-center justify-center rounded hover:bg-[var(--surface-muted,#F3EBDD)] disabled:opacity-40"
+                  >
+                    <span aria-hidden="true">↩</span>
+                  </button>
+                ) : null}
+                {onRedo ? (
+                  <button
+                    type="button"
+                    disabled={!canRedo}
+                    onClick={onRedo}
+                    title="Redo (Ctrl+Shift+Z)"
+                    className="inline-flex h-7 w-7 items-center justify-center rounded hover:bg-[var(--surface-muted,#F3EBDD)] disabled:opacity-40"
+                  >
+                    <span aria-hidden="true">↪</span>
+                  </button>
+                ) : null}
+              </div>
             ) : null}
           </div>
         </div>

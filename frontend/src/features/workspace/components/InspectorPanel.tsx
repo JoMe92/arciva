@@ -67,6 +67,10 @@ type QuickFixControlsProps = {
   onAdjustingChange?: (adjusting: boolean) => void
   applyToSelection?: boolean
   onApplyToSelectionChange?: (apply: boolean) => void
+  canUndo?: boolean
+  canRedo?: boolean
+  onUndo?: () => void
+  onRedo?: () => void
 }
 
 export function InspectorPanel({
@@ -312,9 +316,14 @@ export function InspectorPanel({
                   Image Details
                 </span>
               </div>
-              <div className="grid grid-cols-2 rounded-lg bg-[var(--surface-muted,#F3EBDD)] p-1">
+              <div role="tablist" className="grid grid-cols-2 rounded-lg bg-[var(--surface-muted,#F3EBDD)] p-1">
                 <button
                   type="button"
+                  role="tab"
+                  aria-selected={activeTab === 'details'}
+                  aria-controls={RIGHT_PANEL_CONTENT_ID}
+                  id="tab-details"
+                  tabIndex={activeTab === 'details' ? 0 : -1}
                   onClick={() => setActiveTab('details')}
                   className={`rounded-md py-1.5 text-xs font-semibold transition-all ${activeTab === 'details'
                     ? 'bg-[var(--surface,#FFFFFF)] text-[var(--text,#1F1E1B)] shadow-sm'
@@ -325,6 +334,11 @@ export function InspectorPanel({
                 </button>
                 <button
                   type="button"
+                  role="tab"
+                  aria-selected={activeTab === 'quick-fix'}
+                  aria-controls={RIGHT_PANEL_CONTENT_ID}
+                  id="tab-quick-fix"
+                  tabIndex={activeTab === 'quick-fix' ? 0 : -1}
                   onClick={() => setActiveTab('quick-fix')}
                   className={`rounded-md py-1.5 text-xs font-semibold transition-all ${activeTab === 'quick-fix'
                     ? 'bg-[var(--surface,#FFFFFF)] text-[var(--text,#1F1E1B)] shadow-sm'
@@ -461,6 +475,10 @@ export function InspectorPanel({
                 viewMode={viewMode}
                 applyToSelection={quickFixControls?.applyToSelection}
                 onApplyToSelectionChange={quickFixControls?.onApplyToSelectionChange}
+                canUndo={quickFixControls?.canUndo}
+                canRedo={quickFixControls?.canRedo}
+                onUndo={quickFixControls?.onUndo}
+                onRedo={quickFixControls?.onRedo}
               />
             )}
           </div>

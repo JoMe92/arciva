@@ -106,6 +106,8 @@ type QuickFixPanelProps = {
   onLiveStateChange?: (state: QuickFixState | null) => void
   onAdjustingChange?: (isAdjusting: boolean) => void
   viewMode?: 'grid' | 'detail'
+  applyToSelection?: boolean
+  onApplyToSelectionChange?: (apply: boolean) => void
 }
 
 const formatSigned = (value: number, digits = 2) => `${value >= 0 ? '+' : ''}${value.toFixed(digits)}`
@@ -129,6 +131,8 @@ function QuickFixPanelComponent({
   onLiveStateChange,
   onAdjustingChange,
   viewMode = 'grid',
+  applyToSelection = false,
+  onApplyToSelectionChange,
 }: QuickFixPanelProps) {
   const quickFix = useMemo(() => quickFixState ?? createDefaultQuickFixState(), [quickFixState])
   const [liveState, setLiveState] = useState<QuickFixState | null>(null)
@@ -305,6 +309,33 @@ function QuickFixPanelComponent({
           {disableMessage}
         </div>
       ) : null}
+
+      {!disableMessage && selectionCount > 1 ? (
+        <div className="rounded-lg border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] px-3 py-2">
+          <div className="flex items-start gap-2">
+            <div className="flex-1">
+              <p className="text-xs font-medium text-[var(--text,#1F1E1B)]">
+                {selectionCount} images selected
+              </p>
+              <p className="text-[11px] text-[var(--text-muted,#6B645B)]">
+                Changes will be applied to {selectionCount} selected images.
+              </p>
+            </div>
+            {onApplyToSelectionChange ? (
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={applyToSelection}
+                  onChange={(e) => onApplyToSelectionChange(e.target.checked)}
+                  className="h-4 w-4 rounded border-[var(--border,#EDE1C6)] text-[var(--focus-ring,#1A73E8)] focus:ring-[var(--focus-ring,#1A73E8)]"
+                />
+                <span className="text-xs font-medium text-[var(--text,#1F1E1B)]">Batch</span>
+              </label>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
       {disableMessage
         ? null
         : (previewBusy || saving || errorMessage) && (

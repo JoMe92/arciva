@@ -65,6 +65,8 @@ type QuickFixControlsProps = {
   saving: boolean
   errorMessage: string | null
   onAdjustingChange?: (adjusting: boolean) => void
+  applyToSelection?: boolean
+  onApplyToSelectionChange?: (apply: boolean) => void
 }
 
 export function InspectorPanel({
@@ -457,6 +459,8 @@ export function InspectorPanel({
                 onLiveStateChange={handleLiveQuickFixState}
                 onAdjustingChange={quickFixControls?.onAdjustingChange}
                 viewMode={viewMode}
+                applyToSelection={quickFixControls?.applyToSelection}
+                onApplyToSelectionChange={quickFixControls?.onApplyToSelectionChange}
               />
             )}
           </div>

@@ -22,6 +22,7 @@ import {
   type LoadMetadataFromProjectResponse,
   previewQuickFix,
   saveQuickFixAdjustments,
+  applyQuickFixBatch,
 } from '../../shared/api/assets'
 import {
   getProject,
@@ -42,6 +43,7 @@ import type {
 } from './types'
 import type { PendingItem } from './importTypes'
 import { TopBar } from './components/TopBar'
+import { QuickFixAction } from './components/QuickFixMenu'
 import { Sidebar } from './components/Sidebar'
 import { InspectorPanel, type InspectorTab } from './components/InspectorPanel'
 import { GridView, DetailView } from './components/Views'
@@ -792,6 +794,25 @@ export default function ProjectWorkspace() {
       }
     },
     [id]
+  )
+
+  const handleQuickFix = useCallback(
+    async (action: QuickFixAction) => {
+      if (!id || selectedPhotoIds.size === 0) return
+      const assetIds = Array.from(selectedPhotoIds)
+      try {
+        await applyQuickFixBatch(id, {
+          assetIds,
+          autoExposure: action === 'auto_exposure' || action === 'all',
+          autoWhiteBalance: action === 'auto_white_balance' || action === 'all',
+          autoCrop: action === 'auto_crop' || action === 'all',
+        })
+        await refreshAssets()
+      } catch (err) {
+        console.error('Failed to apply quick fix batch', err)
+      }
+    },
+    [id, selectedPhotoIds, refreshAssets]
   )
 
   const interactionMutation = useMutation({
@@ -2362,6 +2383,7 @@ export default function ProjectWorkspace() {
         selectedCount={selectedPhotoIds.size}
         onOpenExport={() => setExportDialogOpen(true)}
         onOpenSettings={openGeneralSettings}
+        onQuickFix={handleQuickFix}
         layout={isMobileLayout ? 'mobile' : 'desktop'}
         accountControl={<UserMenu variant={isMobileLayout ? 'compact' : 'full'} />}
       />
@@ -2375,8 +2397,8 @@ export default function ProjectWorkspace() {
         <div className="pointer-events-none fixed bottom-6 right-6 z-50">
           <div
             className={`pointer-events-auto w-72 rounded-lg border px-4 py-3 shadow-lg ${uploadBanner.status === 'error'
-                ? 'border-[#F7C9C9] bg-[#FDF2F2]'
-                : 'border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]'
+              ? 'border-[#F7C9C9] bg-[#FDF2F2]'
+              : 'border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]'
               }`}
           >
             {uploadBanner.status === 'running' && (

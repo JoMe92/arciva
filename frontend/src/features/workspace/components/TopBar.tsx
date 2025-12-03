@@ -5,6 +5,7 @@ import StoneTrailLogo from '../../../components/StoneTrailLogo'
 import { useTheme } from '../../../shared/theme'
 import { WorkspaceFilterControls, ColorTag } from '../types'
 import { OverlayDialog, CountBadge } from './Common'
+import { QuickFixMenu, QuickFixAction } from './QuickFixMenu'
 
 const SHORTCUTS_LEGEND_ID = 'shortcuts-legend'
 const FILTERS_DIALOG_ID = 'workspace-filters-dialog'
@@ -31,6 +32,7 @@ export function TopBar({
   onOpenSettings,
   layout = 'desktop',
   accountControl,
+  onQuickFix,
 }: {
   projectName: string
   onBack: () => void
@@ -53,6 +55,7 @@ export function TopBar({
   onOpenSettings: () => void
   layout?: 'desktop' | 'mobile'
   accountControl?: React.ReactNode
+  onQuickFix?: (action: QuickFixAction) => void
 }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(projectName)
@@ -449,6 +452,14 @@ export function TopBar({
             <span>Export…</span>
             {canExport ? <CountBadge count={selectedCount} /> : null}
           </button>
+          {
+            selectedCount > 0 && onQuickFix ? (
+              <QuickFixMenu
+                selectedCount={selectedCount}
+                onAction={onQuickFix}
+              />
+            ) : null
+          }
           <div
             data-testid="top-bar-size-control"
             className="hidden h-9 flex-shrink-0 items-center gap-2 rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 text-[11px] text-[var(--text-muted,#6B645B)] lg:flex"

@@ -336,3 +336,35 @@ export async function saveQuickFixAdjustments(
   }
   return (await res.json()) as AssetDetail
 }
+
+export type QuickFixBatchApplyPayload = {
+  assetIds: string[]
+  autoExposure?: boolean
+  autoWhiteBalance?: boolean
+  autoCrop?: boolean
+}
+
+export async function applyQuickFixBatch(
+  projectId: string,
+  payload: QuickFixBatchApplyPayload
+): Promise<AssetInteractionUpdateResponse> {
+  const body = {
+    asset_ids: payload.assetIds,
+    auto_exposure: payload.autoExposure,
+    auto_white_balance: payload.autoWhiteBalance,
+    auto_crop: payload.autoCrop,
+  }
+  const res = await fetch(
+    withBase(`/v1/projects/${projectId}/assets/quick-fix:apply`)!,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(body),
+    }
+  )
+  if (!res.ok) {
+    throw new Error(await res.text())
+  }
+  return (await res.json()) as AssetInteractionUpdateResponse
+}

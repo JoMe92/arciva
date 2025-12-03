@@ -607,15 +607,15 @@ export function DetailView({
                   }}
                   onWheel={handleWheelZoom}
                 >
-                <div
-                  className="absolute left-1/2 top-1/2"
-                  style={{
-                    width: baseSize.width || undefined,
-                    height: baseSize.height || undefined,
-                    transform: `translate(-50%, -50%) translate3d(${pan.x}px, ${pan.y}px, 0) scale(${zoomValue})`,
-                    transition: isDragging ? 'none' : 'transform 120ms ease-out',
-                  }}
-                >
+                  <div
+                    className="absolute left-1/2 top-1/2"
+                    style={{
+                      width: baseSize.width || undefined,
+                      height: baseSize.height || undefined,
+                      transform: `translate(-50%, -50%) translate3d(${pan.x}px, ${pan.y}px, 0) scale(${zoomValue})`,
+                      transition: isDragging ? 'none' : 'transform 120ms ease-out',
+                    }}
+                  >
                     <div className="relative h-full w-full overflow-hidden rounded-xl bg-[rgba(15,15,15,0.85)]">
                       <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
                         <div
@@ -806,6 +806,14 @@ export function ThumbContent({ p }: { p: Photo }) {
         style={{ backgroundColor: COLOR_MAP[p.tag] }}
         aria-hidden
       />
+      {p.hasEdits ? (
+        <span
+          className="px-1 py-0.5 rounded border border-[var(--border,#E1D3B9)] bg-[var(--surface-frosted,#F8F0E4)]"
+          title="Has adjustments"
+        >
+          ±
+        </span>
+      ) : null}
     </div>
   )
 }

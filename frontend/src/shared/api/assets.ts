@@ -41,6 +41,7 @@ export type AssetListItem = {
   rejected?: boolean
   metadata_state_id?: string | null
   metadata_source_project_id?: string | null
+  metadata_state?: MetadataState | null
 }
 
 export type AssetDerivative = {

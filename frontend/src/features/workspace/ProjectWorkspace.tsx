@@ -450,6 +450,11 @@ function mapAssetToPhoto(item: AssetListItem, existing?: Photo): Photo {
     pairedAssetType,
     stackPrimaryAssetId,
     metadataSourceProjectId,
+    hasEdits: Boolean(
+      item.metadata_state?.edits &&
+      typeof item.metadata_state.edits === 'object' &&
+      Object.keys(item.metadata_state.edits).length > 0
+    ),
   }
 }
 
@@ -1823,6 +1828,7 @@ export default function ProjectWorkspace() {
         if (quickFixSaveSeqRef.current !== seq) return
         quickFixPersistedRef.current[assetId] = cloneQuickFixState(state)
         queryClient.setQueryData(['asset-detail', assetId, projectId], updated)
+        setPhotos((prev) => mergePhotosFromItems(prev, [updated as unknown as AssetListItem]))
         setQuickFixSaving(false)
         setQuickFixError(null)
       } catch (error) {

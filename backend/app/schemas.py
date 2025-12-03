@@ -477,4 +477,3 @@ class QuickFixBatchApply(BaseModel):
     auto_exposure: bool = False
     auto_white_balance: bool = False
     auto_crop: bool = False
-

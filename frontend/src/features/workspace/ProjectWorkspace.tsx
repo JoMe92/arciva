@@ -23,6 +23,7 @@ import {
   previewQuickFix,
   saveQuickFixAdjustments,
   applyQuickFixBatch,
+  type AssetInteractionUpdateResponse,
 } from '../../shared/api/assets'
 import {
   getProject,
@@ -622,6 +623,9 @@ export default function ProjectWorkspace() {
     assetId: null,
     hash: null,
   })
+  const [applyToSelection, setApplyToSelection] = useState(true)
+  const quickFixBatchSaveTimeoutRef = useRef<number | null>(null)
+  const quickFixBatchSaveSeqRef = useRef(0)
   const [activeInspectorTab, setActiveInspectorTab] = useState<InspectorTab>('details')
   const handleInspectorTabChange = useCallback((tab: InspectorTab) => {
     setActiveInspectorTab(tab)
@@ -1856,6 +1860,51 @@ export default function ProjectWorkspace() {
     },
     [projectId, requestQuickFixSave]
   )
+  const requestQuickFixBatchSave = useCallback(
+    async (assetIds: string[], state: QuickFixState) => {
+      if (!projectId) return
+      const payload = quickFixStateToPayload(state) ?? {}
+      const seq = ++quickFixBatchSaveSeqRef.current
+      setQuickFixSaving(true)
+      try {
+        const results: AssetDetail[] = []
+        for (const id of assetIds) {
+          results.push(await saveQuickFixAdjustments(projectId, id, payload))
+        }
+
+        if (quickFixBatchSaveSeqRef.current !== seq) return
+
+        results.forEach((updated) => {
+          quickFixPersistedRef.current[updated.id] = cloneQuickFixState(state)
+          queryClient.setQueryData(['asset-detail', updated.id, projectId], updated)
+        })
+
+        setPhotos((prev) => mergePhotosFromItems(prev, results as unknown as AssetListItem[]))
+        setQuickFixSaving(false)
+        setQuickFixError(null)
+      } catch (error) {
+        if (quickFixBatchSaveSeqRef.current === seq) {
+          setQuickFixSaving(false)
+        }
+        console.error('Failed to save batch Quick Fix adjustments', error)
+        setQuickFixError('Saving adjustments failed. Please check your connection and try again.')
+      }
+    },
+    [projectId, queryClient]
+  )
+  const scheduleQuickFixBatchSave = useCallback(
+    (assetIds: string[], state: QuickFixState) => {
+      if (!projectId) return
+      if (quickFixBatchSaveTimeoutRef.current !== null) {
+        window.clearTimeout(quickFixBatchSaveTimeoutRef.current)
+      }
+      quickFixBatchSaveTimeoutRef.current = window.setTimeout(() => {
+        quickFixBatchSaveTimeoutRef.current = null
+        requestQuickFixBatchSave(assetIds, state)
+      }, 800)
+    },
+    [projectId, requestQuickFixBatchSave]
+  )
   const {
     data: currentAssetDetail,
     isFetching: assetDetailFetching,
@@ -2018,16 +2067,39 @@ export default function ProjectWorkspace() {
   const applyQuickFixChange = useCallback(
     (updater: (prev: QuickFixState) => QuickFixState) => {
       if (!currentAssetId) return
+      const targetIds =
+        applyToSelection && selectedPhotoIds.size > 1 && selectedPhotoIds.has(currentAssetId)
+          ? Array.from(selectedPhotoIds)
+          : [currentAssetId]
+
       setQuickFixStateByPhoto((prev) => {
-        const prevState = prev[currentAssetId] ?? createDefaultQuickFixState()
-        const nextState = updater(prevState)
-        if (areQuickFixStatesEqual(prevState, nextState)) return prev
+        const currentPrevState = prev[currentAssetId] ?? createDefaultQuickFixState()
+        const nextState = updater(currentPrevState)
+        if (areQuickFixStatesEqual(currentPrevState, nextState)) return prev
+
+        const nextMap = { ...prev }
+        targetIds.forEach((id) => {
+          nextMap[id] = nextState
+        })
+
         scheduleQuickFixPreview(currentAssetId, nextState)
-        scheduleQuickFixSave(currentAssetId, nextState)
-        return { ...prev, [currentAssetId]: nextState }
+
+        if (targetIds.length > 1) {
+          scheduleQuickFixBatchSave(targetIds, nextState)
+        } else {
+          scheduleQuickFixSave(currentAssetId, nextState)
+        }
+        return nextMap
       })
     },
-    [currentAssetId, scheduleQuickFixPreview, scheduleQuickFixSave]
+    [
+      currentAssetId,
+      applyToSelection,
+      selectedPhotoIds,
+      scheduleQuickFixPreview,
+      scheduleQuickFixSave,
+      scheduleQuickFixBatchSave,
+    ]
   )
   const updateCropSettings = useCallback(
     (updater: (prev: CropSettings) => CropSettings) => {
@@ -2134,42 +2206,95 @@ export default function ProjectWorkspace() {
   const handleQuickFixGroupReset = useCallback(
     (group: QuickFixGroupKey) => {
       if (!currentAssetId) return
+      const targetIds =
+        applyToSelection && selectedPhotoIds.size > 1 && selectedPhotoIds.has(currentAssetId)
+          ? Array.from(selectedPhotoIds)
+          : [currentAssetId]
       let shouldResetCrop = false
+
       setQuickFixStateByPhoto((prev) => {
-        const prevState = prev[currentAssetId] ?? createDefaultQuickFixState()
-        const nextState = resetQuickFixGroup(prevState, group)
-        if (areQuickFixStatesEqual(prevState, nextState)) return prev
+        const currentPrevState = prev[currentAssetId] ?? createDefaultQuickFixState()
+        const nextState = resetQuickFixGroup(currentPrevState, group)
+        if (areQuickFixStatesEqual(currentPrevState, nextState)) return prev
+
         if (group === 'crop') {
           shouldResetCrop = true
         }
+
+        const nextMap = { ...prev }
+        targetIds.forEach((id) => {
+          nextMap[id] = nextState
+        })
+
         scheduleQuickFixPreview(currentAssetId, nextState)
-        scheduleQuickFixSave(currentAssetId, nextState)
-        return { ...prev, [currentAssetId]: nextState }
+        if (targetIds.length > 1) {
+          scheduleQuickFixBatchSave(targetIds, nextState)
+        } else {
+          scheduleQuickFixSave(currentAssetId, nextState)
+        }
+        return nextMap
       })
+
       if (group === 'crop' && shouldResetCrop) {
-        setCropSettingsByPhoto((prev) => ({
-          ...prev,
-          [currentAssetId]: createDefaultCropSettings(),
-        }))
+        setCropSettingsByPhoto((prev) => {
+          const nextMap = { ...prev }
+          targetIds.forEach((id) => {
+            nextMap[id] = createDefaultCropSettings()
+          })
+          return nextMap
+        })
       }
     },
-    [currentAssetId, scheduleQuickFixPreview, scheduleQuickFixSave]
+    [
+      currentAssetId,
+      applyToSelection,
+      selectedPhotoIds,
+      scheduleQuickFixPreview,
+      scheduleQuickFixSave,
+      scheduleQuickFixBatchSave,
+    ]
   )
   const handleQuickFixGlobalReset = useCallback(() => {
     if (!currentAssetId) return
+    const targetIds =
+      applyToSelection && selectedPhotoIds.size > 1 && selectedPhotoIds.has(currentAssetId)
+        ? Array.from(selectedPhotoIds)
+        : [currentAssetId]
     const defaults = createDefaultQuickFixState()
+
     setQuickFixStateByPhoto((prev) => {
-      const prevState = prev[currentAssetId] ?? defaults
-      if (areQuickFixStatesEqual(prevState, defaults)) return prev
+      const currentPrevState = prev[currentAssetId] ?? defaults
+      if (areQuickFixStatesEqual(currentPrevState, defaults)) return prev
+
+      const nextMap = { ...prev }
+      targetIds.forEach((id) => {
+        nextMap[id] = defaults
+      })
+
       scheduleQuickFixPreview(currentAssetId, defaults)
-      scheduleQuickFixSave(currentAssetId, defaults)
-      return { ...prev, [currentAssetId]: defaults }
+      if (targetIds.length > 1) {
+        scheduleQuickFixBatchSave(targetIds, defaults)
+      } else {
+        scheduleQuickFixSave(currentAssetId, defaults)
+      }
+      return nextMap
     })
-    setCropSettingsByPhoto((prev) => ({
-      ...prev,
-      [currentAssetId]: createDefaultCropSettings(),
-    }))
-  }, [currentAssetId, scheduleQuickFixPreview, scheduleQuickFixSave])
+
+    setCropSettingsByPhoto((prev) => {
+      const nextMap = { ...prev }
+      targetIds.forEach((id) => {
+        nextMap[id] = createDefaultCropSettings()
+      })
+      return nextMap
+    })
+  }, [
+    currentAssetId,
+    applyToSelection,
+    selectedPhotoIds,
+    scheduleQuickFixPreview,
+    scheduleQuickFixSave,
+    scheduleQuickFixBatchSave,
+  ])
   const quickFixControls = useMemo(
     () => ({
       cropSettings: currentCropSettings,
@@ -2186,6 +2311,8 @@ export default function ProjectWorkspace() {
       saving: quickFixSaving,
       errorMessage: quickFixError,
       onAdjustingChange: handleQuickFixAdjustingChange,
+      applyToSelection,
+      onApplyToSelectionChange: setApplyToSelection,
     }),
     [
       applyQuickFixChange,
@@ -2202,6 +2329,7 @@ export default function ProjectWorkspace() {
       quickFixError,
       quickFixPreviewBusy,
       quickFixSaving,
+      applyToSelection,
     ]
   )
   const inspectorPreviewAsset = useMemo(() => {

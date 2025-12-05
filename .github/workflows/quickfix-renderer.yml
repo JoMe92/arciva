@@ -1,0 +1,85 @@
+name: Quickfix Renderer WASM CI
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'quickfix-renderer/**'
+      - 'Cargo.toml'
+      - 'pnpm-workspace.yaml'
+      - '.github/workflows/quickfix-renderer.yml'
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'quickfix-renderer/**'
+      - 'Cargo.toml'
+      - 'pnpm-workspace.yaml'
+      - '.github/workflows/quickfix-renderer.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  wasm:
+    name: Build and Test wasm32
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache cargo registry and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Install wasm-pack
+        uses: jetli/wasm-pack-action@v0.4.0
+
+      - name: Cargo build (wasm32)
+        run: cargo build --workspace --target wasm32-unknown-unknown
+
+      - name: wasm-pack tests (headless chrome)
+        working-directory: quickfix-renderer
+        run: wasm-pack test --headless --chrome
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Enable corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --filter ./quickfix-renderer
+
+      - name: Build npm bundle
+        working-directory: quickfix-renderer
+        run: pnpm build
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: quickfix-renderer-wasm
+          path: |
+            quickfix-renderer/dist
+            quickfix-renderer/pkg

@@ -1,5 +1,6 @@
 # Node / pnpm
 node_modules/
+target/
 .pnpm-store/
 pnpm-debug.log*
 npm-debug.log*
@@ -51,6 +52,8 @@ dev-dist/
 .next/
 .nuxt/
 coverage/
+quickfix-renderer/pkg/
+quickfix-renderer/dist/
 
 # Editor/IDE
 .vscode/

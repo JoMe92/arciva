@@ -1,0 +1,32 @@
+{
+  "name": "@arciva/quickfix-renderer",
+  "version": "0.1.0",
+  "description": "WASM renderer core for Quickfix",
+  "type": "module",
+  "main": "./dist/quickfix-renderer.js",
+  "module": "./dist/quickfix-renderer.js",
+  "types": "./dist/types/index.d.ts",
+  "files": [
+    "dist",
+    "pkg"
+  ],
+  "scripts": {
+    "clean": "rm -rf dist pkg",
+    "wasm:build": "wasm-pack build --release --target bundler --out-dir pkg",
+    "wasm:test": "wasm-pack test --headless --chrome",
+    "typecheck": "tsc --project tsconfig.build.json",
+    "build": "pnpm clean && pnpm wasm:build && pnpm typecheck && vite build"
+  },
+  "keywords": [
+    "webgpu",
+    "wgpu",
+    "wasm",
+    "webgl2"
+  ],
+  "author": "Arciva Contributors",
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "vite": "^7.1.12"
+  }
+}

@@ -72,3 +72,12 @@ cmd = "./dev.sh down"
 
 [tasks.setup]
 cmd = "./dev.sh setup"
+
+[tasks.dev]
+depends-on = ["dev-stack"]
+
+[tasks.test]
+depends-on = ["test-backend"]
+
+[tasks.lint]
+depends-on = ["lint-frontend"]

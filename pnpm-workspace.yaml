@@ -1,4 +1,5 @@
 packages:
   - frontend
+  - quickfix-renderer
 ignoredBuiltDependencies:
   - esbuild

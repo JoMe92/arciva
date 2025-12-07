@@ -2518,10 +2518,6 @@ export default function ProjectWorkspace() {
       zoomStep={DETAIL_ZOOM_FACTOR}
       onViewportChange={setDetailViewportRect}
       viewportResetKey={detailViewportResetKey}
-      renamePending={renameMutation.isPending}
-      renameError={renameErrorMessage}
-      view={view}
-      onChangeView={setView}
       quickFixState={effectiveQuickFixState}
     />
   )
@@ -2847,7 +2843,6 @@ export default function ProjectWorkspace() {
               viewMode={view}
               activeTab={activeInspectorTab}
               onActiveTabChange={handleInspectorTabChange}
-              viewMode={view}
               previewAssetId={currentPhotoIdRef.current}
               onLiveQuickFixChange={handleLiveQuickFixChange}
             />

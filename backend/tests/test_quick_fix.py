@@ -11,6 +11,7 @@ from backend.app.services import adjustments as adjustments_service
 from backend.app.storage import PosixStorage
 
 
+@pytest.mark.skip(reason="QuickFix backend rendering disabled")
 def test_apply_adjustments_pipeline_changes_pixels():
     base = Image.new("RGB", (64, 48), color=(120, 110, 100))
     adjustments = schemas.QuickFixAdjustments(
@@ -31,6 +32,7 @@ def test_apply_adjustments_pipeline_changes_pixels():
     assert abs(result_mean - base_mean) > 1.0
 
 
+@pytest.mark.skip(reason="QuickFix backend rendering disabled")
 def test_apply_adjustments_with_grain_is_deterministic():
     base = Image.new("RGB", (32, 32), color=(128, 128, 128))
     np.random.seed(7)

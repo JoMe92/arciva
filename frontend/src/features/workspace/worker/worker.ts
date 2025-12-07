@@ -36,7 +36,7 @@ ctx.onmessage = async (e: MessageEvent) => {
     const msg = e.data;
     try {
         switch (msg.type) {
-            case 'INIT':
+            case 'INIT': {
                 // Dispose of existing renderer to avoid "Too many active WebGL contexts"
                 if (renderer) {
                     try {
@@ -54,22 +54,7 @@ ctx.onmessage = async (e: MessageEvent) => {
                 // Note: Types might mismatch slightly if not strictly typed, casting as any for safety
                 const options = new RendererOptions(backend === 'auto' ? undefined : backend);
 
-                renderer = QuickFixRenderer.init(options) as unknown as QuickFixRenderer; // static init returns promise? No, based on d.ts it returns QuickFixRenderer directly or Promise?
-                // worker.js: renderer = await QuickFixRenderer.init(options);
-                // Let's check init signature in js file: static init(options) { ... return ret; } where ret is from wasm.quickfixrenderer_init
-                // It usually returns the instance directly in wasm-bindgen classes unless async.
-                // Wait, worker.js says `await QuickFixRenderer.init(options)`.
-                // Let's re-read line 35 of worker.js: `renderer = await QuickFixRenderer.init(options);`
-                // But line 492 of quickfix_renderer.js: `static init(options) { ... return ret; }`
-                // Does `wasm.quickfixrenderer_init` return a promise?
-                // Usually `wasm-bindgen` functions are synchronous unless async.
-                // If `worker.js` awaits it, maybe it is async or maybe it's just safe awaiting.
-                // Let's assume await is fine.
-
-                // Wait, line 35 in worker.js: `renderer = await QuickFixRenderer.init(options);`
-                // But line 498 in quickfix_renderer.js: `const ret = wasm.quickfixrenderer_init(ptr0); return ret;`
-                // This looks synchronous. The await might be superfluous in worker.js or I misread something.
-                // I will include await to match behavior.
+                renderer = QuickFixRenderer.init(options) as unknown as QuickFixRenderer;
                 if (renderer instanceof Promise) {
                     renderer = await renderer;
                 }
@@ -80,8 +65,9 @@ ctx.onmessage = async (e: MessageEvent) => {
                 };
                 ctx.postMessage(response);
                 break;
+            }
 
-            case 'SET_IMAGE':
+            case 'SET_IMAGE': {
                 const payload = msg.payload
                 const newImage = payload.imageData;
                 const w = payload.width;
@@ -103,12 +89,14 @@ ctx.onmessage = async (e: MessageEvent) => {
                 sourceHeight = h;
                 // console.log("Worker: Image set", w, h);
                 break;
+            }
 
-            case 'RENDER':
+            case 'RENDER': {
                 if (!renderer)
                     throw new Error("Renderer not initialized");
 
-                let { requestId, imageData, width, height, adjustments } = msg.payload;
+                const { requestId, imageData, adjustments } = msg.payload;
+                let { width, height } = msg.payload;
 
                 // Cancellation check
                 if (requestId < latestRequestId) {
@@ -186,6 +174,7 @@ ctx.onmessage = async (e: MessageEvent) => {
                 ctx.postMessage(frameResponse, [resultBuffer]);
                 finalResult.free();
                 break;
+            }
 
             case 'CANCEL':
                 if (msg.payload.requestId > latestRequestId) {

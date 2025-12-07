@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc, func
 from uuid import UUID
@@ -16,9 +16,6 @@ from ..services.annotations import write_annotations_for_assets
 from ..services.metadata_states import ensure_state_for_link
 from ..services.links import link_asset_to_project
 from ..services import assets as assets_service
-from ..services import adjustments as adjustments_service
-from io import BytesIO
-from PIL import Image
 from ..utils.projects import ensure_project_access
 
 router = APIRouter(prefix="/v1", tags=["assets"])

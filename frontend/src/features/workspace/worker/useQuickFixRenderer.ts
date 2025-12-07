@@ -39,6 +39,8 @@ export function useQuickFixRenderer(
     const loadedAssetId = useRef<string | null>(null)
     const lastRenderedUrl = useRef<string | null>(null)
 
+    const [reloadKey, setReloadKey] = useState(0)
+
     useEffect(() => {
         // Cleanup function to revoke URLs
         return () => {
@@ -61,46 +63,54 @@ export function useQuickFixRenderer(
         if (loadedAssetId.current !== asset.id) {
             let active = true
             setIsProcessing(true)
+            setError(null) // Clear previous errors
 
             const load = async () => {
+                let bitmap: ImageBitmap | null = null
                 try {
-                    // Find the best image source. Ideally the preview or a medium derivative.
-                    // Using preview_url if available, otherwise finding a suitable derivative.
+                    // Find the best image source.
                     let url = asset.preview_url || asset.thumb_url
                     if (!url) throw new Error('No image URL found')
 
                     // Force relative path to use Vite proxy if it points to backend (port 8000)
-                    // This avoids CORS issues since index.html is on 5173
                     try {
                         const u = new URL(url)
                         if (u.origin === 'http://localhost:8000') {
                             url = u.pathname + u.search
                         }
                     } catch (e) {
-                        // ignore if invalid or already relative
+                        // ignore
                     }
 
-                    // Fetch the image
                     const resp = await fetch(url, { credentials: 'include' })
                     if (!resp.ok) throw new Error('Failed to fetch image')
                     const blob = await resp.blob()
-                    const bitmap = await createImageBitmap(blob)
 
                     if (!active) return
+
+                    bitmap = await createImageBitmap(blob)
+
+                    if (!active) {
+                        bitmap.close()
+                        return
+                    }
 
                     // Send to worker
                     await client.setImage(bitmap, bitmap.width, bitmap.height)
                     loadedAssetId.current = asset.id
 
-                    // Trigger a render if we have adjustments
+                    // Force a re-render attempt if we have adjustments pending
                     if (adjustments) {
-                        // This will be handled by the next effect or we can force it here.
-                        // But let's let the adjustment effect handle rendering.
+                        // We can't easily trigger the other effect safely, but
+                        // if the user moves the slider again, it will work.
+                        // Or we could set a state to trigger it.
                     }
+
                 } catch (err) {
                     if (active) {
                         console.error('Failed to load image for Quick Fix:', err)
                         setError(err instanceof Error ? err.message : String(err))
+                        if (bitmap) bitmap.close()
                     }
                 } finally {
                     if (active) setIsProcessing(false)
@@ -110,12 +120,11 @@ export function useQuickFixRenderer(
             load()
             return () => { active = false }
         }
-    }, [asset])
+    }, [asset, reloadKey])
 
     useEffect(() => {
         // Render when adjustments change
         if (!asset || !adjustments || !loadedAssetId.current || loadedAssetId.current !== asset.id) {
-            // If no image is loaded OR the loaded image does not match current asset, wait.
             return
         }
 
@@ -127,34 +136,17 @@ export function useQuickFixRenderer(
             .then((result) => {
                 if (!active) return
 
-                // Result contains imageBitmap as ArrayBuffer (from our worker wrapper)
-                // We need to convert it to a Blob URL
-                // Actually the worker returns raw bytes?
-                // Wait, the worker.js does:
-                // const id = osCtx.getImageData(...) -> returns ImageData
-                // result.data -> Uint8Array (RGBA pixels usually if from Canvas)
-                // If it's raw RGBA, we can't just make a Blob of it and expect 'image/png'.
-                // We need to put it back on a canvas or use createImageBitmap if it's formatted.
-                // The WASM renderer likely returns raw pixel data (RGBA).
+                if (!result.width || !result.height) {
+                    console.error('Render failed: Invalid dimensions', result.width, result.height)
+                    return
+                }
+                const array = new Uint8ClampedArray(result.imageBitmap as ArrayBuffer)
+                if (array.length !== result.width * result.height * 4) {
+                    console.error('Render failed: Data length mismatch')
+                    return
+                }
 
-                // Let's re-read the worker implementation.
-                // worker.js: renderer.process_frame returns FrameResult.
-                // result.data is Uint8Array.
-                // It does NOT encode to PNG.
-
-                // So we receive raw RGBA pixels.
-                // To display this, we can:
-                // 1. Put it on a canvas.
-                // 2. Encode to PNG/JPEG in worker (if WASM supports it).
-                // 3. Main thread: new ImageData(new Uint8ClampedArray(buffer), width, height), put on canvas, toBlob/toDataURL.
-
-                // Since we want a URL for an <img> tag (previewUrl), we probably want a blob.
-                // Efficient way:
-                const imageData = new ImageData(
-                    new Uint8ClampedArray(result.imageBitmap as ArrayBuffer),
-                    result.width,
-                    result.height
-                )
+                const imageData = new ImageData(array, result.width, result.height)
                 const canvas = document.createElement('canvas')
                 canvas.width = result.width
                 canvas.height = result.height
@@ -165,7 +157,6 @@ export function useQuickFixRenderer(
                     if (!active || !blob) return
                     const url = URL.createObjectURL(blob)
 
-                    // Revoke old URL
                     if (lastRenderedUrl.current) {
                         URL.revokeObjectURL(lastRenderedUrl.current)
                     }
@@ -179,11 +170,17 @@ export function useQuickFixRenderer(
                     console.error('Render failed:', err)
                     setError(String(err))
                     setIsProcessing(false)
+
+                    // Recover from "No image data" error
+                    if (String(err).includes('No image data')) {
+                        loadedAssetId.current = null
+                        setReloadKey(k => k + 1) // Trigger reload
+                    }
                 }
             })
 
         return () => { active = false }
-    }, [asset, adjustments]) // We might need to serialize adjustments if they are new objects every time
+    }, [asset, adjustments, reloadKey]) // We might need to serialize adjustments if they are new objects every time
 
     return { previewUrl, isProcessing, error }
 }

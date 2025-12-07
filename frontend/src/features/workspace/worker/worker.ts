@@ -15,6 +15,8 @@ let wasmInitPromise: Promise<void> | null = null;
 let latestRequestId = 0;
 // Store source image data to avoid re-transferring on every render
 let sourceImage: Uint8Array | null = null;
+let sourceWidth = 0;
+let sourceHeight = 0;
 
 /**
  * Initializes the WASM module if not already initialized.
@@ -22,7 +24,8 @@ let sourceImage: Uint8Array | null = null;
 async function initializeWasm() {
     if (!wasmInitPromise) {
         // Pass the resolved URL from Vite to init()
-        wasmInitPromise = init(wasmUrl).then(() => {
+        // Updated to pass a configuration object to avoid deprecation warning
+        wasmInitPromise = init({ module_or_path: wasmUrl }).then(() => {
             init_panic_hook();
         }) as Promise<void>;
     }
@@ -34,6 +37,16 @@ ctx.onmessage = async (e: MessageEvent) => {
     try {
         switch (msg.type) {
             case 'INIT':
+                // Dispose of existing renderer to avoid "Too many active WebGL contexts"
+                if (renderer) {
+                    try {
+                        renderer.free();
+                    } catch (err) {
+                        console.warn('Failed to free previous renderer:', err);
+                    }
+                    renderer = null;
+                }
+
                 await initializeWasm();
 
                 // Reconstruct options from payload
@@ -86,6 +99,8 @@ ctx.onmessage = async (e: MessageEvent) => {
                 else {
                     sourceImage = new Uint8Array(newImage);
                 }
+                sourceWidth = w;
+                sourceHeight = h;
                 // console.log("Worker: Image set", w, h);
                 break;
 
@@ -93,7 +108,7 @@ ctx.onmessage = async (e: MessageEvent) => {
                 if (!renderer)
                     throw new Error("Renderer not initialized");
 
-                const { requestId, imageData, width, height, adjustments } = msg.payload;
+                let { requestId, imageData, width, height, adjustments } = msg.payload;
 
                 // Cancellation check
                 if (requestId < latestRequestId) {
@@ -119,6 +134,10 @@ ctx.onmessage = async (e: MessageEvent) => {
                     }
                 } else if (sourceImage) {
                     data = sourceImage;
+                    if (width === 0 && height === 0) {
+                        width = sourceWidth;
+                        height = sourceHeight;
+                    }
                 } else {
                     throw new Error("No image data provided and no source image set");
                 }
@@ -136,6 +155,12 @@ ctx.onmessage = async (e: MessageEvent) => {
                 if (requestId < latestRequestId) {
                     finalResult.free();
                     return;
+                }
+
+                if (finalResult.width === 0 || finalResult.height === 0) {
+                    console.error("Worker: Render returned invalid dimensions", finalResult.width, finalResult.height);
+                    // throw new Error("Render returned invalid dimensions");
+                    // We might want to continue to see what happens, or fail hard.
                 }
 
                 const resultData = finalResult.data; // Uint8Array

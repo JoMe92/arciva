@@ -44,6 +44,7 @@ def test_apply_adjustments_with_grain_is_deterministic():
     assert result.getpixel((0, 0)) != (128, 128, 128)
 
 
+@pytest.mark.skip(reason="QuickFix backend rendering disabled")
 @pytest.mark.asyncio
 async def test_quick_fix_preview_and_save(client, TestSessionLocal):
     storage = PosixStorage.from_env()

@@ -39,7 +39,6 @@ import { COLOR_MAP } from '../utils'
 
 import { QuickFixPanel } from './QuickFixPanel'
 import type { QuickFixGroupKey, QuickFixState } from '../quickFixState'
-import { useQuickFixRenderer } from '../worker/useQuickFixRenderer'
 
 const RIGHT_PANEL_ID = 'workspace-image-details-panel'
 const RIGHT_PANEL_CONTENT_ID = `${RIGHT_PANEL_ID}-content`
@@ -108,6 +107,7 @@ export function InspectorPanel({
   activeTab: activeTabProp,
   onActiveTabChange,
   viewMode = 'grid',
+  onLiveQuickFixChange,
 }: {
   collapsed: boolean
   onCollapse: () => void
@@ -142,6 +142,7 @@ export function InspectorPanel({
   onActiveTabChange?: (tab: InspectorTab) => void
   viewMode?: 'grid' | 'detail'
   previewAssetId?: string | null
+  onLiveQuickFixChange?: (state: QuickFixState | null) => void
 }) {
   const [internalActiveTab, setInternalActiveTab] = useState<InspectorTab>('details')
   const activeTab = activeTabProp ?? internalActiveTab
@@ -195,19 +196,19 @@ export function InspectorPanel({
     }
   }, [previewAssetId, previewAsset])
 
-  const { previewUrl: workerPreviewUrl, isProcessing: workerBusy } = useQuickFixRenderer(
-    workerAsset,
-    liveQuickFixState ?? quickFixControls?.quickFixState ?? null
-  )
+  const { previewUrl: workerPreviewUrl, isProcessing: workerBusy } = { previewUrl: null, isProcessing: false } // REMOVED LOCAL RENDERER
+
+  // const { previewUrl: workerPreviewUrl, isProcessing: workerBusy } = useQuickFixRenderer(
+  //   workerAsset,
+  //   liveQuickFixState ?? quickFixControls?.quickFixState ?? null
+  // )
 
   const quickFixPreviewBusy = (quickFixControls?.previewBusy || workerBusy) ?? false
 
+  // We no longer render locally in inspector
   const finalPreview = useMemo(() => {
-    if (workerPreviewUrl && previewAsset) {
-      return { ...previewAsset, src: workerPreviewUrl }
-    }
     return previewAsset
-  }, [workerPreviewUrl, previewAsset])
+  }, [previewAsset])
   const mergedInspectorFields = useMemo(() => {
     const map = new Map<string, string>()
     generalFields.forEach((field) => {
@@ -249,6 +250,7 @@ export function InspectorPanel({
 
   const handleLiveQuickFixState = useCallback(
     (state: QuickFixState | null) => {
+      onLiveQuickFixChange?.(state) // Notify parent
       if (state) {
         liveQuickFixDraftRef.current = state
         setLiveQuickFixState(state)
@@ -256,12 +258,14 @@ export function InspectorPanel({
       }
       if (quickFixPreviewBusy) {
         setLiveQuickFixState(liveQuickFixDraftRef.current)
+        onLiveQuickFixChange?.(liveQuickFixDraftRef.current)
       } else {
         liveQuickFixDraftRef.current = null
         setLiveQuickFixState(null)
+        onLiveQuickFixChange?.(null)
       }
     },
-    [quickFixPreviewBusy]
+    [quickFixPreviewBusy, onLiveQuickFixChange]
   )
 
   useEffect(() => {

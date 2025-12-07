@@ -9,29 +9,34 @@ def apply_adjustments(
 ) -> Image.Image:
     """Apply the configured adjustments in a deterministic order."""
 
-    if adjustments is None:
-        return image.copy()
+    # FIXME: Deactivated for client-side transition (QuickFix Renderer)
+    # logic moved to frontend (WASM)
+    # See: https://github.com/JoMe92/quickfix-renderer
+    return image.copy()
 
-    working = image.copy()
-    if working.mode != "RGB":
-        working = working.convert("RGB")
+    # if adjustments is None:
+    #     return image.copy()
 
-    if adjustments.geometry:
-        working = apply_geometry(working, adjustments.geometry)
+    # working = image.copy()
+    # if working.mode != "RGB":
+    #     working = working.convert("RGB")
 
-    if adjustments.crop:
-        working = apply_crop_rotate(working, adjustments.crop)
+    # if adjustments.geometry:
+    #     working = apply_geometry(working, adjustments.geometry)
 
-    if adjustments.exposure:
-        working = apply_exposure(working, adjustments.exposure)
+    # if adjustments.crop:
+    #     working = apply_crop_rotate(working, adjustments.crop)
 
-    if adjustments.color:
-        working = apply_color_balance(working, adjustments.color)
+    # if adjustments.exposure:
+    #     working = apply_exposure(working, adjustments.exposure)
 
-    if adjustments.grain:
-        working = apply_grain(working, adjustments.grain)
+    # if adjustments.color:
+    #     working = apply_color_balance(working, adjustments.color)
 
-    return working
+    # if adjustments.grain:
+    #     working = apply_grain(working, adjustments.grain)
+
+    # return working
 
 
 def apply_crop_rotate(

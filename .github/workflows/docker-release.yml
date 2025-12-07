@@ -59,6 +59,8 @@ jobs:
         with:
           context: .
           file: Dockerfile
+          build-args: |
+            GITHUB_TOKEN=${{ env.GHCR_TOKEN }}
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |

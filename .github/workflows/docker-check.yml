@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  packages: read
 
 jobs:
   build:
@@ -28,6 +29,8 @@ jobs:
         with:
           context: .
           file: Dockerfile
+          build-args: |
+            GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}
           platforms: linux/amd64,linux/arm64
           push: false
           tags: arciva:ci-check

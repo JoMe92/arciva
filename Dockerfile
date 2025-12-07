@@ -4,6 +4,11 @@ FROM node:20-bookworm-slim AS frontend-builder
 WORKDIR /workspace
 RUN corepack enable
 COPY pnpm-lock.yaml pnpm-workspace.yaml ./
+ARG GITHUB_TOKEN
+
+RUN pnpm config set @JoMe92:registry https://npm.pkg.github.com
+RUN pnpm config set //npm.pkg.github.com/:_authToken ${GITHUB_TOKEN}
+
 COPY frontend/package.json frontend/
 RUN pnpm install --frozen-lockfile --filter ./frontend
 COPY frontend ./frontend

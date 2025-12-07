@@ -93,6 +93,7 @@ export function InspectorPanel({
   metadataLoading,
   metadataError,
   previewAsset,
+  previewAssetId,
   detailZoom,
   detailMinZoom,
   detailMaxZoom,
@@ -106,6 +107,7 @@ export function InspectorPanel({
   activeTab: activeTabProp,
   onActiveTabChange,
   viewMode = 'grid',
+  onLiveQuickFixChange,
 }: {
   collapsed: boolean
   onCollapse: () => void
@@ -139,6 +141,8 @@ export function InspectorPanel({
   activeTab?: InspectorTab
   onActiveTabChange?: (tab: InspectorTab) => void
   viewMode?: 'grid' | 'detail'
+  previewAssetId?: string | null
+  onLiveQuickFixChange?: (state: QuickFixState | null) => void
 }) {
   const [internalActiveTab, setInternalActiveTab] = useState<InspectorTab>('details')
   const activeTab = activeTabProp ?? internalActiveTab
@@ -182,7 +186,29 @@ export function InspectorPanel({
   const panelContentClass = isMobilePanel
     ? 'flex flex-1 min-h-0 flex-col gap-3 pb-4'
     : 'flex flex-1 min-h-0 flex-col gap-3 pr-4'
-  const quickFixPreviewBusy = quickFixControls?.previewBusy ?? false
+
+  const workerAsset = useMemo(() => {
+    if (!previewAssetId || !previewAsset) return null
+    return {
+      id: previewAssetId,
+      preview_url: previewAsset.src,
+      thumb_url: previewAsset.thumbSrc,
+    }
+  }, [previewAssetId, previewAsset])
+
+  const { previewUrl: workerPreviewUrl, isProcessing: workerBusy } = { previewUrl: null, isProcessing: false } // REMOVED LOCAL RENDERER
+
+  // const { previewUrl: workerPreviewUrl, isProcessing: workerBusy } = useQuickFixRenderer(
+  //   workerAsset,
+  //   liveQuickFixState ?? quickFixControls?.quickFixState ?? null
+  // )
+
+  const quickFixPreviewBusy = (quickFixControls?.previewBusy || workerBusy) ?? false
+
+  // We no longer render locally in inspector
+  const finalPreview = useMemo(() => {
+    return previewAsset
+  }, [previewAsset])
   const mergedInspectorFields = useMemo(() => {
     const map = new Map<string, string>()
     generalFields.forEach((field) => {
@@ -224,6 +250,7 @@ export function InspectorPanel({
 
   const handleLiveQuickFixState = useCallback(
     (state: QuickFixState | null) => {
+      onLiveQuickFixChange?.(state) // Notify parent
       if (state) {
         liveQuickFixDraftRef.current = state
         setLiveQuickFixState(state)
@@ -231,12 +258,14 @@ export function InspectorPanel({
       }
       if (quickFixPreviewBusy) {
         setLiveQuickFixState(liveQuickFixDraftRef.current)
+        onLiveQuickFixChange?.(liveQuickFixDraftRef.current)
       } else {
         liveQuickFixDraftRef.current = null
         setLiveQuickFixState(null)
+        onLiveQuickFixChange?.(null)
       }
     },
-    [quickFixPreviewBusy]
+    [quickFixPreviewBusy, onLiveQuickFixChange]
   )
 
   useEffect(() => {
@@ -357,7 +386,7 @@ export function InspectorPanel({
           )}
           <div id={RIGHT_PANEL_CONTENT_ID} className={panelContentClass}>
             <InspectorPreviewCard
-              preview={previewAsset}
+              preview={finalPreview}
               hasSelection={hasSelection}
               zoomLevel={detailZoom}
               minZoom={detailMinZoom}
@@ -369,8 +398,8 @@ export function InspectorPanel({
               onPanPreview={onPreviewPan}
               open={previewOpen}
               onToggle={() => setPreviewOpen((open) => !open)}
-              optimisticQuickFix={liveQuickFixState}
-              committedQuickFix={quickFixControls?.quickFixState ?? null}
+              optimisticQuickFix={null} // Keep navigator static (no preview effects)
+              committedQuickFix={null}
             />
             {activeTab === 'details' ? (
               <div className="flex flex-1 min-h-0 flex-col gap-3 overflow-y-auto overflow-x-hidden pr-1">

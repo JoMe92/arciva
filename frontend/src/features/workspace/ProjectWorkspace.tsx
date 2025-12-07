@@ -20,7 +20,6 @@ import {
   type AssetDetail,
   type AssetProjectUsage,
   type LoadMetadataFromProjectResponse,
-  previewQuickFix,
   saveQuickFixAdjustments,
   applyQuickFixBatch,
   type AssetInteractionUpdateResponse,
@@ -609,12 +608,6 @@ export default function ProjectWorkspace() {
   const [cropSettingsByPhoto, setCropSettingsByPhoto] = useState<Record<string, CropSettings>>({})
   const [quickFixStateByPhoto, setQuickFixStateByPhoto] = useState<Record<string, QuickFixState>>({})
   const quickFixPersistedRef = useRef<Record<string, QuickFixState>>({})
-  const [quickFixPreview, setQuickFixPreview] = useState<{ assetId: string; url: string } | null>(null)
-  const quickFixPreviewRef = useRef<{ assetId: string; url: string } | null>(null)
-  const quickFixPreviewControllerRef = useRef<AbortController | null>(null)
-  const quickFixPreviewTimeoutRef = useRef<number | null>(null)
-  const quickFixPreviewSeqRef = useRef(0)
-  const [quickFixPreviewBusy, setQuickFixPreviewBusy] = useState(false)
   const quickFixSaveTimeoutRef = useRef<number | null>(null)
   const quickFixSaveSeqRef = useRef(0)
   const [quickFixSaving, setQuickFixSaving] = useState(false)
@@ -636,6 +629,23 @@ export default function ProjectWorkspace() {
   const [activeMobilePanel, setActiveMobilePanel] = useState<MobileWorkspacePanel>('photos')
   const mobileViewInitializedRef = useRef(false)
 
+  const [liveQuickFixState, setLiveQuickFixState] = useState<QuickFixState | null>(null)
+
+  const handleLiveQuickFixChange = useCallback((state: QuickFixState | null) => {
+    setLiveQuickFixState(state)
+  }, [])
+
+  // Compute effective state for the current image
+  const effectiveQuickFixState = useMemo(() => {
+    // If we have a live state from dragging sliders, it takes precedence
+    if (liveQuickFixState) return liveQuickFixState
+
+    // Otherwise use the persisted state for the current photo, or default if none
+    const currentId = currentPhotoIdRef.current
+    if (!currentId) return null
+    return quickFixStateByPhoto[currentId] ?? createDefaultQuickFixState()
+  }, [liveQuickFixState, quickFixStateByPhoto])
+
   useEffect(() => {
     if (typeof window === 'undefined') return
     const updateLayout = () => {
@@ -655,32 +665,12 @@ export default function ProjectWorkspace() {
 
   useEffect(() => {
     return () => {
-      if (quickFixPreviewTimeoutRef.current !== null) {
-        window.clearTimeout(quickFixPreviewTimeoutRef.current)
-        quickFixPreviewTimeoutRef.current = null
-      }
       if (quickFixSaveTimeoutRef.current !== null) {
         window.clearTimeout(quickFixSaveTimeoutRef.current)
         quickFixSaveTimeoutRef.current = null
       }
-      if (quickFixPreviewControllerRef.current) {
-        quickFixPreviewControllerRef.current.abort()
-        quickFixPreviewControllerRef.current = null
-      }
-      if (quickFixPreviewRef.current) {
-        URL.revokeObjectURL(quickFixPreviewRef.current.url)
-        quickFixPreviewRef.current = null
-      }
     }
   }, [])
-
-  useEffect(() => {
-    const previous = quickFixPreviewRef.current
-    if (previous && previous !== quickFixPreview) {
-      URL.revokeObjectURL(previous.url)
-    }
-    quickFixPreviewRef.current = quickFixPreview
-  }, [quickFixPreview])
 
   useEffect(() => {
     if (!isMobileLayout) {
@@ -1694,20 +1684,18 @@ export default function ProjectWorkspace() {
     navigate('/')
   }
 
+
   const baseCurrentPhoto = visible[current] ?? null
   const currentAssetId = baseCurrentPhoto?.id ?? null
-  const detailItems: Photo[] = useMemo(() => {
-    if (!quickFixPreview) return visible
-    return visible.map((photo) =>
-      quickFixPreview.assetId === photo.id ? { ...photo, previewSrc: quickFixPreview.url } : photo
-    )
-  }, [quickFixPreview, visible])
+  const detailItems: Photo[] = visible
   const currentPhoto = detailItems[current] ?? baseCurrentPhoto ?? null
+
   useEffect(() => {
     if (activeMobilePanel === 'details' && !currentPhoto) {
       setActiveMobilePanel('photos')
     }
   }, [activeMobilePanel, currentPhoto])
+
   useEffect(() => {
     if (!currentPhoto?.id) return
     setCropSettingsByPhoto((prev) => {
@@ -1715,6 +1703,7 @@ export default function ProjectWorkspace() {
       return { ...prev, [currentPhoto.id]: createDefaultCropSettings() }
     })
   }, [currentPhoto?.id])
+
   useEffect(() => {
     if (!currentPhoto?.id) return
     setQuickFixStateByPhoto((prev) => {
@@ -1722,19 +1711,13 @@ export default function ProjectWorkspace() {
       return { ...prev, [currentPhoto.id]: createDefaultQuickFixState() }
     })
   }, [currentPhoto?.id])
+
   useEffect(() => {
-    if (!quickFixPreview) return
-    if (quickFixPreview.assetId === currentAssetId) return
-    setQuickFixPreview(null)
-  }, [currentAssetId, quickFixPreview])
-  useEffect(() => {
-    if (quickFixPreviewControllerRef.current) {
-      quickFixPreviewControllerRef.current.abort()
-      quickFixPreviewControllerRef.current = null
+    if (!currentAssetId) {
+      setDetailViewportRect(null)
+      setPreviewPanRequest(null)
+      setDetailViewportResetKey((key) => key + 1)
     }
-    quickFixPreviewSeqRef.current += 1
-    setQuickFixPreviewBusy(false)
-    setQuickFixError(null)
   }, [currentAssetId])
   useEffect(() => {
     quickFixAdjustingRef.current = false
@@ -1817,65 +1800,7 @@ export default function ProjectWorkspace() {
     setDetailViewportRect((prev) => (prev ? { ...prev, x: position.x, y: position.y } : prev))
     setPreviewPanRequest({ ...position, token: Date.now() })
   }, [])
-  const requestQuickFixPreview = useCallback(
-    (assetId: string, state: QuickFixState) => {
-      if (!assetId) return
-      if (!hasQuickFixAdjustments(state)) {
-        setQuickFixPreview((prev) => (prev?.assetId === assetId ? null : prev))
-        setQuickFixPreviewBusy(false)
-        if (quickFixPreviewControllerRef.current) {
-          quickFixPreviewControllerRef.current.abort()
-          quickFixPreviewControllerRef.current = null
-        }
-        setQuickFixError(null)
-        return
-      }
-      const payload = quickFixStateToPayload(state)
-      if (!payload) {
-        setQuickFixPreview((prev) => (prev?.assetId === assetId ? null : prev))
-        setQuickFixPreviewBusy(false)
-        return
-      }
-      if (quickFixPreviewControllerRef.current) {
-        quickFixPreviewControllerRef.current.abort()
-      }
-      const controller = new AbortController()
-      quickFixPreviewControllerRef.current = controller
-      const seq = ++quickFixPreviewSeqRef.current
-      setQuickFixPreviewBusy(true)
-      previewQuickFix(assetId, payload, { signal: controller.signal })
-        .then((blob) => {
-          if (quickFixPreviewSeqRef.current !== seq) return
-          const url = URL.createObjectURL(blob)
-          setQuickFixPreview({ assetId, url })
-          setQuickFixPreviewBusy(false)
-          setQuickFixError(null)
-        })
-        .catch((error) => {
-          if (controller.signal.aborted) return
-          console.error('Failed to render Quick Fix preview', error)
-          if (quickFixPreviewSeqRef.current === seq) {
-            setQuickFixPreviewBusy(false)
-          }
-          setQuickFixError('Preview update failed. Please try again.')
-        })
-    },
-    []
-  )
-  const scheduleQuickFixPreview = useCallback(
-    (assetId: string, state: QuickFixState) => {
-      if (!assetId) return
-      if (quickFixPreviewTimeoutRef.current !== null) {
-        window.clearTimeout(quickFixPreviewTimeoutRef.current)
-      }
-      const delay = quickFixAdjustingRef.current ? 500 : 150
-      quickFixPreviewTimeoutRef.current = window.setTimeout(() => {
-        quickFixPreviewTimeoutRef.current = null
-        requestQuickFixPreview(assetId, state)
-      }, delay)
-    },
-    [requestQuickFixPreview]
-  )
+
   const requestQuickFixSave = useCallback(
     async (assetId: string, state: QuickFixState) => {
       if (!projectId) return
@@ -2106,13 +2031,8 @@ export default function ProjectWorkspace() {
       }
       return { ...prev, [currentAssetId]: nextValue }
     })
-    if (hasQuickFixAdjustments(serverState)) {
-      requestQuickFixPreview(currentAssetId, serverState)
-    } else {
-      setQuickFixPreview((prev) => (prev?.assetId === currentAssetId ? null : prev))
-    }
     setQuickFixError(null)
-  }, [currentAssetDetail?.metadata_state?.edits?.quick_fix, currentAssetId, currentDetailAspectRatio, requestQuickFixPreview])
+  }, [currentAssetDetail?.metadata_state?.edits?.quick_fix, currentAssetId, currentDetailAspectRatio])
   const currentCropSettings = currentPhoto?.id ? cropSettingsByPhoto[currentPhoto.id] ?? null : null
   const currentQuickFixState = currentAssetId ? quickFixStateByPhoto[currentAssetId] ?? null : null
   const cropModeActive = activeInspectorTab === 'quick-fix' && !(currentCropSettings?.applied ?? false)
@@ -2147,7 +2067,7 @@ export default function ProjectWorkspace() {
         setQuickFixStateByPhoto((prev) => ({ ...prev, ...stateMap }))
 
         if (stateMap[currentAssetId]) {
-          scheduleQuickFixPreview(currentAssetId, stateMap[currentAssetId])
+          // Preview handled by client-side worker
         }
 
         const ids = Object.keys(stateMap)
@@ -2174,7 +2094,6 @@ export default function ProjectWorkspace() {
       currentAssetId,
       applyToSelection,
       selectedPhotoIds,
-      scheduleQuickFixPreview,
       scheduleQuickFixSave,
       scheduleQuickFixBatchSave,
       quickFixStateByPhoto,
@@ -2316,7 +2235,7 @@ export default function ProjectWorkspace() {
         setQuickFixStateByPhoto((prev) => ({ ...prev, ...stateMap }))
 
         if (stateMap[currentAssetId]) {
-          scheduleQuickFixPreview(currentAssetId, stateMap[currentAssetId])
+          // Preview handled by client-side worker
         }
 
         const ids = Object.keys(stateMap)
@@ -2352,7 +2271,6 @@ export default function ProjectWorkspace() {
       currentAssetId,
       applyToSelection,
       selectedPhotoIds,
-      scheduleQuickFixPreview,
       scheduleQuickFixSave,
       scheduleQuickFixBatchSave,
       quickFixStateByPhoto,
@@ -2384,7 +2302,7 @@ export default function ProjectWorkspace() {
       setQuickFixStateByPhoto((prev) => ({ ...prev, ...stateMap }))
 
       if (stateMap[currentAssetId]) {
-        scheduleQuickFixPreview(currentAssetId, stateMap[currentAssetId])
+        // Preview handled by client-side worker
       }
 
       const ids = Object.keys(stateMap)
@@ -2417,7 +2335,6 @@ export default function ProjectWorkspace() {
     currentAssetId,
     applyToSelection,
     selectedPhotoIds,
-    scheduleQuickFixPreview,
     scheduleQuickFixSave,
     scheduleQuickFixBatchSave,
     quickFixStateByPhoto,
@@ -2435,7 +2352,7 @@ export default function ProjectWorkspace() {
       onQuickFixChange: applyQuickFixChange,
       onQuickFixGroupReset: handleQuickFixGroupReset,
       onQuickFixGlobalReset: handleQuickFixGlobalReset,
-      previewBusy: quickFixPreviewBusy,
+      previewBusy: false,
       saving: quickFixSaving,
       errorMessage: quickFixError,
       onAdjustingChange: handleQuickFixAdjustingChange,
@@ -2459,7 +2376,6 @@ export default function ProjectWorkspace() {
       handleQuickFixGroupReset,
       handleQuickFixAdjustingChange,
       quickFixError,
-      quickFixPreviewBusy,
       quickFixSaving,
       applyToSelection,
       history.canUndo,
@@ -2472,15 +2388,14 @@ export default function ProjectWorkspace() {
     if (!currentPhoto) return null
     const detailPreviewUrl = withBase(currentAssetDetail?.preview_url ?? null)
     const detailThumbUrl = withBase(currentAssetDetail?.thumb_url ?? null)
-    const quickFixPreviewSrc =
-      quickFixPreview && quickFixPreview.assetId === currentAssetId ? quickFixPreview.url : null
+
+    // Quick Fix preview handled by client-side worker in InspectorPanel
     const primarySrc =
-      quickFixPreviewSrc ??
       detailPreviewUrl ??
       currentPhoto.previewSrc ??
       currentPhoto.thumbSrc ??
       detailThumbUrl
-    const fallback = quickFixPreviewSrc ?? currentPhoto.thumbSrc ?? detailThumbUrl ?? null
+    const fallback = currentPhoto.thumbSrc ?? detailThumbUrl ?? null
     return {
       src: primarySrc,
       thumbSrc: fallback,
@@ -2496,7 +2411,6 @@ export default function ProjectWorkspace() {
     currentAssetDetail?.preview_url,
     currentAssetDetail?.thumb_url,
     currentAssetId,
-    quickFixPreview,
   ])
   const metadataSourceProjectId =
     currentPhoto?.metadataSourceProjectId ??
@@ -2604,19 +2518,12 @@ export default function ProjectWorkspace() {
       zoomStep={DETAIL_ZOOM_FACTOR}
       onViewportChange={setDetailViewportRect}
       viewportResetKey={detailViewportResetKey}
-      assetDimensions={currentAssetDimensions}
-      onZoomChange={setDetailZoom}
-      previewPanRequest={previewPanRequest}
-      showFilmstrip={!isMobileLayout}
-      enableSwipeNavigation={isMobileLayout}
-      cropSettings={currentCropSettings}
-      onCropRectChange={handleCropRectChange}
-      cropModeActive={cropModeActive && Boolean(currentPhoto)}
+      quickFixState={effectiveQuickFixState}
     />
   )
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-[var(--surface-subtle,#FBF7EF)] text-[var(--text,#1F1E1B)]">
+    <div className="flex h-screen flex-col overflow-hidden bg-[var(--surface-placeholder,#F3EBDD)] text-[var(--text,#1F1E1B)]">
       <TopBar
         projectName={projectName}
         onBack={goBack}
@@ -2657,313 +2564,327 @@ export default function ProjectWorkspace() {
         layout={isMobileLayout ? 'mobile' : 'desktop'}
         accountControl={<UserMenu variant={isMobileLayout ? 'compact' : 'full'} />}
       />
-      {experimentalStorageWarning ? (
-        <div className="mx-4 mt-3 rounded-3xl border border-red-200 bg-red-50 px-4 py-3 text-[13px] text-red-800">
-          Experimental storage configuration: one or more paths are not available. Some images may
-          be missing until all configured drives are available.
-        </div>
-      ) : null}
-      {uploadBanner && (
-        <div className="pointer-events-none fixed bottom-6 right-6 z-50">
-          <div
-            className={`pointer-events-auto w-72 rounded-lg border px-4 py-3 shadow-lg ${uploadBanner.status === 'error'
-              ? 'border-[#F7C9C9] bg-[#FDF2F2]'
-              : 'border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]'
-              }`}
-          >
-            {uploadBanner.status === 'running' && (
-              <>
-                <div className="flex items-center justify-between text-sm font-semibold text-[var(--text,#1F1E1B)]">
-                  Uploading assets
-                  <span className="text-xs text-[var(--text-muted,#6B645B)]">
-                    {uploadBanner.percent}%
-                  </span>
+      {
+        experimentalStorageWarning ? (
+          <div className="mx-4 mt-3 rounded-3xl border border-red-200 bg-red-50 px-4 py-3 text-[13px] text-red-800">
+            Experimental storage configuration: one or more paths are not available. Some images may
+            be missing until all configured drives are available.
+          </div>
+        ) : null
+      }
+      {
+        uploadBanner && (
+          <div className="pointer-events-none fixed bottom-6 right-6 z-50">
+            <div
+              className={`pointer-events-auto w-72 rounded-lg border px-4 py-3 shadow-lg ${uploadBanner.status === 'error'
+                ? 'border-[#F7C9C9] bg-[#FDF2F2]'
+                : 'border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]'
+                }`}
+            >
+              {uploadBanner.status === 'running' && (
+                <>
+                  <div className="flex items-center justify-between text-sm font-semibold text-[var(--text,#1F1E1B)]">
+                    Uploading assets
+                    <span className="text-xs text-[var(--text-muted,#6B645B)]">
+                      {uploadBanner.percent}%
+                    </span>
+                  </div>
+                  <div className="mt-1 text-[11px] text-[var(--text-muted,#6B645B)]">
+                    {uploadBanner.completed}/{uploadBanner.total} assets •{' '}
+                    {formatBytes(uploadBanner.bytesUploaded)} of{' '}
+                    {formatBytes(uploadBanner.bytesTotal)}
+                  </div>
+                  <div className="mt-3 h-1.5 rounded-full bg-[var(--sand-100,#F3EBDD)]">
+                    <div
+                      className="h-full rounded-full bg-[var(--charcoal-800,#1F1E1B)]"
+                      style={{ width: `${uploadBanner.percent}%` }}
+                    />
+                  </div>
+                </>
+              )}
+              {uploadBanner.status === 'success' && (
+                <div>
+                  <div className="text-sm font-semibold text-[var(--text,#1F1E1B)]">
+                    Upload complete
+                  </div>
+                  <div className="mt-1 text-[11px] text-[var(--text-muted,#6B645B)]">
+                    {uploadBanner.total} asset{uploadBanner.total === 1 ? '' : 's'} imported •{' '}
+                    {formatBytes(uploadBanner.bytesTotal)}
+                  </div>
                 </div>
-                <div className="mt-1 text-[11px] text-[var(--text-muted,#6B645B)]">
-                  {uploadBanner.completed}/{uploadBanner.total} assets •{' '}
-                  {formatBytes(uploadBanner.bytesUploaded)} of{' '}
-                  {formatBytes(uploadBanner.bytesTotal)}
+              )}
+              {uploadBanner.status === 'error' && (
+                <div>
+                  <div className="text-sm font-semibold text-[#B42318]">Upload interrupted</div>
+                  <div className="mt-1 text-[11px] text-[#B42318]">
+                    {uploadBanner.error ??
+                      'Something went wrong. Please reopen the import sheet to retry.'}
+                  </div>
                 </div>
-                <div className="mt-3 h-1.5 rounded-full bg-[var(--sand-100,#F3EBDD)]">
-                  <div
-                    className="h-full rounded-full bg-[var(--charcoal-800,#1F1E1B)]"
-                    style={{ width: `${uploadBanner.percent}%` }}
+              )}
+            </div>
+          </div>
+        )
+      }
+      {
+        uploadInfo && (
+          <div className="fixed bottom-6 left-6 z-50 w-80 rounded-lg border border-[var(--river-200,#DCEDEC)] bg-[var(--river-50,#F0F7F6)] px-4 py-3 text-sm text-[var(--river-900,#10302E)] shadow-lg">
+            <div className="flex items-start gap-3">
+              <span>{uploadInfo}</span>
+              <button
+                type="button"
+                className="ml-auto text-xs text-[var(--river-700,#2C5B58)] hover:text-[var(--river-900,#10302E)]"
+                onClick={dismissUploadInfo}
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )
+      }
+
+      {
+        isMobileLayout ? (
+          <>
+            <div className="flex-1 min-h-0 overflow-hidden pb-24">
+              {activeMobilePanel === 'project' ? (
+                <div className="h-full overflow-y-auto px-3">
+                  <Sidebar
+                    dateTree={dateTree}
+                    projectOverview={projectOverview}
+                    onRenameProject={handleRename}
+                    renamePending={renameMutation.isPending}
+                    renameError={renameErrorMessage}
+                    onProjectOverviewChange={handleProjectInfoChange}
+                    projectOverviewPending={projectInfoMutation.isPending}
+                    projectOverviewError={projectInfoErrorMessage}
+                    onOpenImport={() => setImportOpen(true)}
+                    onSelectDay={handleDaySelect}
+                    selectedDayKey={selectedDayKey}
+                    selectedDay={selectedDayNode}
+                    onClearDateFilter={clearDateFilter}
+                    collapsed={false}
+                    onCollapse={() => { }}
+                    onExpand={() => { }}
+                    mode="mobile"
                   />
                 </div>
-              </>
-            )}
-            {uploadBanner.status === 'success' && (
-              <div>
-                <div className="text-sm font-semibold text-[var(--text,#1F1E1B)]">
-                  Upload complete
+              ) : activeMobilePanel === 'details' ? (
+                <div className="h-full overflow-y-auto px-3">
+                  <InspectorPanel
+                    collapsed={false}
+                    onCollapse={() => { }}
+                    onExpand={() => { }}
+                    hasSelection={Boolean(currentPhoto)}
+                    selectionCount={selectedPhotoIds.size}
+                    usedProjects={usedProjects}
+                    usedProjectsLoading={assetProjectsLoading}
+                    usedProjectsError={usedProjectsErrorMessage}
+                    metadataSourceId={metadataSourceId}
+                    onChangeMetadataSource={handleMetadataSourceChange}
+                    metadataSourceBusy={metadataSyncPending}
+                    metadataSourceError={metadataSourceActionError}
+                    keyMetadataSections={{
+                      general: generalInspectorFields,
+                      capture: captureInspectorFields,
+                    }}
+                    metadataSummary={metadataSummary}
+                    metadataEntries={metadataEntries}
+                    metadataWarnings={metadataWarnings}
+                    metadataLoading={metadataLoading}
+                    metadataError={metadataErrorMessage}
+                    previewAsset={inspectorPreviewAsset}
+                    detailZoom={detailZoom}
+                    detailMinZoom={DETAIL_MIN_ZOOM}
+                    detailMaxZoom={DETAIL_MAX_ZOOM}
+                    onDetailZoomIn={handleDetailZoomIn}
+                    onDetailZoomOut={handleDetailZoomOut}
+                    onDetailZoomReset={handleDetailZoomReset}
+                    detailViewport={detailViewportRect}
+                    onPreviewPan={handlePreviewPan}
+                    mode="mobile"
+                    quickFixControls={quickFixControls}
+                    activeTab={activeInspectorTab}
+                    onActiveTabChange={handleInspectorTabChange}
+                    previewAssetId={currentPhoto?.id}
+                  />
                 </div>
-                <div className="mt-1 text-[11px] text-[var(--text-muted,#6B645B)]">
-                  {uploadBanner.total} asset{uploadBanner.total === 1 ? '' : 's'} imported •{' '}
-                  {formatBytes(uploadBanner.bytesTotal)}
+              ) : (
+                <div className="flex h-full flex-col">
+                  <MobilePhotosModeToggle view={view} onChange={setView} />
+                  <div
+                    ref={activeMobilePanel === 'photos' ? setContentRef : undefined}
+                    className="flex-1 min-h-0 min-w-0 overflow-hidden bg-[var(--surface,#FFFFFF)]"
+                  >
+                    {photosWorkspaceContent}
+                  </div>
                 </div>
-              </div>
-            )}
-            {uploadBanner.status === 'error' && (
-              <div>
-                <div className="text-sm font-semibold text-[#B42318]">Upload interrupted</div>
-                <div className="mt-1 text-[11px] text-[#B42318]">
-                  {uploadBanner.error ??
-                    'Something went wrong. Please reopen the import sheet to retry.'}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-      {uploadInfo && (
-        <div className="fixed bottom-6 left-6 z-50 w-80 rounded-lg border border-[var(--river-200,#DCEDEC)] bg-[var(--river-50,#F0F7F6)] px-4 py-3 text-sm text-[var(--river-900,#10302E)] shadow-lg">
-          <div className="flex items-start gap-3">
-            <span>{uploadInfo}</span>
+              )}
+            </div>
+            <MobileBottomBar
+              activePanel={activeMobilePanel}
+              onSelectPanel={setActiveMobilePanel}
+              onOpenExport={() => setExportDialogOpen(true)}
+              canExport={selectedPhotoIds.size > 0}
+              detailsDisabled={!currentPhoto}
+            />
+          </>
+        ) : (
+          <div
+            className="flex-1 min-h-0 grid overflow-hidden"
+            style={{
+              gridTemplateColumns: `${effectiveLeftWidth}px ${HANDLE_WIDTH}px minmax(0,1fr) ${HANDLE_WIDTH}px ${effectiveRightWidth}px`,
+            }}
+          >
+            <Sidebar
+              dateTree={dateTree}
+              projectOverview={projectOverview}
+              onRenameProject={handleRename}
+              renamePending={renameMutation.isPending}
+              renameError={renameErrorMessage}
+              onProjectOverviewChange={handleProjectInfoChange}
+              projectOverviewPending={projectInfoMutation.isPending}
+              projectOverviewError={projectInfoErrorMessage}
+              onOpenImport={() => setImportOpen(true)}
+              onSelectDay={handleDaySelect}
+              selectedDayKey={selectedDayKey}
+              selectedDay={selectedDayNode}
+              onClearDateFilter={clearDateFilter}
+              collapsed={leftPanelCollapsed}
+              onCollapse={() => setLeftPanelCollapsed(true)}
+              onExpand={() => setLeftPanelCollapsed(false)}
+            />
+
             <button
               type="button"
-              className="ml-auto text-xs text-[var(--river-700,#2C5B58)] hover:text-[var(--river-900,#10302E)]"
-              onClick={dismissUploadInfo}
+              role="separator"
+              aria-orientation="vertical"
+              aria-valuemin={LEFT_COLLAPSED_WIDTH}
+              aria-valuemax={LEFT_MAX_WIDTH}
+              aria-valuenow={leftPanelCollapsed ? LEFT_COLLAPSED_WIDTH : leftPanelWidth}
+              aria-valuetext={
+                leftPanelCollapsed ? 'Collapsed' : `${Math.round(leftPanelWidth)} pixels`
+              }
+              aria-label="Resize Project Overview panel"
+              tabIndex={0}
+              className="group flex h-full w-full cursor-col-resize items-center justify-center border-x border-[var(--border,#EDE1C6)] bg-[var(--sand-50,#FBF7EF)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)]"
+              onPointerDown={handleLeftHandlePointerDown}
+              onKeyDown={handleLeftHandleKeyDown}
+              onDoubleClick={() => setLeftPanelCollapsed((prev) => !prev)}
             >
-              Dismiss
+              <span
+                className="h-10 w-[2px] rounded-full bg-[var(--border,#EDE1C6)] transition-colors group-hover:bg-[var(--text-muted,#6B645B)]"
+                aria-hidden="true"
+              />
             </button>
-          </div>
-        </div>
-      )}
 
-      {isMobileLayout ? (
-        <>
-          <div className="flex-1 min-h-0 overflow-hidden pb-24">
-            {activeMobilePanel === 'project' ? (
-              <div className="h-full overflow-y-auto px-3">
-                <Sidebar
-                  dateTree={dateTree}
-                  projectOverview={projectOverview}
-                  onRenameProject={handleRename}
-                  renamePending={renameMutation.isPending}
-                  renameError={renameErrorMessage}
-                  onProjectOverviewChange={handleProjectInfoChange}
-                  projectOverviewPending={projectInfoMutation.isPending}
-                  projectOverviewError={projectInfoErrorMessage}
-                  onOpenImport={() => setImportOpen(true)}
-                  onSelectDay={handleDaySelect}
-                  selectedDayKey={selectedDayKey}
-                  selectedDay={selectedDayNode}
-                  onClearDateFilter={clearDateFilter}
-                  collapsed={false}
-                  onCollapse={() => { }}
-                  onExpand={() => { }}
-                  mode="mobile"
-                />
-              </div>
-            ) : activeMobilePanel === 'details' ? (
-              <div className="h-full overflow-y-auto px-3">
-                <InspectorPanel
-                  collapsed={false}
-                  onCollapse={() => { }}
-                  onExpand={() => { }}
-                  hasSelection={Boolean(currentPhoto)}
-                  selectionCount={selectedPhotoIds.size}
-                  usedProjects={usedProjects}
-                  usedProjectsLoading={assetProjectsLoading}
-                  usedProjectsError={usedProjectsErrorMessage}
-                  metadataSourceId={metadataSourceId}
-                  onChangeMetadataSource={handleMetadataSourceChange}
-                  metadataSourceBusy={metadataSyncPending}
-                  metadataSourceError={metadataSourceActionError}
-                  keyMetadataSections={{
-                    general: generalInspectorFields,
-                    capture: captureInspectorFields,
-                  }}
-                  metadataSummary={metadataSummary}
-                  metadataEntries={metadataEntries}
-                  metadataWarnings={metadataWarnings}
-                  metadataLoading={metadataLoading}
-                  metadataError={metadataErrorMessage}
-                  previewAsset={inspectorPreviewAsset}
-                  detailZoom={detailZoom}
-                  detailMinZoom={DETAIL_MIN_ZOOM}
-                  detailMaxZoom={DETAIL_MAX_ZOOM}
-                  onDetailZoomIn={handleDetailZoomIn}
-                  onDetailZoomOut={handleDetailZoomOut}
-                  onDetailZoomReset={handleDetailZoomReset}
-                  detailViewport={detailViewportRect}
-                  onPreviewPan={handlePreviewPan}
-                  mode="mobile"
-                  quickFixControls={quickFixControls}
-                  activeTab={activeInspectorTab}
-                  onActiveTabChange={handleInspectorTabChange}
-                />
-              </div>
-            ) : (
-              <div className="flex h-full flex-col">
-                <MobilePhotosModeToggle view={view} onChange={setView} />
-                <div
-                  ref={activeMobilePanel === 'photos' ? setContentRef : undefined}
-                  className="flex-1 min-h-0 min-w-0 overflow-hidden bg-[var(--surface,#FFFFFF)]"
-                >
-                  {photosWorkspaceContent}
+            <main
+              ref={setContentRef}
+              className="relative flex min-h-0 min-w-0 flex-col bg-[var(--surface,#FFFFFF)]"
+            >
+              <div className="flex-1 min-h-0 min-w-0 overflow-hidden">{photosWorkspaceContent}</div>
+            </main>
+
+            <button
+              type="button"
+              role="separator"
+              aria-orientation="vertical"
+              aria-valuemin={RIGHT_COLLAPSED_WIDTH}
+              aria-valuemax={RIGHT_MAX_WIDTH}
+              aria-valuenow={rightPanelCollapsed ? RIGHT_COLLAPSED_WIDTH : rightPanelWidth}
+              aria-valuetext={
+                rightPanelCollapsed ? 'Collapsed' : `${Math.round(rightPanelWidth)} pixels`
+              }
+              aria-label="Resize Image Details panel"
+              tabIndex={0}
+              className="group flex h-full w-full cursor-col-resize items-center justify-center border-x border-[var(--border,#EDE1C6)] bg-[var(--sand-50,#FBF7EF)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)]"
+              onPointerDown={handleRightHandlePointerDown}
+              onKeyDown={handleRightHandleKeyDown}
+              onDoubleClick={() => setRightPanelCollapsed((prev) => !prev)}
+            >
+              <span
+                className="h-10 w-[2px] rounded-full bg-[var(--border,#EDE1C6)] transition-colors group-hover:bg-[var(--text-muted,#6B645B)]"
+                aria-hidden="true"
+              />
+            </button>
+
+            <InspectorPanel
+              collapsed={rightPanelCollapsed}
+              onCollapse={() => setRightPanelCollapsed(true)}
+              onExpand={() => setRightPanelCollapsed(false)}
+              hasSelection={Boolean(currentPhoto)}
+              selectionCount={selectedPhotoIds.size}
+              usedProjects={usedProjects}
+              usedProjectsLoading={assetProjectsLoading}
+              usedProjectsError={usedProjectsErrorMessage}
+              metadataSourceId={metadataSourceId}
+              onChangeMetadataSource={handleMetadataSourceChange}
+              metadataSourceBusy={metadataSyncPending}
+              metadataSourceError={metadataSourceActionError}
+              keyMetadataSections={{
+                general: generalInspectorFields,
+                capture: captureInspectorFields,
+              }}
+              metadataSummary={metadataSummary}
+              metadataEntries={metadataEntries}
+              metadataWarnings={metadataWarnings}
+              metadataLoading={metadataLoading}
+              metadataError={metadataErrorMessage}
+              previewAsset={inspectorPreviewAsset}
+              detailZoom={detailZoom}
+              detailMinZoom={DETAIL_MIN_ZOOM}
+              detailMaxZoom={DETAIL_MAX_ZOOM}
+              onDetailZoomIn={handleDetailZoomIn}
+              onDetailZoomOut={handleDetailZoomOut}
+              onDetailZoomReset={handleDetailZoomReset}
+              detailViewport={detailViewportRect}
+              onPreviewPan={handlePreviewPan}
+              quickFixControls={quickFixControls}
+              viewMode={view}
+              activeTab={activeInspectorTab}
+              onActiveTabChange={handleInspectorTabChange}
+              previewAssetId={currentPhotoIdRef.current}
+              onLiveQuickFixChange={handleLiveQuickFixChange}
+            />
+          </div>
+        )
+      }
+
+      {
+        importOpen && (
+          <ErrorBoundary
+            fallback={
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 p-4">
+                <div className="w-[min(95vw,640px)] rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-6 text-sm text-[var(--text,#1F1E1B)] shadow-2xl">
+                  <div className="text-base font-semibold">Import panel crashed</div>
+                  <p className="mt-2 text-[var(--text-muted,#6B645B)]">
+                    Something went wrong while loading the import sheet. Close it and try again.
+                  </p>
+                  <div className="mt-4 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setImportOpen(false)}
+                      className="rounded border border-[var(--border,#E1D3B9)] px-3 py-1.5"
+                    >
+                      Close
+                    </button>
+                  </div>
                 </div>
               </div>
-            )}
-          </div>
-          <MobileBottomBar
-            activePanel={activeMobilePanel}
-            onSelectPanel={setActiveMobilePanel}
-            onOpenExport={() => setExportDialogOpen(true)}
-            canExport={selectedPhotoIds.size > 0}
-            detailsDisabled={!currentPhoto}
-          />
-        </>
-      ) : (
-        <div
-          className="flex-1 min-h-0 grid overflow-hidden"
-          style={{
-            gridTemplateColumns: `${effectiveLeftWidth}px ${HANDLE_WIDTH}px minmax(0,1fr) ${HANDLE_WIDTH}px ${effectiveRightWidth}px`,
-          }}
-        >
-          <Sidebar
-            dateTree={dateTree}
-            projectOverview={projectOverview}
-            onRenameProject={handleRename}
-            renamePending={renameMutation.isPending}
-            renameError={renameErrorMessage}
-            onProjectOverviewChange={handleProjectInfoChange}
-            projectOverviewPending={projectInfoMutation.isPending}
-            projectOverviewError={projectInfoErrorMessage}
-            onOpenImport={() => setImportOpen(true)}
-            onSelectDay={handleDaySelect}
-            selectedDayKey={selectedDayKey}
-            selectedDay={selectedDayNode}
-            onClearDateFilter={clearDateFilter}
-            collapsed={leftPanelCollapsed}
-            onCollapse={() => setLeftPanelCollapsed(true)}
-            onExpand={() => setLeftPanelCollapsed(false)}
-          />
-
-          <button
-            type="button"
-            role="separator"
-            aria-orientation="vertical"
-            aria-valuemin={LEFT_COLLAPSED_WIDTH}
-            aria-valuemax={LEFT_MAX_WIDTH}
-            aria-valuenow={leftPanelCollapsed ? LEFT_COLLAPSED_WIDTH : leftPanelWidth}
-            aria-valuetext={
-              leftPanelCollapsed ? 'Collapsed' : `${Math.round(leftPanelWidth)} pixels`
             }
-            aria-label="Resize Project Overview panel"
-            tabIndex={0}
-            className="group flex h-full w-full cursor-col-resize items-center justify-center border-x border-[var(--border,#EDE1C6)] bg-[var(--sand-50,#FBF7EF)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)]"
-            onPointerDown={handleLeftHandlePointerDown}
-            onKeyDown={handleLeftHandleKeyDown}
-            onDoubleClick={() => setLeftPanelCollapsed((prev) => !prev)}
           >
-            <span
-              className="h-10 w-[2px] rounded-full bg-[var(--border,#EDE1C6)] transition-colors group-hover:bg-[var(--text-muted,#6B645B)]"
-              aria-hidden="true"
+            <ImportSheet
+              projectId={id}
+              onClose={() => setImportOpen(false)}
+              onImport={handleImport}
+              onProgressSnapshot={handleUploadProgress}
+              folderMode={folderMode}
+              customFolder={customFolder}
+              onInfoMessage={showUploadInfo}
             />
-          </button>
-
-          <main
-            ref={setContentRef}
-            className="relative flex min-h-0 min-w-0 flex-col bg-[var(--surface,#FFFFFF)]"
-          >
-            <div className="flex-1 min-h-0 min-w-0 overflow-hidden">{photosWorkspaceContent}</div>
-          </main>
-
-          <button
-            type="button"
-            role="separator"
-            aria-orientation="vertical"
-            aria-valuemin={RIGHT_COLLAPSED_WIDTH}
-            aria-valuemax={RIGHT_MAX_WIDTH}
-            aria-valuenow={rightPanelCollapsed ? RIGHT_COLLAPSED_WIDTH : rightPanelWidth}
-            aria-valuetext={
-              rightPanelCollapsed ? 'Collapsed' : `${Math.round(rightPanelWidth)} pixels`
-            }
-            aria-label="Resize Image Details panel"
-            tabIndex={0}
-            className="group flex h-full w-full cursor-col-resize items-center justify-center border-x border-[var(--border,#EDE1C6)] bg-[var(--sand-50,#FBF7EF)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)]"
-            onPointerDown={handleRightHandlePointerDown}
-            onKeyDown={handleRightHandleKeyDown}
-            onDoubleClick={() => setRightPanelCollapsed((prev) => !prev)}
-          >
-            <span
-              className="h-10 w-[2px] rounded-full bg-[var(--border,#EDE1C6)] transition-colors group-hover:bg-[var(--text-muted,#6B645B)]"
-              aria-hidden="true"
-            />
-          </button>
-
-          <InspectorPanel
-            collapsed={rightPanelCollapsed}
-            onCollapse={() => setRightPanelCollapsed(true)}
-            onExpand={() => setRightPanelCollapsed(false)}
-            hasSelection={Boolean(currentPhoto)}
-            selectionCount={selectedPhotoIds.size}
-            usedProjects={usedProjects}
-            usedProjectsLoading={assetProjectsLoading}
-            usedProjectsError={usedProjectsErrorMessage}
-            metadataSourceId={metadataSourceId}
-            onChangeMetadataSource={handleMetadataSourceChange}
-            metadataSourceBusy={metadataSyncPending}
-            metadataSourceError={metadataSourceActionError}
-            keyMetadataSections={{
-              general: generalInspectorFields,
-              capture: captureInspectorFields,
-            }}
-            metadataSummary={metadataSummary}
-            metadataEntries={metadataEntries}
-            metadataWarnings={metadataWarnings}
-            metadataLoading={metadataLoading}
-            metadataError={metadataErrorMessage}
-            previewAsset={inspectorPreviewAsset}
-            detailZoom={detailZoom}
-            detailMinZoom={DETAIL_MIN_ZOOM}
-            detailMaxZoom={DETAIL_MAX_ZOOM}
-            onDetailZoomIn={handleDetailZoomIn}
-            onDetailZoomOut={handleDetailZoomOut}
-            onDetailZoomReset={handleDetailZoomReset}
-            detailViewport={detailViewportRect}
-            onPreviewPan={handlePreviewPan}
-            quickFixControls={quickFixControls}
-            activeTab={activeInspectorTab}
-            onActiveTabChange={handleInspectorTabChange}
-          />
-        </div>
-      )}
-
-      {importOpen && (
-        <ErrorBoundary
-          fallback={
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 p-4">
-              <div className="w-[min(95vw,640px)] rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-6 text-sm text-[var(--text,#1F1E1B)] shadow-2xl">
-                <div className="text-base font-semibold">Import panel crashed</div>
-                <p className="mt-2 text-[var(--text-muted,#6B645B)]">
-                  Something went wrong while loading the import sheet. Close it and try again.
-                </p>
-                <div className="mt-4 flex justify-end">
-                  <button
-                    type="button"
-                    onClick={() => setImportOpen(false)}
-                    className="rounded border border-[var(--border,#E1D3B9)] px-3 py-1.5"
-                  >
-                    Close
-                  </button>
-                </div>
-              </div>
-            </div>
-          }
-        >
-          <ImportSheet
-            projectId={id}
-            onClose={() => setImportOpen(false)}
-            onImport={handleImport}
-            onProgressSnapshot={handleUploadProgress}
-            folderMode={folderMode}
-            customFolder={customFolder}
-            onInfoMessage={showUploadInfo}
-          />
-        </ErrorBoundary>
-      )}
+          </ErrorBoundary>
+        )
+      }
       <GeneralSettingsDialog
         open={generalSettingsOpen}
         settings={generalSettings}
@@ -2976,7 +2897,7 @@ export default function ProjectWorkspace() {
         projectId={projectId ?? null}
         onClose={() => setExportDialogOpen(false)}
       />
-    </div>
+    </div >
   )
 }
 

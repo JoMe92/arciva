@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc, func
 from uuid import UUID
@@ -16,9 +16,6 @@ from ..services.annotations import write_annotations_for_assets
 from ..services.metadata_states import ensure_state_for_link
 from ..services.links import link_asset_to_project
 from ..services import assets as assets_service
-from ..services import adjustments as adjustments_service
-from io import BytesIO
-from PIL import Image
 from ..utils.projects import ensure_project_access
 
 router = APIRouter(prefix="/v1", tags=["assets"])
@@ -716,62 +713,67 @@ async def quick_fix_preview(
     # For preview, we want speed. Use the "preview_raw" or "thumb_256" if available.
     # Ideally "preview_raw" which is usually a decent sized JPEG.
 
-    await ensure_asset_metadata_column(db)
-    asset = (
-        await db.execute(
-            select(models.Asset).where(
-                models.Asset.id == asset_id,
-                models.Asset.user_id == current_user.id,
-            )
-        )
-    ).scalar_one_or_none()
+    # FIXME: Deactivated for client-side transition (QuickFix Renderer)
+    raise HTTPException(
+        503, "QuickFix backend rendering is disabled. Use client-side rendering."
+    )
 
-    if not asset or not asset.sha256:
-        raise HTTPException(404, "asset not ready")
+    # await ensure_asset_metadata_column(db)
+    # asset = (
+    #     await db.execute(
+    #         select(models.Asset).where(
+    #             models.Asset.id == asset_id,
+    #             models.Asset.user_id == current_user.id,
+    #         )
+    #     )
+    # ).scalar_one_or_none()
 
-    storage = PosixStorage.from_env()
+    # if not asset or not asset.sha256:
+    #     raise HTTPException(404, "asset not ready")
 
-    # Try to find a source image to work on
-    # 1. Preview (best balance)
-    # 2. Original (if JPEG and small enough? No, might be huge RAW)
-    # 3. Thumbnail (too small?)
+    # storage = PosixStorage.from_env()
 
-    path = storage.find_derivative(asset.sha256, "preview_raw", "jpg")
+    # # Try to find a source image to work on
+    # # 1. Preview (best balance)
+    # # 2. Original (if JPEG and small enough? No, might be huge RAW)
+    # # 3. Thumbnail (too small?)
 
-    def _is_jpeg(asset_obj: models.Asset) -> bool:
-        fmt = (asset_obj.format or "").upper()
-        mime = (asset_obj.mime or "").lower()
-        return fmt in {"JPEG", "JPG"} or mime in {"image/jpeg", "image/jpg"}
+    # path = storage.find_derivative(asset.sha256, "preview_raw", "jpg")
 
-    if (path is None or not path.exists()) and asset.storage_uri and _is_jpeg(asset):
-        try:
-            original_path = storage.path_from_key(asset.storage_uri)
-        except ValueError:
-            original_path = None
-        if original_path and original_path.exists():
-            path = original_path
+    # def _is_jpeg(asset_obj: models.Asset) -> bool:
+    #     fmt = (asset_obj.format or "").upper()
+    #     mime = (asset_obj.mime or "").lower()
+    #     return fmt in {"JPEG", "JPG"} or mime in {"image/jpeg", "image/jpg"}
 
-    if path is None or not path.exists():
-        fallback = storage.find_derivative(asset.sha256, "thumb_256", "jpg")
-        if fallback and fallback.exists():
-            path = fallback
+    # if (path is None or not path.exists()) and asset.storage_uri and _is_jpeg(asset):
+    #     try:
+    #         original_path = storage.path_from_key(asset.storage_uri)
+    #     except ValueError:
+    #         original_path = None
+    #     if original_path and original_path.exists():
+    #         path = original_path
 
-    if not path or not path.exists():
-        raise HTTPException(404, "source image for preview not found")
+    # if path is None or not path.exists():
+    #     fallback = storage.find_derivative(asset.sha256, "thumb_256", "jpg")
+    #     if fallback and fallback.exists():
+    #         path = fallback
 
-    try:
-        with Image.open(path) as img:
-            # Apply adjustments
-            result_img = adjustments_service.apply_adjustments(img, body)
+    # if not path or not path.exists():
+    #     raise HTTPException(404, "source image for preview not found")
 
-            # Save to buffer
-            buf = BytesIO()
-            result_img.save(buf, format="JPEG", quality=80)
-            buf.seek(0)
-            return Response(content=buf.getvalue(), media_type="image/jpeg")
-    except Exception as e:
-        logger.exception("quick_fix_preview failed")
-        raise HTTPException(500, f"preview generation failed: {e}")
+    # try:
+    #     with Image.open(path) as img:
+    #         # Apply adjustments
+    #         result_img = adjustments_service.apply_adjustments(img, body)
+
+    #         # Save to buffer
+    #         buf = BytesIO()
+    #         result_img.save(buf, format="JPEG", quality=80)
+    #         buf.seek(0)
+    #         return Response(content=buf.getvalue(), media_type="image/jpeg")
+    # except Exception as e:
+    #     logger.exception("quick_fix_preview failed")
+    #     raise HTTPException(500, f"preview generation failed: {e}")
 
 
 @router.patch(

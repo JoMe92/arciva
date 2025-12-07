@@ -8,6 +8,9 @@ importers:
 
   frontend:
     dependencies:
+      '@JoMe92/quickfix-renderer':
+        specifier: ^0.2.1
+        version: 0.2.1
       '@tanstack/react-query':
         specifier: ^5.90.5
         version: 5.90.5(react@19.2.0)
@@ -101,6 +104,9 @@ importers:
         version: 4.0.14(jiti@2.6.1)(jsdom@27.1.0)(lightningcss@1.30.2)(terser@5.44.1)
 
 packages:
+
+  '@JoMe92/quickfix-renderer@0.2.1':
+    resolution: {integrity: sha512-lzMjo9/4sWHKjJECZ4Kdz/m6mtYRWlCShr0f5ydy9SvvhQtQzqgeGw03WWWaWALsHsp1rTgatg0mkXaAyGPqHg==, tarball: https://npm.pkg.github.com/download/@JoMe92/quickfix-renderer/0.2.1/9ec5858d8729fca0fe9287ac513e8ea14f732155}
 
   '@acemir/cssom@0.9.20':
     resolution: {integrity: sha512-YUSA5jW8qn/c6nZUlFsn2Nt5qFFRBcGTgL9CzbiZbJCtEFY0Nv/ycO3BHT9tLjus9++zOYWe5mLCRIesuay25g==}
@@ -3166,6 +3172,8 @@ packages:
     resolution: {integrity: sha512-AvvthqfqrAhNH9dnfmrfKzX5upOdjUVJYFqNSlkmGf64gRaTzlPwz99IHYnVs28qYAybvAlBV+H7pn0saFY4Ig==}
 
 snapshots:
+
+  '@JoMe92/quickfix-renderer@0.2.1': {}
 
   '@acemir/cssom@0.9.20': {}
 

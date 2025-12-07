@@ -8,6 +8,8 @@ import {
   CropRect,
   CropAspectRatioId,
 } from '../types'
+import { QuickFixState } from '../quickFixState'
+import { useQuickFixRenderer } from '../worker/useQuickFixRenderer'
 import { computeCols, COLOR_MAP } from '../utils'
 import { resolveAspectRatioValue } from '../cropUtils'
 import { RawPlaceholder, RawPlaceholderFrame } from '../../../components/RawPlaceholder'
@@ -104,6 +106,7 @@ export function DetailView({
   cropSettings,
   onCropRectChange,
   cropModeActive = false,
+  quickFixState,
 }: {
   items: Photo[]
   index: number
@@ -126,6 +129,7 @@ export function DetailView({
   cropSettings?: CropSettings | null
   onCropRectChange?: (rect: CropRect) => void
   cropModeActive?: boolean
+  quickFixState?: QuickFixState | null
 }) {
   const cur = items[index]
   const canPrev = index > 0
@@ -451,8 +455,40 @@ export function DetailView({
     [clampZoomValue, cropModeActive, cur, onZoomChange, zoomStep, zoomValue]
   )
 
+  // Calculate worker asset for DetailView
+  const workerAsset = useMemo(() => {
+    if (!cur) return null
+    return {
+      id: cur.id,
+      preview_url: cur.previewSrc,
+      thumb_url: cur.thumbSrc,
+    }
+  }, [cur])
+
+  // Use the renderer hook
+  const { previewUrl: workerPreviewUrl, isProcessing: workerBusy } = useQuickFixRenderer(
+    workerAsset,
+    cur ? quickFixState ?? null : null
+  )
+
   const detailImage = useMemo(() => {
     if (!cur) return null
+
+    // Prefer worker result if available
+    const displaySrc = workerPreviewUrl || cur.previewSrc || cur.thumbSrc
+
+    if (displaySrc) {
+      return (
+        <img
+          src={displaySrc}
+          alt={cur.name}
+          draggable={false}
+          className="pointer-events-none h-full w-full select-none object-contain"
+        />
+      )
+    }
+
+    /* 
     if (cur.previewSrc) {
       return (
         <img
@@ -473,6 +509,8 @@ export function DetailView({
         />
       )
     }
+    */
+
     return (
       <div className="pointer-events-none">
         <RawPlaceholder
@@ -482,7 +520,7 @@ export function DetailView({
         />
       </div>
     )
-  }, [cur])
+  }, [cur, workerPreviewUrl])
   const rotationScale = useMemo(() => {
     if (!cropAngle || !baseSize.width || !baseSize.height) return 1
     const radians = Math.abs((cropAngle * Math.PI) / 180)

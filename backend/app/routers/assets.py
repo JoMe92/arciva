@@ -714,7 +714,9 @@ async def quick_fix_preview(
     # Ideally "preview_raw" which is usually a decent sized JPEG.
 
     # FIXME: Deactivated for client-side transition (QuickFix Renderer)
-    raise HTTPException(503, "QuickFix backend rendering is disabled. Use client-side rendering.")
+    raise HTTPException(
+        503, "QuickFix backend rendering is disabled. Use client-side rendering."
+    )
 
     # await ensure_asset_metadata_column(db)
     # asset = (

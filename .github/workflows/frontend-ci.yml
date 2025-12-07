@@ -14,6 +14,7 @@ on:
 
 permissions:
   contents: read
+  packages: read
 
 jobs:
   build:
@@ -50,6 +51,8 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --filter ./frontend
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Lint
         run: pnpm --filter ./frontend lint

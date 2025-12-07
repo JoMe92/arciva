@@ -1,30 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { createQuickFixClient } from './client'
-import type { QuickFixClient } from '@JoMe92/quickfix-renderer/client.js'
+import { getQuickFixClient } from './client' // Fixed import
 import type { QuickFixAdjustments } from '@JoMe92/quickfix-renderer/quickfix_renderer.js'
 
 type WorkerAsset = {
     id: string
     preview_url?: string | null
     thumb_url?: string | null
-}
-
-// Singleton instance to share across component re-mounts if needed,
-// or we can instantiate inside the hook.
-// For now, let's keep it simple: one worker per hook usage (or shared ref).
-// Given we only have one QuickFixPanel active, a ref inside the hook or context is fine.
-// But since the worker is heavy, maybe a singleton module-level instance is better?
-// Let's stick to ref for now to allow cleanup.
-
-let sharedClient: QuickFixClient | null = null
-
-function getClient() {
-    if (!sharedClient) {
-        sharedClient = createQuickFixClient()
-        // Initialize with default options immediately
-        sharedClient.init({}).catch(console.error)
-    }
-    return sharedClient
 }
 
 export function useQuickFixRenderer(
@@ -57,7 +38,7 @@ export function useQuickFixRenderer(
             return
         }
 
-        const client = getClient()
+        const client = getQuickFixClient()
 
         // Check if we need to load a new image
         if (loadedAssetId.current !== asset.id) {
@@ -122,65 +103,110 @@ export function useQuickFixRenderer(
         }
     }, [asset, reloadKey])
 
+    // Conflation optimization ref setup
+    const renderingRef = useRef(false)
+    const pendingAdjustmentsRef = useRef<QuickFixAdjustments | null>(null)
+    const activeRef = useRef(true)
+
+    // Update pending adjustments ref whenever adjustments change
     useEffect(() => {
-        // Render when adjustments change
-        if (!asset || !adjustments || !loadedAssetId.current || loadedAssetId.current !== asset.id) {
-            return
-        }
+        pendingAdjustmentsRef.current = adjustments
+    }, [adjustments])
 
-        const client = getClient()
-        let active = true
-        setIsProcessing(true)
+    // Driver loop for rendering
+    useEffect(() => {
+        activeRef.current = true
 
-        client.render(null, 0, 0, adjustments)
-            .then((result) => {
-                if (!active) return
+        // This function attempts to process the next pending render
+        const processNext = async () => {
+            if (!activeRef.current) return
+
+            // If already rendering, do nothing. The current render loop will pick up the next value when finished.
+            if (renderingRef.current) return
+
+            // If no asset loaded or id mismatch, wait.
+            if (!asset || !loadedAssetId.current || loadedAssetId.current !== asset.id) return
+
+            // If no pending adjustments (shouldn't happen if we are triggered correctly), stop.
+            if (!pendingAdjustmentsRef.current) return
+
+            renderingRef.current = true
+            setIsProcessing(true)
+
+            // Capture the exact adjustments we are about to render
+            const currentAdjustments = pendingAdjustmentsRef.current
+
+            try {
+                const client = getQuickFixClient()
+                const result = await client.render(null, 0, 0, currentAdjustments)
+
+                if (!activeRef.current) {
+                    renderingRef.current = false
+                    return
+                }
 
                 if (!result.width || !result.height) {
                     console.error('Render failed: Invalid dimensions', result.width, result.height)
-                    return
-                }
-                const array = new Uint8ClampedArray(result.imageBitmap as ArrayBuffer)
-                if (array.length !== result.width * result.height * 4) {
-                    console.error('Render failed: Data length mismatch')
-                    return
-                }
+                } else {
+                    const array = new Uint8ClampedArray(result.imageBitmap as ArrayBuffer)
+                    if (array.length === result.width * result.height * 4) {
+                        const imageData = new ImageData(array, result.width, result.height)
+                        // Create canvas off-screen
+                        const canvas = document.createElement('canvas')
+                        canvas.width = result.width
+                        canvas.height = result.height
+                        const ctx = canvas.getContext('2d')
+                        ctx?.putImageData(imageData, 0, 0)
 
-                const imageData = new ImageData(array, result.width, result.height)
-                const canvas = document.createElement('canvas')
-                canvas.width = result.width
-                canvas.height = result.height
-                const ctx = canvas.getContext('2d')
-                ctx?.putImageData(imageData, 0, 0)
+                        canvas.toBlob((blob) => {
+                            if (!activeRef.current || !blob) return
+                            const url = URL.createObjectURL(blob)
+                            if (lastRenderedUrl.current) {
+                                URL.revokeObjectURL(lastRenderedUrl.current)
+                            }
+                            lastRenderedUrl.current = url
+                            setPreviewUrl(url)
 
-                canvas.toBlob((blob) => {
-                    if (!active || !blob) return
-                    const url = URL.createObjectURL(blob)
-
-                    if (lastRenderedUrl.current) {
-                        URL.revokeObjectURL(lastRenderedUrl.current)
+                            // Only clear processing if we are truly caught up
+                            if (pendingAdjustmentsRef.current === currentAdjustments) {
+                                setIsProcessing(false)
+                            }
+                        })
+                    } else {
+                        console.error('Render failed: Data length mismatch')
                     }
-                    lastRenderedUrl.current = url
-                    setPreviewUrl(url)
-                    setIsProcessing(false)
-                })
-            })
-            .catch((err) => {
-                if (active) {
+                }
+            } catch (err) {
+                if (activeRef.current) {
                     console.error('Render failed:', err)
                     setError(String(err))
                     setIsProcessing(false)
-
                     // Recover from "No image data" error
                     if (String(err).includes('No image data')) {
                         loadedAssetId.current = null
-                        setReloadKey(k => k + 1) // Trigger reload
+                        setReloadKey(k => k + 1)
                     }
                 }
-            })
+            } finally {
+                renderingRef.current = false
 
-        return () => { active = false }
-    }, [asset, adjustments, reloadKey]) // We might need to serialize adjustments if they are new objects every time
+                // Recursion check: If pending adjustments have changed while we were rendering, process again immediately.
+                if (activeRef.current && pendingAdjustmentsRef.current !== currentAdjustments) {
+                    // Use setTimeout to avoid strictly recursive stack overflow, though async await handles stack depth usually.
+                    // A microtask via simple call is fine here.
+                    processNext()
+                } else if (activeRef.current) {
+                    setIsProcessing(false)
+                }
+            }
+        }
+
+        // Trigger processing whenever adjustments or asset/reload key changes
+        // This is the "kick" to start the loop.
+        processNext()
+
+        return () => { activeRef.current = false }
+    }, [asset, adjustments, reloadKey])
 
     return { previewUrl, isProcessing, error }
 }

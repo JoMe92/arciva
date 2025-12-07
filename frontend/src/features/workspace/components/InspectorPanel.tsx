@@ -398,8 +398,8 @@ export function InspectorPanel({
               onPanPreview={onPreviewPan}
               open={previewOpen}
               onToggle={() => setPreviewOpen((open) => !open)}
-              optimisticQuickFix={liveQuickFixState}
-              committedQuickFix={quickFixControls?.quickFixState ?? null}
+              optimisticQuickFix={null} // Keep navigator static (no preview effects)
+              committedQuickFix={null}
             />
             {activeTab === 'details' ? (
               <div className="flex flex-1 min-h-0 flex-col gap-3 overflow-y-auto overflow-x-hidden pr-1">

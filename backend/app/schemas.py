@@ -434,3 +434,46 @@ class ImageHubAssetsResponse(BaseModel):
     assets: List[HubAsset]
     projects: List[HubProjectSummary]
     dates: List[HubDateSummary]
+
+
+# Quick-Fix Adjustments
+class CropSettings(BaseModel):
+    aspect_ratio: float = 0.0  # 0.0 = Original/Free? Or use specific values.
+    rotation: float = 0.0
+
+
+class ExposureSettings(BaseModel):
+    exposure: float = 0.0
+    contrast: float = 1.0
+    highlights: float = 0.0
+    shadows: float = 0.0
+
+
+class ColorSettings(BaseModel):
+    temperature: float = 0.0
+    tint: float = 0.0
+
+
+class GrainSettings(BaseModel):
+    amount: float = 0.0
+    size: Literal["fine", "medium", "coarse"] = "medium"
+
+
+class GeometrySettings(BaseModel):
+    vertical: float = 0.0
+    horizontal: float = 0.0
+
+
+class QuickFixAdjustments(BaseModel):
+    crop: Optional[CropSettings] = None
+    exposure: Optional[ExposureSettings] = None
+    color: Optional[ColorSettings] = None
+    grain: Optional[GrainSettings] = None
+    geometry: Optional[GeometrySettings] = None
+
+
+class QuickFixBatchApply(BaseModel):
+    asset_ids: List[UUID] = Field(..., min_length=1)
+    auto_exposure: bool = False
+    auto_white_balance: bool = False
+    auto_crop: bool = False

@@ -31,8 +31,14 @@ import {
   CURRENT_CONFIG_SOURCE_ID,
   ColorTag,
   InspectorViewportRect,
+  CropSettings,
+  CropAspectRatioId,
+  CropOrientation,
 } from '../types'
 import { COLOR_MAP } from '../utils'
+
+import { QuickFixPanel } from './QuickFixPanel'
+import type { QuickFixGroupKey, QuickFixState } from '../quickFixState'
 
 const RIGHT_PANEL_ID = 'workspace-image-details-panel'
 const RIGHT_PANEL_CONTENT_ID = `${RIGHT_PANEL_ID}-content`
@@ -42,11 +48,37 @@ const RIGHT_METADATA_SECTION_ID = `${RIGHT_PANEL_ID}-metadata`
 
 type RightPanelTarget = 'keyData' | 'projects' | 'metadata'
 
+export type InspectorTab = 'details' | 'quick-fix'
+
+type QuickFixControlsProps = {
+  cropSettings: CropSettings | null
+  onAspectRatioChange: (ratio: CropAspectRatioId) => void
+  onAngleChange: (angle: number) => void
+  onReset: () => void
+  onOrientationChange: (orientation: CropOrientation) => void
+  onCropApplyChange: (applied: boolean) => void
+  quickFixState: QuickFixState | null
+  onQuickFixChange: (updater: (prev: QuickFixState) => QuickFixState) => void
+  onQuickFixGroupReset: (group: QuickFixGroupKey) => void
+  onQuickFixGlobalReset: () => void
+  previewBusy: boolean
+  saving: boolean
+  errorMessage: string | null
+  onAdjustingChange?: (adjusting: boolean) => void
+  applyToSelection?: boolean
+  onApplyToSelectionChange?: (apply: boolean) => void
+  canUndo?: boolean
+  canRedo?: boolean
+  onUndo?: () => void
+  onRedo?: () => void
+}
+
 export function InspectorPanel({
   collapsed,
   onCollapse,
   onExpand,
   hasSelection,
+  selectionCount,
   usedProjects,
   usedProjectsLoading,
   usedProjectsError,
@@ -61,6 +93,7 @@ export function InspectorPanel({
   metadataLoading,
   metadataError,
   previewAsset,
+  previewAssetId,
   detailZoom,
   detailMinZoom,
   detailMaxZoom,
@@ -70,11 +103,17 @@ export function InspectorPanel({
   detailViewport,
   onPreviewPan,
   mode = 'sidebar',
+  quickFixControls,
+  activeTab: activeTabProp,
+  onActiveTabChange,
+  viewMode = 'grid',
+  onLiveQuickFixChange,
 }: {
   collapsed: boolean
   onCollapse: () => void
   onExpand: () => void
   hasSelection: boolean
+  selectionCount: number
   usedProjects: UsedProjectLink[]
   usedProjectsLoading: boolean
   usedProjectsError: string | null
@@ -98,7 +137,24 @@ export function InspectorPanel({
   detailViewport: InspectorViewportRect | null
   onPreviewPan?: (position: { x: number; y: number }) => void
   mode?: 'sidebar' | 'mobile'
+  quickFixControls?: QuickFixControlsProps | null
+  activeTab?: InspectorTab
+  onActiveTabChange?: (tab: InspectorTab) => void
+  viewMode?: 'grid' | 'detail'
+  previewAssetId?: string | null
+  onLiveQuickFixChange?: (state: QuickFixState | null) => void
 }) {
+  const [internalActiveTab, setInternalActiveTab] = useState<InspectorTab>('details')
+  const activeTab = activeTabProp ?? internalActiveTab
+  const setActiveTab = useCallback(
+    (next: InspectorTab) => {
+      if (activeTabProp === undefined) {
+        setInternalActiveTab(next)
+      }
+      onActiveTabChange?.(next)
+    },
+    [activeTabProp, onActiveTabChange]
+  )
   const keyDataSectionRef = useRef<HTMLDivElement | null>(null)
   const projectsSectionRef = useRef<HTMLDivElement | null>(null)
   const metadataSectionRef = useRef<HTMLDivElement | null>(null)
@@ -106,6 +162,9 @@ export function InspectorPanel({
   const [keyDataOpen, setKeyDataOpen] = useState(true)
   const [projectsOpen, setProjectsOpen] = useState(true)
   const [metadataOpen, setMetadataOpen] = useState(true)
+  const [liveQuickFixState, setLiveQuickFixState] = useState<QuickFixState | null>(null)
+  const liveQuickFixDraftRef = useRef<QuickFixState | null>(null)
+  const lastPreviewBusyRef = useRef(quickFixControls?.previewBusy ?? false)
   const pendingTargetRef = useRef<RightPanelTarget | null>(null)
   const generalFields = keyMetadataSections?.general ?? []
   const captureFields = keyMetadataSections?.capture ?? []
@@ -126,7 +185,30 @@ export function InspectorPanel({
     : 'flex h-full min-h-0 flex-col overflow-hidden rounded-[var(--r-lg,20px)] border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] p-4 shadow-[0_30px_80px_rgba(31,30,27,0.16)]'
   const panelContentClass = isMobilePanel
     ? 'flex flex-1 min-h-0 flex-col gap-3 pb-4'
-    : 'flex flex-1 min-h-0 flex-col gap-3 overflow-y-auto pr-2'
+    : 'flex flex-1 min-h-0 flex-col gap-3 pr-4'
+
+  const workerAsset = useMemo(() => {
+    if (!previewAssetId || !previewAsset) return null
+    return {
+      id: previewAssetId,
+      preview_url: previewAsset.src,
+      thumb_url: previewAsset.thumbSrc,
+    }
+  }, [previewAssetId, previewAsset])
+
+  const { previewUrl: workerPreviewUrl, isProcessing: workerBusy } = { previewUrl: null, isProcessing: false } // REMOVED LOCAL RENDERER
+
+  // const { previewUrl: workerPreviewUrl, isProcessing: workerBusy } = useQuickFixRenderer(
+  //   workerAsset,
+  //   liveQuickFixState ?? quickFixControls?.quickFixState ?? null
+  // )
+
+  const quickFixPreviewBusy = (quickFixControls?.previewBusy || workerBusy) ?? false
+
+  // We no longer render locally in inspector
+  const finalPreview = useMemo(() => {
+    return previewAsset
+  }, [previewAsset])
   const mergedInspectorFields = useMemo(() => {
     const map = new Map<string, string>()
     generalFields.forEach((field) => {
@@ -157,6 +239,43 @@ export function InspectorPanel({
     else if (target === 'projects') setProjectsOpen(true)
     else setMetadataOpen(true)
   }, [])
+
+  useEffect(() => {
+    if (!hasSelection) {
+      liveQuickFixDraftRef.current = null
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Reset optimistic preview immediately when there is no selection.
+      setLiveQuickFixState(null)
+    }
+  }, [hasSelection])
+
+  const handleLiveQuickFixState = useCallback(
+    (state: QuickFixState | null) => {
+      onLiveQuickFixChange?.(state) // Notify parent
+      if (state) {
+        liveQuickFixDraftRef.current = state
+        setLiveQuickFixState(state)
+        return
+      }
+      if (quickFixPreviewBusy) {
+        setLiveQuickFixState(liveQuickFixDraftRef.current)
+        onLiveQuickFixChange?.(liveQuickFixDraftRef.current)
+      } else {
+        liveQuickFixDraftRef.current = null
+        setLiveQuickFixState(null)
+        onLiveQuickFixChange?.(null)
+      }
+    },
+    [quickFixPreviewBusy, onLiveQuickFixChange]
+  )
+
+  useEffect(() => {
+    if (lastPreviewBusyRef.current && !quickFixPreviewBusy) {
+      liveQuickFixDraftRef.current = null
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Clear optimistic layer once server preview catches up.
+      setLiveQuickFixState(null)
+    }
+    lastPreviewBusyRef.current = quickFixPreviewBusy
+  }, [quickFixPreviewBusy])
 
   const scrollToTarget = useCallback((target: RightPanelTarget) => {
     const refMap: Record<RightPanelTarget, React.RefObject<HTMLDivElement | null>> = {
@@ -200,18 +319,18 @@ export function InspectorPanel({
       id={RIGHT_PANEL_ID}
       role="complementary"
       aria-label="Image Details panel"
-      className={`relative h - full min - h - 0 ${isMobilePanel ? 'px-3 py-4' : 'px-2 py-4'} `}
+      className={`relative h-full min-h-0 ${isMobilePanel ? 'px-3 py-4' : 'px-2 py-4'} `}
       data-state={collapsedState ? 'collapsed' : 'expanded'}
     >
       <div
         data-panel="body"
         aria-hidden={collapsedState}
-        className={`h - full min - h - 0 ${isMobilePanel ? '' : `transition-opacity duration-150 ${collapsedState ? 'pointer-events-none opacity-0' : 'opacity-100'}`} `}
+        className={`h-full min-h-0 ${isMobilePanel ? '' : `transition-opacity duration-150 ${collapsedState ? 'pointer-events-none opacity-0' : 'opacity-100'}`} `}
       >
         <div className={panelShellClass}>
           {!isMobilePanel ? (
             <header className="sticky top-0 z-10 border-b border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] pb-3">
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 mb-3">
                 <button
                   type="button"
                   aria-label="Collapse Image Details panel"
@@ -226,6 +345,38 @@ export function InspectorPanel({
                   Image Details
                 </span>
               </div>
+              <div role="tablist" className="grid grid-cols-2 rounded-lg bg-[var(--surface-muted,#F3EBDD)] p-1">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeTab === 'details'}
+                  aria-controls={RIGHT_PANEL_CONTENT_ID}
+                  id="tab-details"
+                  tabIndex={activeTab === 'details' ? 0 : -1}
+                  onClick={() => setActiveTab('details')}
+                  className={`rounded-md py-1.5 text-xs font-semibold transition-all ${activeTab === 'details'
+                    ? 'bg-[var(--surface,#FFFFFF)] text-[var(--text,#1F1E1B)] shadow-sm'
+                    : 'text-[var(--text-muted,#6B645B)] hover:text-[var(--text,#1F1E1B)]'
+                    }`}
+                >
+                  Details
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeTab === 'quick-fix'}
+                  aria-controls={RIGHT_PANEL_CONTENT_ID}
+                  id="tab-quick-fix"
+                  tabIndex={activeTab === 'quick-fix' ? 0 : -1}
+                  onClick={() => setActiveTab('quick-fix')}
+                  className={`rounded-md py-1.5 text-xs font-semibold transition-all ${activeTab === 'quick-fix'
+                    ? 'bg-[var(--surface,#FFFFFF)] text-[var(--text,#1F1E1B)] shadow-sm'
+                    : 'text-[var(--text-muted,#6B645B)] hover:text-[var(--text,#1F1E1B)]'
+                    }`}
+                >
+                  Quick Fix
+                </button>
+              </div>
             </header>
           ) : (
             <div className="flex items-center gap-2 px-1 text-sm font-semibold text-[var(--text,#1F1E1B)]">
@@ -235,7 +386,7 @@ export function InspectorPanel({
           )}
           <div id={RIGHT_PANEL_CONTENT_ID} className={panelContentClass}>
             <InspectorPreviewCard
-              preview={previewAsset}
+              preview={finalPreview}
               hasSelection={hasSelection}
               zoomLevel={detailZoom}
               minZoom={detailMinZoom}
@@ -247,86 +398,118 @@ export function InspectorPanel({
               onPanPreview={onPreviewPan}
               open={previewOpen}
               onToggle={() => setPreviewOpen((open) => !open)}
+              optimisticQuickFix={null} // Keep navigator static (no preview effects)
+              committedQuickFix={null}
             />
-            <InspectorSection
-              id={RIGHT_KEY_SECTION_ID}
-              ref={keyDataSectionRef}
-              icon={<InfoIcon className="h-4 w-4" aria-hidden="true" />}
-              label="Key Data"
-              open={keyDataOpen}
-              onToggle={() => setKeyDataOpen((open) => !open)}
-            >
-              {hasSelection ? (
-                <KeyDataGrid rows={keyDataRows} />
-              ) : (
-                <p className="text-sm text-[var(--text-muted,#6B645B)]">
-                  Select a photo from the gallery to inspect its details.
-                </p>
-              )}
-            </InspectorSection>
-            <InspectorSection
-              id={RIGHT_PROJECT_SECTION_ID}
-              ref={projectsSectionRef}
-              icon={<FolderIcon className="h-4 w-4" aria-hidden="true" />}
-              label="Used in Projects"
-              open={projectsOpen}
-              onToggle={() => setProjectsOpen((open) => !open)}
-            >
-              {hasSelection ? (
-                <UsedProjectsSection
-                  projects={usedProjects}
-                  loading={usedProjectsLoading}
-                  error={usedProjectsError}
-                  metadataSourceId={metadataSourceId}
-                  onChangeMetadataSource={onChangeMetadataSource}
-                  metadataSourceBusy={metadataSourceBusy}
-                  actionError={metadataSourceError}
-                />
-              ) : (
-                <p className="text-sm text-[var(--text-muted,#6B645B)]">
-                  Select a photo to see where it is used.
-                </p>
-              )}
-            </InspectorSection>
-            <InspectorSection
-              id={RIGHT_METADATA_SECTION_ID}
-              ref={metadataSectionRef}
-              icon={<CameraIcon className="h-4 w-4" aria-hidden="true" />}
-              label="Metadata"
-              open={metadataOpen}
-              onToggle={() => setMetadataOpen((open) => !open)}
-              grow
-            >
-              {metadataLoading ? (
-                <p className="text-xs text-[var(--text-muted,#6B645B)]">Loading metadata…</p>
-              ) : null}
-              {metadataError ? <p className="text-xs text-[#B42318]">{metadataError}</p> : null}
-              {metadataWarnings.length ? (
-                <ul className="space-y-1 rounded-[12px] border border-[#F59E0B]/40 bg-[#FFF7ED] px-3 py-2 text-[11px] text-[#B45309]">
-                  {metadataWarnings.map((warning) => (
-                    <li key={warning} className="flex items-start gap-2">
-                      <span className="mt-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full border border-[#F59E0B] text-[10px]">
-                        !
-                      </span>
-                      <span className="flex-1 break-words">{warning}</span>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-              {hasSelection ? (
-                metadataRows.length ? (
-                  <KeyDataGrid rows={metadataRows} />
-                ) : (
-                  <p className="text-sm text-[var(--text-muted,#6B645B)]">
-                    No metadata available for this asset.
-                  </p>
-                )
-              ) : (
-                <p className="text-sm text-[var(--text-muted,#6B645B)]">
-                  Select a photo to review metadata.
-                </p>
-              )}
-            </InspectorSection>
+            {activeTab === 'details' ? (
+              <div className="flex flex-1 min-h-0 flex-col gap-3 overflow-y-auto overflow-x-hidden pr-1">
+                <InspectorSection
+                  id={RIGHT_KEY_SECTION_ID}
+                  ref={keyDataSectionRef}
+                  icon={<InfoIcon className="h-4 w-4" aria-hidden="true" />}
+                  label="Key Data"
+                  open={keyDataOpen}
+                  onToggle={() => setKeyDataOpen((open) => !open)}
+                >
+                  {hasSelection ? (
+                    <KeyDataGrid rows={keyDataRows} />
+                  ) : (
+                    <p className="text-sm text-[var(--text-muted,#6B645B)]">
+                      Select a photo from the gallery to inspect its details.
+                    </p>
+                  )}
+                </InspectorSection>
+                <InspectorSection
+                  id={RIGHT_PROJECT_SECTION_ID}
+                  ref={projectsSectionRef}
+                  icon={<FolderIcon className="h-4 w-4" aria-hidden="true" />}
+                  label="Used in Projects"
+                  open={projectsOpen}
+                  onToggle={() => setProjectsOpen((open) => !open)}
+                >
+                  {hasSelection ? (
+                    <UsedProjectsSection
+                      projects={usedProjects}
+                      loading={usedProjectsLoading}
+                      error={usedProjectsError}
+                      metadataSourceId={metadataSourceId}
+                      onChangeMetadataSource={onChangeMetadataSource}
+                      metadataSourceBusy={metadataSourceBusy}
+                      actionError={metadataSourceError}
+                    />
+                  ) : (
+                    <p className="text-sm text-[var(--text-muted,#6B645B)]">
+                      Select a photo to see where it is used.
+                    </p>
+                  )}
+                </InspectorSection>
+                <InspectorSection
+                  id={RIGHT_METADATA_SECTION_ID}
+                  ref={metadataSectionRef}
+                  icon={<CameraIcon className="h-4 w-4" aria-hidden="true" />}
+                  label="Metadata"
+                  open={metadataOpen}
+                  onToggle={() => setMetadataOpen((open) => !open)}
+                >
+                  {metadataLoading ? (
+                    <p className="text-xs text-[var(--text-muted,#6B645B)]">Loading metadata…</p>
+                  ) : null}
+                  {metadataError ? <p className="text-xs text-[#B42318]">{metadataError}</p> : null}
+                  {metadataWarnings.length ? (
+                    <ul className="space-y-1 rounded-[12px] border border-[#F59E0B]/40 bg-[#FFF7ED] px-3 py-2 text-[11px] text-[#B45309]">
+                      {metadataWarnings.map((warning) => (
+                        <li key={warning} className="flex items-start gap-2">
+                          <span className="mt-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full border border-[#F59E0B] text-[10px]">
+                            !
+                          </span>
+                          <span className="flex-1 break-words">{warning}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  {hasSelection ? (
+                    metadataRows.length ? (
+                      <KeyDataGrid rows={metadataRows} />
+                    ) : (
+                      <p className="text-sm text-[var(--text-muted,#6B645B)]">
+                        No metadata available for this asset.
+                      </p>
+                    )
+                  ) : (
+                    <p className="text-sm text-[var(--text-muted,#6B645B)]">
+                      Select a photo to review metadata.
+                    </p>
+                  )}
+                </InspectorSection>
+              </div>
+            ) : (
+              <QuickFixPanel
+                hasSelection={hasSelection}
+                selectionCount={selectionCount}
+                cropSettings={quickFixControls?.cropSettings ?? null}
+                onAspectRatioChange={quickFixControls?.onAspectRatioChange ?? (() => { })}
+                onAngleChange={quickFixControls?.onAngleChange ?? (() => { })}
+                onOrientationChange={quickFixControls?.onOrientationChange ?? (() => { })}
+                onReset={quickFixControls?.onReset ?? (() => { })}
+                onCropApplyChange={quickFixControls?.onCropApplyChange ?? (() => { })}
+                quickFixState={quickFixControls?.quickFixState ?? null}
+                onQuickFixChange={quickFixControls?.onQuickFixChange ?? (() => { })}
+                onQuickFixGroupReset={quickFixControls?.onQuickFixGroupReset ?? (() => { })}
+                onQuickFixGlobalReset={quickFixControls?.onQuickFixGlobalReset ?? (() => { })}
+                previewBusy={quickFixControls?.previewBusy ?? false}
+                saving={quickFixControls?.saving ?? false}
+                errorMessage={quickFixControls?.errorMessage ?? null}
+                onLiveStateChange={handleLiveQuickFixState}
+                onAdjustingChange={quickFixControls?.onAdjustingChange}
+                viewMode={viewMode}
+                applyToSelection={quickFixControls?.applyToSelection}
+                onApplyToSelectionChange={quickFixControls?.onApplyToSelectionChange}
+                canUndo={quickFixControls?.canUndo}
+                canRedo={quickFixControls?.canRedo}
+                onUndo={quickFixControls?.onUndo}
+                onRedo={quickFixControls?.onRedo}
+              />
+            )}
           </div>
         </div>
       </div>
@@ -363,9 +546,91 @@ type InspectorPreviewCardProps = {
   onPanPreview?: (position: { x: number; y: number }) => void
   open: boolean
   onToggle: () => void
+  optimisticQuickFix?: QuickFixState | null
+  committedQuickFix?: QuickFixState | null
 }
 
-function InspectorPreviewCard({
+type PreviewEffectStyle = {
+  filter?: string
+  overlayColor?: string
+  overlayOpacity?: number
+  transform?: string
+}
+
+const clampPreviewValue = (value: number, min: number, max: number) =>
+  Math.min(max, Math.max(min, value))
+
+function buildQuickFixPreviewEffect(
+  committed: QuickFixState | null | undefined,
+  optimistic: QuickFixState | null | undefined
+): PreviewEffectStyle | null {
+  if (!committed || !optimistic) return null
+  const exposureDelta = optimistic.exposure.exposure - committed.exposure.exposure
+  const contrastDelta = optimistic.exposure.contrast - committed.exposure.contrast
+  const highlightsDelta = optimistic.exposure.highlights - committed.exposure.highlights
+  const shadowsDelta = optimistic.exposure.shadows - committed.exposure.shadows
+  const temperatureDelta = optimistic.color.temperature - committed.color.temperature
+  const tintDelta = optimistic.color.tint - committed.color.tint
+  const verticalDelta = optimistic.geometry.vertical - committed.geometry.vertical
+  const horizontalDelta = optimistic.geometry.horizontal - committed.geometry.horizontal
+  const filters: string[] = []
+  let hasEffect = false
+
+  const brightness = clampPreviewValue(1 + exposureDelta * 0.35 + highlightsDelta * 0.2 - shadowsDelta * 0.2, 0.2, 3)
+  if (Math.abs(brightness - 1) > 0.01) {
+    filters.push(`brightness(${brightness.toFixed(3)})`)
+    hasEffect = true
+  }
+
+  if (Math.abs(contrastDelta) > 0.01) {
+    const contrast = clampPreviewValue(1 + contrastDelta * 0.6, 0.2, 3)
+    filters.push(`contrast(${contrast.toFixed(3)})`)
+    hasEffect = true
+  }
+
+  if (Math.abs(tintDelta) > 0.01) {
+    filters.push(`hue-rotate(${(tintDelta * 30).toFixed(2)}deg)`)
+    hasEffect = true
+  }
+
+  if (Math.abs(temperatureDelta) > 0.01) {
+    const saturation = clampPreviewValue(1 + temperatureDelta * 0.35, 0.2, 2.5)
+    filters.push(`saturate(${saturation.toFixed(3)})`)
+    hasEffect = true
+  }
+
+  const colorIntensity = Math.max(Math.abs(temperatureDelta), Math.abs(tintDelta))
+  let overlayColor: string | undefined
+  let overlayOpacity: number | undefined
+  if (colorIntensity > 0.01) {
+    const warm = clampPreviewValue(temperatureDelta, -1, 1)
+    const tint = clampPreviewValue(tintDelta, -1, 1)
+    const red = clampPreviewValue(Math.round(200 + warm * 40 + tint * 30), 120, 255)
+    const green = clampPreviewValue(Math.round(200 - tint * 35 - warm * 30), 120, 255)
+    const blue = clampPreviewValue(Math.round(200 - warm * 40 + tint * 30), 120, 255)
+    overlayColor = `rgb(${red}, ${green}, ${blue})`
+    overlayOpacity = clampPreviewValue(colorIntensity * 0.45, 0, 0.35)
+    hasEffect = true
+  }
+
+  let transform: string | undefined
+  if (Math.abs(verticalDelta) > 0.01 || Math.abs(horizontalDelta) > 0.01) {
+    const tiltX = clampPreviewValue(verticalDelta * -5, -8, 8)
+    const tiltY = clampPreviewValue(horizontalDelta * 5, -8, 8)
+    transform = `perspective(1200px) rotateX(${tiltX.toFixed(2)}deg) rotateY(${tiltY.toFixed(2)}deg)`
+    hasEffect = true
+  }
+
+  if (!hasEffect) return null
+  return {
+    filter: filters.join(' '),
+    overlayColor,
+    overlayOpacity,
+    transform,
+  }
+}
+
+export function InspectorPreviewCard({
   preview,
   hasSelection,
   zoomLevel,
@@ -378,6 +643,8 @@ function InspectorPreviewCard({
   onPanPreview,
   open,
   onToggle,
+  optimisticQuickFix,
+  committedQuickFix,
 }: InspectorPreviewCardProps) {
   const contentId = useId()
   const imageSrc = preview?.src ?? preview?.thumbSrc ?? null
@@ -389,6 +656,19 @@ function InspectorPreviewCard({
   const previewMessage = hasSelection
     ? 'Preview unavailable for this asset.'
     : 'Select a photo to see it here.'
+
+  const optimisticEffect = useMemo(
+    () => buildQuickFixPreviewEffect(committedQuickFix, optimisticQuickFix),
+    [committedQuickFix, optimisticQuickFix]
+  )
+  const previewEffectStyle =
+    optimisticEffect && (optimisticEffect.filter || optimisticEffect.transform)
+      ? {
+        filter: optimisticEffect.filter,
+        transform: optimisticEffect.transform,
+        transition: 'filter 120ms ease, transform 160ms ease',
+      }
+      : undefined
 
   const handleWheel = useCallback(
     (event: React.WheelEvent<HTMLDivElement>) => {
@@ -506,19 +786,27 @@ function InspectorPreviewCard({
           >
             <div className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-[12px] border border-[var(--border,#EDE1C6)] bg-[var(--placeholder-bg-beige,#F3EBDD)]">
               {preview ? (
-                imageSrc ? (
-                  <img
-                    src={imageSrc}
-                    alt={preview.alt}
-                    className="max-h-full max-w-full object-contain"
-                  />
-                ) : (
-                  <RawPlaceholder
-                    ratio={preview.placeholderRatio}
-                    title={preview.alt}
-                    fit="contain"
-                  />
-                )
+                <div
+                  className="relative flex h-full w-full items-center justify-center"
+                  style={previewEffectStyle}
+                >
+                  {imageSrc ? (
+                    <img src={imageSrc} alt={preview.alt} className="max-h-full max-w-full object-contain" />
+                  ) : (
+                    <RawPlaceholder ratio={preview.placeholderRatio} title={preview.alt} fit="contain" />
+                  )}
+                  {optimisticEffect?.overlayColor ? (
+                    <span
+                      className="pointer-events-none absolute inset-0 rounded-[12px]"
+                      style={{
+                        backgroundColor: optimisticEffect.overlayColor,
+                        opacity: optimisticEffect.overlayOpacity ?? 0,
+                        mixBlendMode: 'soft-light',
+                        transition: 'opacity 160ms ease',
+                      }}
+                    />
+                  ) : null}
+                </div>
               ) : (
                 <p className="px-4 text-center text-sm text-[var(--text-muted,#6B645B)]">
                   {previewMessage}
@@ -627,7 +915,7 @@ const InspectorSection = React.forwardRef<HTMLDivElement | null, InspectorSectio
         <div
           id={`${id}-content`}
           aria-hidden={!open}
-          className={`${open ? `${grow ? 'flex flex-col ' : ''}px-4 pb-4 pt-1` : 'hidden'} ${growClasses}`}
+          className={`${open ? `${grow ? 'flex flex-col overflow-y-auto ' : ''}px-4 pb-4 pt-1` : 'hidden'} ${growClasses}`}
         >
           {children}
         </div>
@@ -641,12 +929,12 @@ type KeyDataRow = { label: string; value: React.ReactNode }
 function KeyDataGrid({ rows }: { rows: KeyDataRow[] }) {
   return (
     <dl className="space-y-3">
-      {rows.map((row) => (
-        <div key={row.label} className="flex items-start gap-4 text-sm">
+      {rows.map((row, index) => (
+        <div key={`${row.label}-${index}`} className="flex items-start gap-4 text-sm">
           <dt className="w-32 flex-shrink-0 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">
             {row.label}
           </dt>
-          <dd className="flex-1 text-right text-sm font-semibold text-[var(--text,#1F1E1B)]">
+          <dd className="flex-1 min-w-0 break-words text-right text-sm font-semibold text-[var(--text,#1F1E1B)]">
             {row.value}
           </dd>
         </div>
@@ -889,11 +1177,10 @@ function MetadataSourceRow({
       type="button"
       role="radio"
       aria-checked={selected}
-      className={`flex w-full items-center gap-3 rounded-[12px] border px-3 py-2.5 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)] ${
-        selected
-          ? 'border-[var(--river-400,#69A3AE)] bg-[var(--river-50,#F0F7F6)]'
-          : 'border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] hover:border-[var(--text,#1F1E1B)]'
-      } ${disabled ? 'cursor-not-allowed opacity-70' : ''}`}
+      className={`flex w-full items-center gap-3 rounded-[12px] border px-3 py-2.5 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)] ${selected
+        ? 'border-[var(--river-400,#69A3AE)] bg-[var(--river-50,#F0F7F6)]'
+        : 'border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] hover:border-[var(--text,#1F1E1B)]'
+        } ${disabled ? 'cursor-not-allowed opacity-70' : ''}`}
       disabled={disabled}
       onClick={() => {
         if (!disabled) onSelect()
@@ -918,9 +1205,8 @@ function RadioIndicator({ selected }: { selected: boolean }) {
   return (
     <span
       aria-hidden="true"
-      className={`inline-flex h-4 w-4 items-center justify-center rounded-full border ${
-        selected ? 'border-[var(--river-500,#3B7F87)]' : 'border-[var(--border,#EDE1C6)]'
-      }`}
+      className={`inline-flex h-4 w-4 items-center justify-center rounded-full border ${selected ? 'border-[var(--river-500,#3B7F87)]' : 'border-[var(--border,#EDE1C6)]'
+        }`}
     >
       <span
         className={`h-2 w-2 rounded-full ${selected ? 'bg-[var(--river-500,#3B7F87)]' : 'bg-transparent'}`}

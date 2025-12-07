@@ -41,6 +41,7 @@ export type AssetListItem = {
   rejected?: boolean
   metadata_state_id?: string | null
   metadata_source_project_id?: string | null
+  metadata_state?: MetadataState | null
 }
 
 export type AssetDerivative = {
@@ -262,4 +263,109 @@ export async function loadMetadataFromProject(
     throw new Error(await res.text())
   }
   return (await res.json()) as LoadMetadataFromProjectResponse
+}
+
+export type QuickFixCropSettingsPayload = {
+  aspect_ratio?: number | null
+  rotation?: number | null
+}
+
+export type QuickFixExposureSettingsPayload = {
+  exposure?: number | null
+  contrast?: number | null
+  highlights?: number | null
+  shadows?: number | null
+}
+
+export type QuickFixColorSettingsPayload = {
+  temperature?: number | null
+  tint?: number | null
+}
+
+export type QuickFixGrainSettingsPayload = {
+  amount?: number | null
+  size?: 'fine' | 'medium' | 'coarse'
+}
+
+export type QuickFixGeometrySettingsPayload = {
+  vertical?: number | null
+  horizontal?: number | null
+}
+
+export type QuickFixAdjustmentsPayload = {
+  crop?: QuickFixCropSettingsPayload | null
+  exposure?: QuickFixExposureSettingsPayload | null
+  color?: QuickFixColorSettingsPayload | null
+  grain?: QuickFixGrainSettingsPayload | null
+  geometry?: QuickFixGeometrySettingsPayload | null
+}
+
+export async function previewQuickFix(
+  assetId: string,
+  payload: QuickFixAdjustmentsPayload,
+  options: { signal?: AbortSignal } = {}
+): Promise<Blob> {
+  const res = await fetch(withBase(`/v1/assets/${assetId}/quick-fix/preview`)!, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(payload ?? {}),
+    signal: options.signal,
+  })
+  if (!res.ok) {
+    throw new Error(await res.text())
+  }
+  return await res.blob()
+}
+
+export async function saveQuickFixAdjustments(
+  projectId: string,
+  assetId: string,
+  payload: QuickFixAdjustmentsPayload
+): Promise<AssetDetail> {
+  const res = await fetch(
+    withBase(`/v1/projects/${projectId}/assets/${assetId}/quick-fix`)!,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(payload ?? {}),
+    }
+  )
+  if (!res.ok) {
+    throw new Error(await res.text())
+  }
+  return (await res.json()) as AssetDetail
+}
+
+export type QuickFixBatchApplyPayload = {
+  assetIds: string[]
+  autoExposure?: boolean
+  autoWhiteBalance?: boolean
+  autoCrop?: boolean
+}
+
+export async function applyQuickFixBatch(
+  projectId: string,
+  payload: QuickFixBatchApplyPayload
+): Promise<AssetInteractionUpdateResponse> {
+  const body = {
+    asset_ids: payload.assetIds,
+    auto_exposure: payload.autoExposure,
+    auto_white_balance: payload.autoWhiteBalance,
+    auto_crop: payload.autoCrop,
+  }
+  const res = await fetch(
+    withBase(`/v1/projects/${projectId}/assets/quick-fix:apply`)!,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(body),
+    }
+  )
+  if (!res.ok) {
+    throw new Error(await res.text())
+  }
+  return (await res.json()) as AssetInteractionUpdateResponse
 }

@@ -4,11 +4,18 @@ import {
   GridSelectOptions,
   InspectorViewportRect,
   InspectorPreviewPanCommand,
+  CropSettings,
+  CropRect,
+  CropAspectRatioId,
 } from '../types'
+import { QuickFixState } from '../quickFixState'
+import { useQuickFixRenderer } from '../worker/useQuickFixRenderer'
 import { computeCols, COLOR_MAP } from '../utils'
+import { resolveAspectRatioValue } from '../cropUtils'
 import { RawPlaceholder, RawPlaceholderFrame } from '../../../components/RawPlaceholder'
 import { ChevronLeftIcon, ChevronRightIcon } from './icons'
 import { StarRow, ColorSwatch, Badge, BadgeConfig } from './Common'
+import { CropOverlay } from './CropOverlay'
 
 export function GridView({
   items,
@@ -96,6 +103,10 @@ export function DetailView({
   previewPanRequest,
   showFilmstrip = true,
   enableSwipeNavigation = false,
+  cropSettings,
+  onCropRectChange,
+  cropModeActive = false,
+  quickFixState,
 }: {
   items: Photo[]
   index: number
@@ -115,6 +126,10 @@ export function DetailView({
   previewPanRequest?: InspectorPreviewPanCommand | null
   showFilmstrip?: boolean
   enableSwipeNavigation?: boolean
+  cropSettings?: CropSettings | null
+  onCropRectChange?: (rect: CropRect) => void
+  cropModeActive?: boolean
+  quickFixState?: QuickFixState | null
 }) {
   const cur = items[index]
   const canPrev = index > 0
@@ -182,19 +197,20 @@ export function DetailView({
   const zoomValue = useMemo(() => {
     return clampZoomValue(zoom)
   }, [zoom, clampZoomValue])
+  const cropAngle = cropSettings?.angle ?? 0
   const SWIPE_DISTANCE = 40
   const SWIPE_MAX_DURATION = 800
 
   const handleSwipePointerDown = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
-      if (!enableSwipeNavigation || zoomValue > 1) return
+      if (!enableSwipeNavigation || zoomValue > 1 || cropModeActive) return
       swipeStateRef.current = {
         pointerId: event.pointerId,
         startX: event.clientX,
         startTime: event.timeStamp,
       }
     },
-    [enableSwipeNavigation, zoomValue]
+    [cropModeActive, enableSwipeNavigation, zoomValue]
   )
 
   const cancelSwipeTracking = useCallback((pointerId?: number) => {
@@ -221,7 +237,7 @@ export function DetailView({
 
   const handleSwipePointerUp = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
-      if (!enableSwipeNavigation || zoomValue > 1) return
+      if (!enableSwipeNavigation || zoomValue > 1 || cropModeActive) return
       const state = swipeStateRef.current
       if (!state || state.pointerId !== event.pointerId) return
       const deltaX = event.clientX - state.startX
@@ -232,7 +248,7 @@ export function DetailView({
       }
       swipeStateRef.current = null
     },
-    [enableSwipeNavigation, triggerSwipeNavigation, zoomValue]
+    [cropModeActive, enableSwipeNavigation, triggerSwipeNavigation, zoomValue]
   )
   const handleSwipePointerCancel = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
@@ -283,6 +299,17 @@ export function DetailView({
     }
     return fallbackRatio || 1
   }, [assetDimensions?.width, assetDimensions?.height, fallbackRatio])
+  const cropAspectRatioPreference: CropAspectRatioId = cropSettings?.aspectRatioId ?? 'original'
+  const cropOrientation = cropSettings?.orientation ?? 'horizontal'
+  const overlayAspectRatio = useMemo(() => {
+    const ratio = resolveAspectRatioValue(cropAspectRatioPreference, detailAspectRatio)
+    if (!ratio) return null
+    if (cropOrientation === 'vertical') {
+      if (ratio === 0) return null
+      return 1 / ratio
+    }
+    return ratio
+  }, [cropAspectRatioPreference, cropOrientation, detailAspectRatio])
 
   const baseSize = useMemo(() => {
     if (!containerSize.width || !containerSize.height) return { width: 0, height: 0 }
@@ -297,6 +324,9 @@ export function DetailView({
     const width = height * ratio
     return { width, height }
   }, [containerSize.width, containerSize.height, detailAspectRatio])
+  const canShowCropOverlay =
+    cropModeActive &&
+    Boolean(cropSettings && onCropRectChange && baseSize.width && baseSize.height)
 
   const scaledWidth = baseSize.width * zoomValue
   const scaledHeight = baseSize.height * zoomValue
@@ -373,7 +403,7 @@ export function DetailView({
 
   const handlePointerDown = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
-      if (zoomValue <= 1) return
+      if (cropModeActive || zoomValue <= 1) return
       event.preventDefault()
       event.currentTarget.setPointerCapture(event.pointerId)
       dragStateRef.current = {
@@ -383,11 +413,12 @@ export function DetailView({
       }
       setIsDragging(true)
     },
-    [zoomValue]
+    [cropModeActive, zoomValue]
   )
 
   const handlePointerMove = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
+      if (cropModeActive) return
       const state = dragStateRef.current
       if (!state || state.pointerId !== event.pointerId) return
       event.preventDefault()
@@ -397,7 +428,7 @@ export function DetailView({
       state.lastY = event.clientY
       setPan((prev) => clampPanState({ x: prev.x + dx, y: prev.y + dy }))
     },
-    [clampPanState]
+    [clampPanState, cropModeActive]
   )
 
   const endPointerInteraction = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
@@ -410,21 +441,54 @@ export function DetailView({
     }
   }, [])
 
-  const interactionCursor = zoomValue > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default'
+  const interactionCursor =
+    cropModeActive || zoomValue <= 1 ? 'default' : isDragging ? 'grabbing' : 'grab'
   const handleWheelZoom = useCallback(
     (event: React.WheelEvent<HTMLDivElement>) => {
-      if (!onZoomChange || !cur) return
+      if (!onZoomChange || !cur || cropModeActive) return
       event.preventDefault()
       const direction = event.deltaY < 0 ? zoomStep : 1 / zoomStep
       const nextZoom = clampZoomValue(zoomValue * direction)
       if (nextZoom === zoomValue) return
       onZoomChange(() => nextZoom)
     },
-    [clampZoomValue, cur, onZoomChange, zoomStep, zoomValue]
+    [clampZoomValue, cropModeActive, cur, onZoomChange, zoomStep, zoomValue]
+  )
+
+  // Calculate worker asset for DetailView
+  const workerAsset = useMemo(() => {
+    if (!cur) return null
+    return {
+      id: cur.id,
+      preview_url: cur.previewSrc,
+      thumb_url: cur.thumbSrc,
+    }
+  }, [cur])
+
+  // Use the renderer hook
+  const { previewUrl: workerPreviewUrl, isProcessing: workerBusy } = useQuickFixRenderer(
+    workerAsset,
+    cur ? quickFixState ?? null : null
   )
 
   const detailImage = useMemo(() => {
     if (!cur) return null
+
+    // Prefer worker result if available
+    const displaySrc = workerPreviewUrl || cur.previewSrc || cur.thumbSrc
+
+    if (displaySrc) {
+      return (
+        <img
+          src={displaySrc}
+          alt={cur.name}
+          draggable={false}
+          className="pointer-events-none h-full w-full select-none object-contain"
+        />
+      )
+    }
+
+    /* 
     if (cur.previewSrc) {
       return (
         <img
@@ -445,6 +509,8 @@ export function DetailView({
         />
       )
     }
+    */
+
     return (
       <div className="pointer-events-none">
         <RawPlaceholder
@@ -454,7 +520,22 @@ export function DetailView({
         />
       </div>
     )
-  }, [cur])
+  }, [cur, workerPreviewUrl])
+  const rotationScale = useMemo(() => {
+    if (!cropAngle || !baseSize.width || !baseSize.height) return 1
+    const radians = Math.abs((cropAngle * Math.PI) / 180)
+    const cos = Math.abs(Math.cos(radians))
+    const sin = Math.abs(Math.sin(radians))
+    if (!Number.isFinite(cos) || !Number.isFinite(sin)) return 1
+    const boundingWidth = baseSize.width * cos + baseSize.height * sin
+    const boundingHeight = baseSize.width * sin + baseSize.height * cos
+    if (!boundingWidth || !boundingHeight) return 1
+    const scaleX = baseSize.width / boundingWidth
+    const scaleY = baseSize.height / boundingHeight
+    const scale = Math.min(scaleX, scaleY)
+    if (!Number.isFinite(scale) || scale <= 0 || scale > 1) return 1
+    return scale
+  }, [baseSize.height, baseSize.width, cropAngle])
 
   useEffect(() => {
     if (!onViewportChange) return
@@ -542,7 +623,8 @@ export function DetailView({
                   className="absolute inset-0"
                   style={{
                     cursor: interactionCursor,
-                    touchAction: zoomValue > 1 || enableSwipeNavigation ? 'none' : 'auto',
+                    touchAction:
+                      cropModeActive || zoomValue > 1 || enableSwipeNavigation ? 'none' : 'auto',
                   }}
                   onPointerDown={(event) => {
                     handlePointerDown(event)
@@ -572,7 +654,35 @@ export function DetailView({
                       transition: isDragging ? 'none' : 'transform 120ms ease-out',
                     }}
                   >
-                    {detailImage}
+                    <div className="relative h-full w-full overflow-hidden rounded-xl bg-[rgba(15,15,15,0.85)]">
+                      <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+                        <div
+                          className="relative h-full w-full"
+                          style={{
+                            transform: cropAngle
+                              ? `rotate(${cropAngle}deg) scale(${rotationScale})`
+                              : `scale(${rotationScale})`,
+                            transformOrigin: 'center',
+                            transition: 'transform 120ms ease-out',
+                          }}
+                        >
+                          {detailImage}
+                        </div>
+                      </div>
+                      {canShowCropOverlay && cropSettings && onCropRectChange ? (
+                        <CropOverlay
+                          width={baseSize.width}
+                          height={baseSize.height}
+                          scale={zoomValue}
+                          rect={cropSettings.rect}
+                          aspectRatio={overlayAspectRatio}
+                          onChange={onCropRectChange}
+                          active
+                          rotationAngle={cropAngle}
+                          rotationScale={rotationScale}
+                        />
+                      ) : null}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -734,6 +844,14 @@ export function ThumbContent({ p }: { p: Photo }) {
         style={{ backgroundColor: COLOR_MAP[p.tag] }}
         aria-hidden
       />
+      {p.hasEdits ? (
+        <span
+          className="px-1 py-0.5 rounded border border-[var(--border,#E1D3B9)] bg-[var(--surface-frosted,#F8F0E4)]"
+          title="Has adjustments"
+        >
+          ±
+        </span>
+      ) : null}
     </div>
   )
 }

@@ -701,3 +701,237 @@ async def update_preview_flag(
         metadata = await ensure_state_for_link(db, link)
     storage = PosixStorage.from_env()
     return assets_service.serialize_asset_item(asset, link, pair, storage, metadata)
+
+
+@router.post("/assets/{asset_id}/quick-fix/preview")
+async def quick_fix_preview(
+    asset_id: UUID,
+    body: schemas.QuickFixAdjustments,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    # For preview, we want speed. Use the "preview_raw" or "thumb_256" if available.
+    # Ideally "preview_raw" which is usually a decent sized JPEG.
+
+    # FIXME: Deactivated for client-side transition (QuickFix Renderer)
+    raise HTTPException(
+        503, "QuickFix backend rendering is disabled. Use client-side rendering."
+    )
+
+    # await ensure_asset_metadata_column(db)
+    # asset = (
+    #     await db.execute(
+    #         select(models.Asset).where(
+    #             models.Asset.id == asset_id,
+    #             models.Asset.user_id == current_user.id,
+    #         )
+    #     )
+    # ).scalar_one_or_none()
+
+    # if not asset or not asset.sha256:
+    #     raise HTTPException(404, "asset not ready")
+
+    # storage = PosixStorage.from_env()
+
+    # # Try to find a source image to work on
+    # # 1. Preview (best balance)
+    # # 2. Original (if JPEG and small enough? No, might be huge RAW)
+    # # 3. Thumbnail (too small?)
+
+    # path = storage.find_derivative(asset.sha256, "preview_raw", "jpg")
+
+    # def _is_jpeg(asset_obj: models.Asset) -> bool:
+    #     fmt = (asset_obj.format or "").upper()
+    #     mime = (asset_obj.mime or "").lower()
+    #     return fmt in {"JPEG", "JPG"} or mime in {"image/jpeg", "image/jpg"}
+
+    # if (path is None or not path.exists()) and asset.storage_uri and _is_jpeg(asset):
+    #     try:
+    #         original_path = storage.path_from_key(asset.storage_uri)
+    #     except ValueError:
+    #         original_path = None
+    #     if original_path and original_path.exists():
+    #         path = original_path
+
+    # if path is None or not path.exists():
+    #     fallback = storage.find_derivative(asset.sha256, "thumb_256", "jpg")
+    #     if fallback and fallback.exists():
+    #         path = fallback
+
+    # if not path or not path.exists():
+    #     raise HTTPException(404, "source image for preview not found")
+
+    # try:
+    #     with Image.open(path) as img:
+    #         # Apply adjustments
+    #         result_img = adjustments_service.apply_adjustments(img, body)
+
+    #         # Save to buffer
+    #         buf = BytesIO()
+    #         result_img.save(buf, format="JPEG", quality=80)
+    #         buf.seek(0)
+    #         return Response(content=buf.getvalue(), media_type="image/jpeg")
+    # except Exception as e:
+    #     logger.exception("quick_fix_preview failed")
+    #     raise HTTPException(500, f"preview generation failed: {e}")
+
+
+@router.patch(
+    "/projects/{project_id}/assets/{asset_id}/quick-fix",
+    response_model=schemas.AssetDetail,
+)
+async def save_quick_fix(
+    project_id: UUID,
+    asset_id: UUID,
+    body: schemas.QuickFixAdjustments,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    await ensure_project_access(db, project_id=project_id, user_id=current_user.id)
+    await ensure_asset_metadata_column(db)
+
+    # Find the link
+    link = (
+        await db.execute(
+            select(models.ProjectAsset).where(
+                models.ProjectAsset.project_id == project_id,
+                models.ProjectAsset.asset_id == asset_id,
+                models.ProjectAsset.user_id == current_user.id,
+            )
+        )
+    ).scalar_one_or_none()
+
+    if not link:
+        raise HTTPException(404, "asset not linked to project")
+
+    # Get or create metadata state
+    metadata = (
+        await db.execute(
+            select(models.MetadataState).where(models.MetadataState.link_id == link.id)
+        )
+    ).scalar_one_or_none()
+
+    if metadata is None:
+        metadata = await ensure_state_for_link(db, link)
+
+    try:
+        current_edits = dict(metadata.edits or {})
+        quick_fix_payload = body.model_dump(exclude_none=True)
+        if quick_fix_payload:
+            current_edits["quick_fix"] = quick_fix_payload
+        else:
+            current_edits.pop("quick_fix", None)
+
+        metadata.edits = current_edits or None
+        await db.commit()
+        await db.refresh(metadata)
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception(
+            "save_quick_fix failed: project=%s asset=%s user=%s",
+            project_id,
+            asset_id,
+            current_user.id,
+        )
+        await db.rollback()
+        raise HTTPException(500, "failed to save quick fix adjustments")
+
+    asset = await db.get(models.Asset, asset_id)
+    if not asset or asset.user_id != current_user.id:
+        raise HTTPException(404, "asset not found")
+    storage = PosixStorage.from_env()
+    return await assets_service.asset_detail(
+        asset, db, storage, link=link, metadata=metadata
+    )
+
+
+@router.post(
+    "/projects/{project_id}/assets/quick-fix:apply",
+    response_model=schemas.AssetInteractionUpdateOut,
+)
+async def apply_quick_fix_batch(
+    project_id: UUID,
+    body: schemas.QuickFixBatchApply,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if not body.asset_ids:
+        raise HTTPException(400, "asset_ids required")
+
+    await ensure_project_access(db, project_id=project_id, user_id=current_user.id)
+    await ensure_asset_metadata_column(db)
+
+    # Fetch assets and links
+    base_ids = list(dict.fromkeys(body.asset_ids))
+    query = (
+        select(
+            models.Asset,
+            models.ProjectAsset,
+            models.MetadataState,
+        )
+        .join(
+            models.ProjectAsset,
+            models.ProjectAsset.asset_id == models.Asset.id,
+        )
+        .outerjoin(
+            models.MetadataState,
+            models.MetadataState.link_id == models.ProjectAsset.id,
+        )
+        .where(
+            models.ProjectAsset.project_id == project_id,
+            models.ProjectAsset.asset_id.in_(base_ids),
+            models.ProjectAsset.user_id == current_user.id,
+        )
+    )
+    rows = (await db.execute(query)).all()
+
+    # Map for easy access
+    assets_map = {asset.id: (asset, link, metadata) for asset, link, metadata in rows}
+
+    touched_pairs: list[tuple[models.Asset, models.MetadataState]] = []
+
+    for asset_id in base_ids:
+        if asset_id not in assets_map:
+            continue
+
+        asset, link, metadata = assets_map[asset_id]
+        state = metadata or await ensure_state_for_link(db, link)
+
+        current_edits = dict(state.edits or {})
+        quick_fix = current_edits.get("quick_fix", {})
+
+        # Apply auto adjustments
+        # Note: In a real implementation, this would analyze the image.
+        # For now, we apply safe defaults/heuristics.
+
+        if body.auto_exposure:
+            # Heuristic: Slight contrast boost and brightness
+            exposure = quick_fix.get("exposure", {})
+            exposure["exposure"] = 0.2
+            exposure["contrast"] = 1.1
+            quick_fix["exposure"] = exposure
+
+        if body.auto_white_balance:
+            # Heuristic: Warm it up slightly
+            color = quick_fix.get("color", {})
+            color["temperature"] = 0.1
+            quick_fix["color"] = color
+
+        if body.auto_crop:
+            # Heuristic: Reset rotation, maybe set 1:1 if we were bold
+            crop = quick_fix.get("crop", {})
+            crop["rotation"] = 0.0
+            quick_fix["crop"] = crop
+
+        current_edits["quick_fix"] = quick_fix
+        state.edits = current_edits
+        touched_pairs.append((asset, state))
+
+    await db.commit()
+
+    # Return updated items
+    items = await assets_service.load_asset_items(
+        db, project_id, base_ids, user_id=current_user.id
+    )
+    return schemas.AssetInteractionUpdateOut(items=items)

@@ -21,9 +21,9 @@ export default defineConfig(({ mode }) => {
   const https =
     enableHttps && httpsKeyPath && httpsCertPath
       ? {
-          key: readFileSync(httpsKeyPath),
-          cert: readFileSync(httpsCertPath),
-        }
+        key: readFileSync(httpsKeyPath),
+        cert: readFileSync(httpsCertPath),
+      }
       : enableHttps
         ? true
         : undefined
@@ -86,6 +86,9 @@ export default defineConfig(({ mode }) => {
       port: 5173,
       strictPort: true,
       https,
+      proxy: {
+        '/v1': 'http://localhost:8000',
+      },
     },
     preview: {
       host: '0.0.0.0',

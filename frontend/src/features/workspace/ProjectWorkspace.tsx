@@ -20,7 +20,6 @@ import {
   type AssetDetail,
   type AssetProjectUsage,
   type LoadMetadataFromProjectResponse,
-  previewQuickFix,
   saveQuickFixAdjustments,
   applyQuickFixBatch,
   type AssetInteractionUpdateResponse,
@@ -609,12 +608,6 @@ export default function ProjectWorkspace() {
   const [cropSettingsByPhoto, setCropSettingsByPhoto] = useState<Record<string, CropSettings>>({})
   const [quickFixStateByPhoto, setQuickFixStateByPhoto] = useState<Record<string, QuickFixState>>({})
   const quickFixPersistedRef = useRef<Record<string, QuickFixState>>({})
-  const [quickFixPreview, setQuickFixPreview] = useState<{ assetId: string; url: string } | null>(null)
-  const quickFixPreviewRef = useRef<{ assetId: string; url: string } | null>(null)
-  const quickFixPreviewControllerRef = useRef<AbortController | null>(null)
-  const quickFixPreviewTimeoutRef = useRef<number | null>(null)
-  const quickFixPreviewSeqRef = useRef(0)
-  const [quickFixPreviewBusy, setQuickFixPreviewBusy] = useState(false)
   const quickFixSaveTimeoutRef = useRef<number | null>(null)
   const quickFixSaveSeqRef = useRef(0)
   const [quickFixSaving, setQuickFixSaving] = useState(false)
@@ -655,32 +648,12 @@ export default function ProjectWorkspace() {
 
   useEffect(() => {
     return () => {
-      if (quickFixPreviewTimeoutRef.current !== null) {
-        window.clearTimeout(quickFixPreviewTimeoutRef.current)
-        quickFixPreviewTimeoutRef.current = null
-      }
       if (quickFixSaveTimeoutRef.current !== null) {
         window.clearTimeout(quickFixSaveTimeoutRef.current)
         quickFixSaveTimeoutRef.current = null
       }
-      if (quickFixPreviewControllerRef.current) {
-        quickFixPreviewControllerRef.current.abort()
-        quickFixPreviewControllerRef.current = null
-      }
-      if (quickFixPreviewRef.current) {
-        URL.revokeObjectURL(quickFixPreviewRef.current.url)
-        quickFixPreviewRef.current = null
-      }
     }
   }, [])
-
-  useEffect(() => {
-    const previous = quickFixPreviewRef.current
-    if (previous && previous !== quickFixPreview) {
-      URL.revokeObjectURL(previous.url)
-    }
-    quickFixPreviewRef.current = quickFixPreview
-  }, [quickFixPreview])
 
   useEffect(() => {
     if (!isMobileLayout) {
@@ -1694,20 +1667,18 @@ export default function ProjectWorkspace() {
     navigate('/')
   }
 
+
   const baseCurrentPhoto = visible[current] ?? null
   const currentAssetId = baseCurrentPhoto?.id ?? null
-  const detailItems: Photo[] = useMemo(() => {
-    if (!quickFixPreview) return visible
-    return visible.map((photo) =>
-      quickFixPreview.assetId === photo.id ? { ...photo, previewSrc: quickFixPreview.url } : photo
-    )
-  }, [quickFixPreview, visible])
+  const detailItems: Photo[] = visible
   const currentPhoto = detailItems[current] ?? baseCurrentPhoto ?? null
+
   useEffect(() => {
     if (activeMobilePanel === 'details' && !currentPhoto) {
       setActiveMobilePanel('photos')
     }
   }, [activeMobilePanel, currentPhoto])
+
   useEffect(() => {
     if (!currentPhoto?.id) return
     setCropSettingsByPhoto((prev) => {
@@ -1715,6 +1686,7 @@ export default function ProjectWorkspace() {
       return { ...prev, [currentPhoto.id]: createDefaultCropSettings() }
     })
   }, [currentPhoto?.id])
+
   useEffect(() => {
     if (!currentPhoto?.id) return
     setQuickFixStateByPhoto((prev) => {
@@ -1722,19 +1694,13 @@ export default function ProjectWorkspace() {
       return { ...prev, [currentPhoto.id]: createDefaultQuickFixState() }
     })
   }, [currentPhoto?.id])
+
   useEffect(() => {
-    if (!quickFixPreview) return
-    if (quickFixPreview.assetId === currentAssetId) return
-    setQuickFixPreview(null)
-  }, [currentAssetId, quickFixPreview])
-  useEffect(() => {
-    if (quickFixPreviewControllerRef.current) {
-      quickFixPreviewControllerRef.current.abort()
-      quickFixPreviewControllerRef.current = null
+    if (!currentAssetId) {
+      setDetailViewportRect(null)
+      setPreviewPanRequest(null)
+      setDetailViewportResetKey((key) => key + 1)
     }
-    quickFixPreviewSeqRef.current += 1
-    setQuickFixPreviewBusy(false)
-    setQuickFixError(null)
   }, [currentAssetId])
   useEffect(() => {
     quickFixAdjustingRef.current = false
@@ -1817,65 +1783,7 @@ export default function ProjectWorkspace() {
     setDetailViewportRect((prev) => (prev ? { ...prev, x: position.x, y: position.y } : prev))
     setPreviewPanRequest({ ...position, token: Date.now() })
   }, [])
-  const requestQuickFixPreview = useCallback(
-    (assetId: string, state: QuickFixState) => {
-      if (!assetId) return
-      if (!hasQuickFixAdjustments(state)) {
-        setQuickFixPreview((prev) => (prev?.assetId === assetId ? null : prev))
-        setQuickFixPreviewBusy(false)
-        if (quickFixPreviewControllerRef.current) {
-          quickFixPreviewControllerRef.current.abort()
-          quickFixPreviewControllerRef.current = null
-        }
-        setQuickFixError(null)
-        return
-      }
-      const payload = quickFixStateToPayload(state)
-      if (!payload) {
-        setQuickFixPreview((prev) => (prev?.assetId === assetId ? null : prev))
-        setQuickFixPreviewBusy(false)
-        return
-      }
-      if (quickFixPreviewControllerRef.current) {
-        quickFixPreviewControllerRef.current.abort()
-      }
-      const controller = new AbortController()
-      quickFixPreviewControllerRef.current = controller
-      const seq = ++quickFixPreviewSeqRef.current
-      setQuickFixPreviewBusy(true)
-      previewQuickFix(assetId, payload, { signal: controller.signal })
-        .then((blob) => {
-          if (quickFixPreviewSeqRef.current !== seq) return
-          const url = URL.createObjectURL(blob)
-          setQuickFixPreview({ assetId, url })
-          setQuickFixPreviewBusy(false)
-          setQuickFixError(null)
-        })
-        .catch((error) => {
-          if (controller.signal.aborted) return
-          console.error('Failed to render Quick Fix preview', error)
-          if (quickFixPreviewSeqRef.current === seq) {
-            setQuickFixPreviewBusy(false)
-          }
-          setQuickFixError('Preview update failed. Please try again.')
-        })
-    },
-    []
-  )
-  const scheduleQuickFixPreview = useCallback(
-    (assetId: string, state: QuickFixState) => {
-      if (!assetId) return
-      if (quickFixPreviewTimeoutRef.current !== null) {
-        window.clearTimeout(quickFixPreviewTimeoutRef.current)
-      }
-      const delay = quickFixAdjustingRef.current ? 500 : 150
-      quickFixPreviewTimeoutRef.current = window.setTimeout(() => {
-        quickFixPreviewTimeoutRef.current = null
-        requestQuickFixPreview(assetId, state)
-      }, delay)
-    },
-    [requestQuickFixPreview]
-  )
+
   const requestQuickFixSave = useCallback(
     async (assetId: string, state: QuickFixState) => {
       if (!projectId) return
@@ -2106,13 +2014,8 @@ export default function ProjectWorkspace() {
       }
       return { ...prev, [currentAssetId]: nextValue }
     })
-    if (hasQuickFixAdjustments(serverState)) {
-      requestQuickFixPreview(currentAssetId, serverState)
-    } else {
-      setQuickFixPreview((prev) => (prev?.assetId === currentAssetId ? null : prev))
-    }
     setQuickFixError(null)
-  }, [currentAssetDetail?.metadata_state?.edits?.quick_fix, currentAssetId, currentDetailAspectRatio, requestQuickFixPreview])
+  }, [currentAssetDetail?.metadata_state?.edits?.quick_fix, currentAssetId, currentDetailAspectRatio])
   const currentCropSettings = currentPhoto?.id ? cropSettingsByPhoto[currentPhoto.id] ?? null : null
   const currentQuickFixState = currentAssetId ? quickFixStateByPhoto[currentAssetId] ?? null : null
   const cropModeActive = activeInspectorTab === 'quick-fix' && !(currentCropSettings?.applied ?? false)
@@ -2147,7 +2050,7 @@ export default function ProjectWorkspace() {
         setQuickFixStateByPhoto((prev) => ({ ...prev, ...stateMap }))
 
         if (stateMap[currentAssetId]) {
-          scheduleQuickFixPreview(currentAssetId, stateMap[currentAssetId])
+          // Preview handled by client-side worker
         }
 
         const ids = Object.keys(stateMap)
@@ -2174,7 +2077,6 @@ export default function ProjectWorkspace() {
       currentAssetId,
       applyToSelection,
       selectedPhotoIds,
-      scheduleQuickFixPreview,
       scheduleQuickFixSave,
       scheduleQuickFixBatchSave,
       quickFixStateByPhoto,
@@ -2316,7 +2218,7 @@ export default function ProjectWorkspace() {
         setQuickFixStateByPhoto((prev) => ({ ...prev, ...stateMap }))
 
         if (stateMap[currentAssetId]) {
-          scheduleQuickFixPreview(currentAssetId, stateMap[currentAssetId])
+          // Preview handled by client-side worker
         }
 
         const ids = Object.keys(stateMap)
@@ -2352,7 +2254,6 @@ export default function ProjectWorkspace() {
       currentAssetId,
       applyToSelection,
       selectedPhotoIds,
-      scheduleQuickFixPreview,
       scheduleQuickFixSave,
       scheduleQuickFixBatchSave,
       quickFixStateByPhoto,
@@ -2384,7 +2285,7 @@ export default function ProjectWorkspace() {
       setQuickFixStateByPhoto((prev) => ({ ...prev, ...stateMap }))
 
       if (stateMap[currentAssetId]) {
-        scheduleQuickFixPreview(currentAssetId, stateMap[currentAssetId])
+        // Preview handled by client-side worker
       }
 
       const ids = Object.keys(stateMap)
@@ -2417,7 +2318,6 @@ export default function ProjectWorkspace() {
     currentAssetId,
     applyToSelection,
     selectedPhotoIds,
-    scheduleQuickFixPreview,
     scheduleQuickFixSave,
     scheduleQuickFixBatchSave,
     quickFixStateByPhoto,
@@ -2435,7 +2335,7 @@ export default function ProjectWorkspace() {
       onQuickFixChange: applyQuickFixChange,
       onQuickFixGroupReset: handleQuickFixGroupReset,
       onQuickFixGlobalReset: handleQuickFixGlobalReset,
-      previewBusy: quickFixPreviewBusy,
+      previewBusy: false,
       saving: quickFixSaving,
       errorMessage: quickFixError,
       onAdjustingChange: handleQuickFixAdjustingChange,
@@ -2459,7 +2359,6 @@ export default function ProjectWorkspace() {
       handleQuickFixGroupReset,
       handleQuickFixAdjustingChange,
       quickFixError,
-      quickFixPreviewBusy,
       quickFixSaving,
       applyToSelection,
       history.canUndo,
@@ -2472,15 +2371,14 @@ export default function ProjectWorkspace() {
     if (!currentPhoto) return null
     const detailPreviewUrl = withBase(currentAssetDetail?.preview_url ?? null)
     const detailThumbUrl = withBase(currentAssetDetail?.thumb_url ?? null)
-    const quickFixPreviewSrc =
-      quickFixPreview && quickFixPreview.assetId === currentAssetId ? quickFixPreview.url : null
+
+    // Quick Fix preview handled by client-side worker in InspectorPanel
     const primarySrc =
-      quickFixPreviewSrc ??
       detailPreviewUrl ??
       currentPhoto.previewSrc ??
       currentPhoto.thumbSrc ??
       detailThumbUrl
-    const fallback = quickFixPreviewSrc ?? currentPhoto.thumbSrc ?? detailThumbUrl ?? null
+    const fallback = currentPhoto.thumbSrc ?? detailThumbUrl ?? null
     return {
       src: primarySrc,
       thumbSrc: fallback,
@@ -2496,7 +2394,6 @@ export default function ProjectWorkspace() {
     currentAssetDetail?.preview_url,
     currentAssetDetail?.thumb_url,
     currentAssetId,
-    quickFixPreview,
   ])
   const metadataSourceProjectId =
     currentPhoto?.metadataSourceProjectId ??
@@ -2792,6 +2689,7 @@ export default function ProjectWorkspace() {
                   quickFixControls={quickFixControls}
                   activeTab={activeInspectorTab}
                   onActiveTabChange={handleInspectorTabChange}
+                  previewAssetId={currentPhoto?.id}
                 />
               </div>
             ) : (
@@ -2925,8 +2823,10 @@ export default function ProjectWorkspace() {
             detailViewport={detailViewportRect}
             onPreviewPan={handlePreviewPan}
             quickFixControls={quickFixControls}
+            viewMode={view}
             activeTab={activeInspectorTab}
             onActiveTabChange={handleInspectorTabChange}
+            previewAssetId={currentPhoto?.id}
           />
         </div>
       )}

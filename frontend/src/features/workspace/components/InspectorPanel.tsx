@@ -39,6 +39,7 @@ import { COLOR_MAP } from '../utils'
 
 import { QuickFixPanel } from './QuickFixPanel'
 import type { QuickFixGroupKey, QuickFixState } from '../quickFixState'
+import { useQuickFixRenderer } from '../worker/useQuickFixRenderer'
 
 const RIGHT_PANEL_ID = 'workspace-image-details-panel'
 const RIGHT_PANEL_CONTENT_ID = `${RIGHT_PANEL_ID}-content`
@@ -93,6 +94,7 @@ export function InspectorPanel({
   metadataLoading,
   metadataError,
   previewAsset,
+  previewAssetId,
   detailZoom,
   detailMinZoom,
   detailMaxZoom,
@@ -139,6 +141,7 @@ export function InspectorPanel({
   activeTab?: InspectorTab
   onActiveTabChange?: (tab: InspectorTab) => void
   viewMode?: 'grid' | 'detail'
+  previewAssetId?: string | null
 }) {
   const [internalActiveTab, setInternalActiveTab] = useState<InspectorTab>('details')
   const activeTab = activeTabProp ?? internalActiveTab
@@ -182,7 +185,29 @@ export function InspectorPanel({
   const panelContentClass = isMobilePanel
     ? 'flex flex-1 min-h-0 flex-col gap-3 pb-4'
     : 'flex flex-1 min-h-0 flex-col gap-3 pr-4'
-  const quickFixPreviewBusy = quickFixControls?.previewBusy ?? false
+
+  const workerAsset = useMemo(() => {
+    if (!previewAssetId || !previewAsset) return null
+    return {
+      id: previewAssetId,
+      preview_url: previewAsset.src,
+      thumb_url: previewAsset.thumbSrc,
+    }
+  }, [previewAssetId, previewAsset])
+
+  const { previewUrl: workerPreviewUrl, isProcessing: workerBusy } = useQuickFixRenderer(
+    workerAsset,
+    liveQuickFixState ?? quickFixControls?.quickFixState ?? null
+  )
+
+  const quickFixPreviewBusy = (quickFixControls?.previewBusy || workerBusy) ?? false
+
+  const finalPreview = useMemo(() => {
+    if (workerPreviewUrl && previewAsset) {
+      return { ...previewAsset, src: workerPreviewUrl }
+    }
+    return previewAsset
+  }, [workerPreviewUrl, previewAsset])
   const mergedInspectorFields = useMemo(() => {
     const map = new Map<string, string>()
     generalFields.forEach((field) => {
@@ -357,7 +382,7 @@ export function InspectorPanel({
           )}
           <div id={RIGHT_PANEL_CONTENT_ID} className={panelContentClass}>
             <InspectorPreviewCard
-              preview={previewAsset}
+              preview={finalPreview}
               hasSelection={hasSelection}
               zoomLevel={detailZoom}
               minZoom={detailMinZoom}

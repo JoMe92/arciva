@@ -20,20 +20,6 @@ vi.mock('../../features/auth/AuthContext', () => ({
     AuthProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }))
 
-Object.defineProperty(window, 'matchMedia', {
-    writable: true,
-    value: vi.fn().mockImplementation(query => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addListener: vi.fn(), // deprecated
-        removeListener: vi.fn(), // deprecated
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-        dispatchEvent: vi.fn(),
-    })),
-})
-
 const mockFetchProjects = fetchImageHubProjects as unknown as ReturnType<typeof vi.fn>
 const mockFetchAssets = fetchImageHubAssets as unknown as ReturnType<typeof vi.fn>
 
@@ -64,6 +50,7 @@ const mockAssets: ImageHubAsset[] = [
         width: 800,
         height: 600,
         is_paired: false,
+        thumb_url: 'http://example.com/thumb.jpg',
         projects: [],
     },
 ]

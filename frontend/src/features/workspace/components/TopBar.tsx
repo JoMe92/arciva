@@ -33,6 +33,7 @@ export function TopBar({
   layout = 'desktop',
   accountControl,
   onQuickFix,
+  onOpenSocialExport,
 }: {
   projectName: string
   onBack: () => void
@@ -56,6 +57,7 @@ export function TopBar({
   layout?: 'desktop' | 'mobile'
   accountControl?: React.ReactNode
   onQuickFix?: (action: QuickFixAction) => void
+  onOpenSocialExport?: () => void
 }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(projectName)
@@ -451,6 +453,19 @@ export function TopBar({
             <span aria-hidden="true">⇣</span>
             <span>Export…</span>
             {canExport ? <CountBadge count={selectedCount} /> : null}
+          </button>
+          <button
+            type="button"
+            onClick={onOpenSocialExport}
+            disabled={!canExport}
+            className={`inline-flex h-9 min-w-[80px] flex-shrink-0 items-center justify-center gap-2 rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-4 text-[12px] font-semibold text-[var(--text,#1F1E1B)] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--stone-trail-brand-focus,#4A463F)] ${canExport
+              ? 'hover:bg-[var(--sand-50,#F9F4EC)]'
+              : 'text-[var(--text-muted,#6B645B)] cursor-not-allowed opacity-60'
+              }`}
+            aria-disabled={!canExport}
+            title="Create Social Media Canvas"
+          >
+            <span>Canvas</span>
           </button>
           {
             selectedCount > 0 && onQuickFix ? (

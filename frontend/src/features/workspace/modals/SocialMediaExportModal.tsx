@@ -19,6 +19,7 @@ export const SocialMediaExportModal = ({ isOpen, onClose, photo }: Props) => {
     // Reset state when photo changes or modal opens
     useEffect(() => {
         if (isOpen && photo) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setTemplateId(SOCIAL_TEMPLATES[0].id); // Default to IG Portrait
             // Load image
             const img = new Image();
@@ -113,8 +114,8 @@ export const SocialMediaExportModal = ({ isOpen, onClose, photo }: Props) => {
                                         key={t.id}
                                         onClick={() => setTemplateId(t.id)}
                                         className={`flex flex-col items-center justify-center p-3 rounded-[14px] border transition-all ${templateId === t.id
-                                                ? 'border-[var(--text,#1F1E1B)] bg-[var(--sand-50,#F3EBDD)] ring-1 ring-[var(--text,#1F1E1B)]'
-                                                : 'border-[var(--border,#E1D3B9)] bg-white hover:border-[var(--text-muted,#6B645B)]'
+                                            ? 'border-[var(--text,#1F1E1B)] bg-[var(--sand-50,#F3EBDD)] ring-1 ring-[var(--text,#1F1E1B)]'
+                                            : 'border-[var(--border,#E1D3B9)] bg-white hover:border-[var(--text-muted,#6B645B)]'
                                             }`}
                                     >
                                         <div className="text-sm font-semibold">{t.label}</div>

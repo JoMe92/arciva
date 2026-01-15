@@ -51,10 +51,24 @@ def apply_crop_rotate(
             expand=False,
         )
 
-    if settings.aspect_ratio and settings.aspect_ratio > 0:
-        current_ratio = result.width / result.height
-        target_ratio = settings.aspect_ratio
-        if abs(current_ratio - target_ratio) > 1e-3:
+    if settings.aspect_ratio:
+        try:
+            target_ratio = float(settings.aspect_ratio)
+        except (ValueError, TypeError):
+            # If it's a string like "1:1", we might need a parser.
+            # For now, if it fails to convert to float directly, we skip or handle common presets.
+            if isinstance(settings.aspect_ratio, str) and ":" in settings.aspect_ratio:
+                try:
+                    w, h = map(float, settings.aspect_ratio.split(":"))
+                    target_ratio = w / h
+                except (ValueError, ZeroDivisionError):
+                    target_ratio = 0.0
+            else:
+                target_ratio = 0.0
+
+        if target_ratio > 0:
+            current_ratio = result.width / result.height
+            if abs(current_ratio - target_ratio) > 1e-3:
             if current_ratio > target_ratio:
                 new_width = int(result.height * target_ratio)
                 offset = max((result.width - new_width) // 2, 0)

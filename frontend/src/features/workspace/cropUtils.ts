@@ -127,17 +127,34 @@ export function applyOrientationToRatio(
 }
 
 export function inferAspectRatioSelection(
-  value: number | null,
+  value: number | string | null,
   originalRatio: number | null
 ): { id: CropAspectRatioId; orientation: CropOrientation } {
-  if (!value || value <= 0) {
+  let numericValue: number | null = null
+  if (typeof value === 'string') {
+    if (value.includes(':')) {
+      const [w, h] = value.split(':').map(Number)
+      if (w > 0 && h > 0) {
+        numericValue = w / h
+      }
+    } else {
+      const parsed = parseFloat(value)
+      if (Number.isFinite(parsed)) {
+        numericValue = parsed
+      }
+    }
+  } else {
+    numericValue = value
+  }
+
+  if (!numericValue || numericValue <= 0) {
     return { id: 'free', orientation: 'horizontal' }
   }
   let orientation: CropOrientation = 'horizontal'
-  let target = value
-  if (value < 1) {
+  let target = numericValue
+  if (numericValue < 1) {
     orientation = 'vertical'
-    target = 1 / value
+    target = 1 / numericValue
   }
   const tolerance = 0.01
   if (originalRatio && Math.abs(target - originalRatio) <= tolerance) {

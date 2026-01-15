@@ -118,6 +118,22 @@ def serialize_asset_item(
     metadata_state_id = metadata.id if metadata else None
     metadata_source_project_id = metadata.source_project_id if metadata else None
 
+    metadata_state_out = None
+    if metadata and project_asset:
+        metadata_state_out = schemas.MetadataStateOut(
+            id=metadata.id,
+            link_id=project_asset.id,
+            project_id=project_asset.project_id,
+            rating=rating,
+            color_label=color_label,
+            picked=picked,
+            rejected=rejected,
+            edits=metadata.edits,
+            source_project_id=metadata.source_project_id,
+            created_at=metadata.created_at,
+            updated_at=metadata.updated_at,
+        )
+
     return schemas.AssetListItem(
         id=asset.id,
         link_id=project_asset.id,
@@ -148,6 +164,7 @@ def serialize_asset_item(
         rejected=rejected,
         metadata_state_id=metadata_state_id,
         metadata_source_project_id=metadata_source_project_id,
+        metadata_state=metadata_state_out,
     )
 
 

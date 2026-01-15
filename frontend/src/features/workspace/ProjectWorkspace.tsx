@@ -389,7 +389,7 @@ function detectAspect(
   return 'square'
 }
 
-function mapAssetToPhoto(item: AssetListItem, existing?: Photo): Photo {
+export function mapAssetToPhoto(item: AssetListItem, existing?: Photo): Photo {
   const name = item.original_filename ?? existing?.name ?? 'Untitled asset'
   const type = inferTypeFromName(name)
   const capturedAt = item.taken_at ?? existing?.capturedAt ?? null
@@ -788,6 +788,31 @@ export default function ProjectWorkspace() {
         } else {
           nextIndex = Math.max(0, Math.min(nextIndex, mapped.length - 1))
         }
+
+        // Pre-populate quick fix states from the list response to prevent flickering
+        const nextQuickFixStates: Record<string, QuickFixState> = {}
+        items.forEach(item => {
+          const serverPayload = item.metadata_state?.edits?.quick_fix ?? null
+          nextQuickFixStates[item.id] = quickFixStateFromApi(serverPayload) ?? createDefaultQuickFixState()
+        })
+
+        setQuickFixStateByPhoto(prev => ({ ...prev, ...nextQuickFixStates }))
+
+        setCropSettingsByPhoto(prev => {
+          const next = { ...prev }
+          items.forEach(item => {
+            const state = nextQuickFixStates[item.id]
+            const existingCrop = next[item.id] ?? createDefaultCropSettings()
+            const ratioInfo = inferAspectRatioSelection(state.crop.aspectRatio, 1)
+            next[item.id] = {
+              ...existingCrop,
+              angle: state.crop.rotation,
+              aspectRatioId: ratioInfo.id,
+              orientation: ratioInfo.orientation,
+            }
+          })
+          return next
+        })
 
         setCurrent(nextIndex)
       } catch (err) {

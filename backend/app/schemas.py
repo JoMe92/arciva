@@ -5,7 +5,7 @@ from pydantic import (
     field_validator,
     model_validator,
 )
-from typing import Optional, List, Dict, Any, Literal
+from typing import Optional, List, Dict, Any, Literal, Union
 from datetime import datetime
 from enum import Enum
 from uuid import UUID
@@ -170,6 +170,20 @@ class UploadCompleteIn(BaseModel):
     asset_id: UUID
 
 
+class MetadataStateOut(BaseModel):
+    id: UUID
+    link_id: UUID
+    project_id: UUID
+    rating: int
+    color_label: ColorLabel
+    picked: bool
+    rejected: bool
+    edits: Optional[Dict[str, Any]] = None
+    source_project_id: Optional[UUID] = None
+    created_at: datetime
+    updated_at: datetime
+
+
 class AssetListItem(BaseModel):
     id: UUID
     link_id: UUID
@@ -200,6 +214,7 @@ class AssetListItem(BaseModel):
     rejected: bool = False
     metadata_state_id: Optional[UUID] = None
     metadata_source_project_id: Optional[UUID] = None
+    metadata_state: Optional[MetadataStateOut] = None
 
 
 class AssetDerivativeOut(BaseModel):
@@ -245,20 +260,6 @@ class AssetProjectUsage(BaseModel):
     name: str
     cover_thumb: Optional[str] = None
     last_modified: Optional[datetime] = None
-
-
-class MetadataStateOut(BaseModel):
-    id: UUID
-    link_id: UUID
-    project_id: UUID
-    rating: int
-    color_label: ColorLabel
-    picked: bool
-    rejected: bool
-    edits: Optional[Dict[str, Any]] = None
-    source_project_id: Optional[UUID] = None
-    created_at: datetime
-    updated_at: datetime
 
 
 # Project-asset linking
@@ -438,7 +439,9 @@ class ImageHubAssetsResponse(BaseModel):
 
 # Quick-Fix Adjustments
 class CropSettings(BaseModel):
-    aspect_ratio: float = 0.0  # 0.0 = Original/Free? Or use specific values.
+    aspect_ratio: Optional[Union[float, str]] = (
+        0.0  # 0.0 = Original/Free? Or use specific values like "1:1".
+    )
     rotation: float = 0.0
 
 

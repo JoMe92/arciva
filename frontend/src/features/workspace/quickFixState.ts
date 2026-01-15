@@ -85,9 +85,27 @@ const sanitizeNumber = (value: unknown, fallback: number): number => {
 
 function sanitizeCropSettings(payload: unknown): QuickFixCropState {
   const data = (payload ?? {}) as QuickFixCropSettingsPayload
+  let aspectRatio: number | null = null
+
+  if (typeof data.aspect_ratio === 'string') {
+    if (data.aspect_ratio.includes(':')) {
+      const [w, h] = data.aspect_ratio.split(':').map(Number)
+      if (w > 0 && h > 0) {
+        aspectRatio = w / h
+      }
+    } else {
+      const parsed = parseFloat(data.aspect_ratio)
+      if (Number.isFinite(parsed) && parsed > 0) {
+        aspectRatio = parsed
+      }
+    }
+  } else if (typeof data.aspect_ratio === 'number' && data.aspect_ratio > 0) {
+    aspectRatio = data.aspect_ratio
+  }
+
   return {
     rotation: sanitizeNumber(data.rotation, DEFAULT_STATE.crop.rotation),
-    aspectRatio: isNumber(data.aspect_ratio) && data.aspect_ratio > 0 ? data.aspect_ratio : null,
+    aspectRatio,
   }
 }
 
@@ -148,24 +166,28 @@ const colorDefaults = DEFAULT_STATE.color
 const grainDefaults = DEFAULT_STATE.grain
 const geometryDefaults = DEFAULT_STATE.geometry
 
-const cropEqual = (a: QuickFixCropState, b: QuickFixCropState) =>
-  Math.abs(a.rotation - b.rotation) < 1e-3 &&
-  ((a.aspectRatio === null && b.aspectRatio === null) ||
-    (a.aspectRatio !== null && b.aspectRatio !== null && Math.abs(a.aspectRatio - b.aspectRatio) < 1e-4))
+export const cropEqual = (a: QuickFixCropState, b: QuickFixCropState) => {
+  if (Math.abs(a.rotation - b.rotation) >= 1e-3) return false
+  if (a.aspectRatio === b.aspectRatio) return true
+  if (typeof a.aspectRatio === 'number' && typeof b.aspectRatio === 'number') {
+    return Math.abs(a.aspectRatio - b.aspectRatio) < 1e-4
+  }
+  return false
+}
 
-const exposureEqual = (a: QuickFixExposureState, b: QuickFixExposureState) =>
+export const exposureEqual = (a: QuickFixExposureState, b: QuickFixExposureState) =>
   Math.abs(a.exposure - b.exposure) < 1e-3 &&
   Math.abs(a.contrast - b.contrast) < 1e-3 &&
   Math.abs(a.highlights - b.highlights) < 1e-3 &&
   Math.abs(a.shadows - b.shadows) < 1e-3
 
-const colorEqual = (a: QuickFixColorState, b: QuickFixColorState) =>
+export const colorEqual = (a: QuickFixColorState, b: QuickFixColorState) =>
   Math.abs(a.temperature - b.temperature) < 1e-3 && Math.abs(a.tint - b.tint) < 1e-3
 
-const grainEqual = (a: QuickFixGrainState, b: QuickFixGrainState) =>
+export const grainEqual = (a: QuickFixGrainState, b: QuickFixGrainState) =>
   Math.abs(a.amount - b.amount) < 1e-3 && a.size === b.size
 
-const geometryEqual = (a: QuickFixGeometryState, b: QuickFixGeometryState) =>
+export const geometryEqual = (a: QuickFixGeometryState, b: QuickFixGeometryState) =>
   Math.abs(a.vertical - b.vertical) < 1e-3 && Math.abs(a.horizontal - b.horizontal) < 1e-3
 
 export function areQuickFixStatesEqual(

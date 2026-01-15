@@ -266,7 +266,7 @@ export async function loadMetadataFromProject(
 }
 
 export type QuickFixCropSettingsPayload = {
-  aspect_ratio?: number | null
+  aspect_ratio?: number | string | null
   rotation?: number | null
 }
 

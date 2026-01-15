@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence } from 'framer-motion'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import StoneTrailLogo from '../components/StoneTrailLogo'
 import ProjectCard from '../components/ProjectCard'
@@ -66,54 +66,59 @@ const AppBar: React.FC<{
   onToggleFilters,
   filterCount,
 }) => {
-  const { mode, toggle } = useTheme()
-  const filterButtonActive = filtersOpen || filterCount > 0
+    const { mode, toggle } = useTheme()
+    const filterButtonActive = filtersOpen || filterCount > 0
 
-  return (
-    <div className="border-b border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]/90 backdrop-blur">
-      <div className="mx-auto max-w-7xl px-4 py-2 flex items-center gap-3">
-        <StoneTrailLogo className="shrink-0" mode={mode} onToggleTheme={toggle} />
-        <div className="ml-auto flex items-center gap-2">
-          <button
-            onClick={onToggleArchive}
-            className="inline-flex h-8 items-center rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 text-[12px] hover:border-[var(--text-muted,#6B645B)]"
-          >
-            {archiveMode ? 'Exit archive' : 'Enter archive'}
-          </button>
-          <button
-            type="button"
-            onClick={onToggleFilters}
-            className={`inline-flex h-8 items-center rounded-full border px-3 text-[12px] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--stone-trail-brand-focus,#4A463F)] ${
-              filterButtonActive
+    return (
+      <div className="border-b border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]/90 backdrop-blur">
+        <div className="mx-auto max-w-7xl px-4 py-2 flex items-center gap-3">
+          <StoneTrailLogo className="shrink-0" mode={mode} onToggleTheme={toggle} />
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              onClick={onToggleArchive}
+              className="inline-flex h-8 items-center rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 text-[12px] hover:border-[var(--text-muted,#6B645B)]"
+            >
+              {archiveMode ? 'Exit archive' : 'Enter archive'}
+            </button>
+            <button
+              type="button"
+              onClick={onToggleFilters}
+              className={`inline-flex h-8 items-center rounded-full border px-3 text-[12px] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--stone-trail-brand-focus,#4A463F)] ${filterButtonActive
                 ? 'border-[var(--text,#1F1E1B)] text-[var(--text,#1F1E1B)]'
                 : 'border-[var(--border,#E1D3B9)] text-[var(--text-muted,#6B645B)] hover:border-[var(--text-muted,#6B645B)]'
-            }`}
-            aria-expanded={filtersOpen}
-            aria-controls={FILTER_PANEL_ID}
-            title="Toggle project filters"
-          >
-            {filterCount ? `Filters (${filterCount})` : 'Filters'}
-          </button>
-          <button
-            onClick={onCreate}
-            className="inline-flex h-8 items-center rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 text-[12px] hover:border-[var(--text-muted,#6B645B)]"
-          >
-            <span className="mr-1">＋</span> New project
-            <kbd className="ml-2 hidden lg:inline text-[10px] text-[var(--text-muted,#6B645B)]">
-              ⌘/Ctrl+N
-            </kbd>
-          </button>
-          <ProjectSettingsButton
-            onClick={onOpenSettings}
-            label="Open application settings"
-            title="Application settings"
-          />
-          <UserMenu />
+                }`}
+              aria-expanded={filtersOpen}
+              aria-controls={FILTER_PANEL_ID}
+              title="Toggle project filters"
+            >
+              {filterCount ? `Filters (${filterCount})` : 'Filters'}
+            </button>
+            <Link
+              to="/hub"
+              className="inline-flex h-8 items-center rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 text-[12px] text-[var(--text,#1F1E1B)] hover:border-[var(--text-muted,#6B645B)]"
+            >
+              Image Hub
+            </Link>
+            <button
+              onClick={onCreate}
+              className="inline-flex h-8 items-center rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 text-[12px] hover:border-[var(--text-muted,#6B645B)]"
+            >
+              <span className="mr-1">＋</span> New project
+              <kbd className="ml-2 hidden lg:inline text-[10px] text-[var(--text-muted,#6B645B)]">
+                ⌘/Ctrl+N
+              </kbd>
+            </button>
+            <ProjectSettingsButton
+              onClick={onOpenSettings}
+              label="Open application settings"
+              title="Application settings"
+            />
+            <UserMenu />
+          </div>
         </div>
       </div>
-    </div>
-  )
-}
+    )
+  }
 
 const FilterBar: React.FC<{
   projects: Project[]
@@ -144,289 +149,289 @@ const FilterBar: React.FC<{
   onClearFilters,
   id,
 }) => {
-  const clients = useMemo(() => unique(projects.map((p) => p.client)), [projects])
-  const allTags = useMemo(() => unique(projects.flatMap((p) => p.tags || [])), [projects])
-  const years = useMemo(() => {
-    const collected: number[] = []
-    projects.forEach((p) => {
-      if (!p.createdAt) return
-      const parsed = new Date(p.createdAt)
-      if (Number.isNaN(parsed.getTime())) return
-      collected.push(parsed.getFullYear())
-    })
-    const set = Array.from(new Set(collected))
-    return set.sort((a, b) => b - a).map(String)
-  }, [projects])
-  const [tagPickerOpen, setTagPickerOpen] = React.useState(false)
-  const [tagSearch, setTagSearch] = React.useState('')
-  const tagButtonRef = React.useRef<HTMLButtonElement | null>(null)
-  const popoverRef = React.useRef<HTMLDivElement | null>(null)
-  const filteredTags = useMemo(() => {
-    if (!tagSearch) return allTags
-    const lower = tagSearch.toLowerCase()
-    return allTags.filter((tag) => tag.toLowerCase().includes(lower))
-  }, [allTags, tagSearch])
-  const toggleTag = React.useCallback(
-    (value: string) => {
-      setTags(tags.includes(value) ? tags.filter((t) => t !== value) : [...tags, value])
-    },
-    [setTags, tags]
-  )
-  const closePicker = React.useCallback(() => setTagPickerOpen(false), [])
+    const clients = useMemo(() => unique(projects.map((p) => p.client)), [projects])
+    const allTags = useMemo(() => unique(projects.flatMap((p) => p.tags || [])), [projects])
+    const years = useMemo(() => {
+      const collected: number[] = []
+      projects.forEach((p) => {
+        if (!p.createdAt) return
+        const parsed = new Date(p.createdAt)
+        if (Number.isNaN(parsed.getTime())) return
+        collected.push(parsed.getFullYear())
+      })
+      const set = Array.from(new Set(collected))
+      return set.sort((a, b) => b - a).map(String)
+    }, [projects])
+    const [tagPickerOpen, setTagPickerOpen] = React.useState(false)
+    const [tagSearch, setTagSearch] = React.useState('')
+    const tagButtonRef = React.useRef<HTMLButtonElement | null>(null)
+    const popoverRef = React.useRef<HTMLDivElement | null>(null)
+    const filteredTags = useMemo(() => {
+      if (!tagSearch) return allTags
+      const lower = tagSearch.toLowerCase()
+      return allTags.filter((tag) => tag.toLowerCase().includes(lower))
+    }, [allTags, tagSearch])
+    const toggleTag = React.useCallback(
+      (value: string) => {
+        setTags(tags.includes(value) ? tags.filter((t) => t !== value) : [...tags, value])
+      },
+      [setTags, tags]
+    )
+    const closePicker = React.useCallback(() => setTagPickerOpen(false), [])
 
-  React.useEffect(() => {
-    if (!tagPickerOpen) return
-    const handleClick = (event: MouseEvent) => {
-      const target = event.target as Node | null
-      if (
-        target &&
-        popoverRef.current &&
-        !popoverRef.current.contains(target) &&
-        tagButtonRef.current &&
-        !tagButtonRef.current.contains(target)
-      ) {
-        closePicker()
+    React.useEffect(() => {
+      if (!tagPickerOpen) return
+      const handleClick = (event: MouseEvent) => {
+        const target = event.target as Node | null
+        if (
+          target &&
+          popoverRef.current &&
+          !popoverRef.current.contains(target) &&
+          tagButtonRef.current &&
+          !tagButtonRef.current.contains(target)
+        ) {
+          closePicker()
+        }
       }
-    }
-    const handleKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        closePicker()
+      const handleKey = (event: KeyboardEvent) => {
+        if (event.key === 'Escape') {
+          closePicker()
+        }
       }
-    }
-    document.addEventListener('mousedown', handleClick)
-    document.addEventListener('keydown', handleKey)
-    return () => {
-      document.removeEventListener('mousedown', handleClick)
-      document.removeEventListener('keydown', handleKey)
-    }
-  }, [closePicker, tagPickerOpen])
+      document.addEventListener('mousedown', handleClick)
+      document.addEventListener('keydown', handleKey)
+      return () => {
+        document.removeEventListener('mousedown', handleClick)
+        document.removeEventListener('keydown', handleKey)
+      }
+    }, [closePicker, tagPickerOpen])
 
-  const handleClearAll = React.useCallback(() => {
-    onClearFilters()
-    setTagPickerOpen(false)
-    setTagSearch('')
-  }, [onClearFilters])
+    const handleClearAll = React.useCallback(() => {
+      onClearFilters()
+      setTagPickerOpen(false)
+      setTagSearch('')
+    }, [onClearFilters])
 
-  const monthLabel = month ? (MONTHS[Number(month) - 1] ?? null) : null
-  const hasFilterSelections = Boolean(client || year || month || tags.length)
-  const activePills: Array<{ label: string; onClear: () => void }> = []
-  if (client) activePills.push({ label: `Client: ${client}`, onClear: () => setClient('') })
-  if (year) activePills.push({ label: `Year: ${year}`, onClear: () => setYear('') })
-  if (month && monthLabel)
-    activePills.push({ label: `Month: ${monthLabel}`, onClear: () => setMonth('') })
+    const monthLabel = month ? (MONTHS[Number(month) - 1] ?? null) : null
+    const hasFilterSelections = Boolean(client || year || month || tags.length)
+    const activePills: Array<{ label: string; onClear: () => void }> = []
+    if (client) activePills.push({ label: `Client: ${client}`, onClear: () => setClient('') })
+    if (year) activePills.push({ label: `Year: ${year}`, onClear: () => setYear('') })
+    if (month && monthLabel)
+      activePills.push({ label: `Month: ${monthLabel}`, onClear: () => setMonth('') })
 
-  return (
-    <div
-      id={id}
-      role="region"
-      aria-label="Project filters"
-      className="mb-8 rounded-3xl border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-4 py-4 shadow-[0_8px_26px_rgba(31,30,27,0.05)]"
-    >
-      <div className="flex flex-wrap gap-4">
-        <div className="flex-1 min-w-[220px]">
-          <label className="block text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">
-            <span className="mb-1 block">Search</span>
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Search projects…"
-              className="w-full rounded-2xl border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 py-2 text-[13px] outline-none placeholder:text-[var(--text-muted,#6B645B)]"
-            />
-          </label>
-        </div>
+    return (
+      <div
+        id={id}
+        role="region"
+        aria-label="Project filters"
+        className="mb-8 rounded-3xl border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-4 py-4 shadow-[0_8px_26px_rgba(31,30,27,0.05)]"
+      >
+        <div className="flex flex-wrap gap-4">
+          <div className="flex-1 min-w-[220px]">
+            <label className="block text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">
+              <span className="mb-1 block">Search</span>
+              <input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Search projects…"
+                className="w-full rounded-2xl border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 py-2 text-[13px] outline-none placeholder:text-[var(--text-muted,#6B645B)]"
+              />
+            </label>
+          </div>
 
-        <div className="w-[160px]">
-          <label className="block text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">
-            <span className="mb-1 block">Client</span>
-            <select
-              value={client}
-              onChange={(e) => setClient(e.target.value)}
-              className="w-full rounded-2xl border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 py-2 text-[13px] outline-none"
-            >
-              <option value="">All clients</option>
-              {clients.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-
-        <div className="w-[140px]">
-          <label className="block text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">
-            <span className="mb-1 block">Year</span>
-            <select
-              value={year}
-              onChange={(e) => setYear(e.target.value)}
-              className="w-full rounded-2xl border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 py-2 text-[13px] outline-none"
-            >
-              <option value="">All years</option>
-              {years.map((optionYear) => (
-                <option key={optionYear} value={optionYear}>
-                  {optionYear}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-
-        <div className="w-[150px]">
-          <label className="block text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">
-            <span className="mb-1 block">Month</span>
-            <select
-              value={month}
-              onChange={(e) => setMonth(e.target.value)}
-              className="w-full rounded-2xl border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 py-2 text-[13px] outline-none"
-            >
-              <option value="">All months</option>
-              {MONTHS.map((label, idx) => {
-                const value = String(idx + 1)
-                return (
-                  <option key={label} value={value}>
-                    {label}
-                  </option>
-                )
-              })}
-            </select>
-          </label>
-        </div>
-
-        <div className="relative w-[160px]">
-          <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">
-            Tags
-          </span>
-          <button
-            type="button"
-            ref={tagButtonRef}
-            onClick={() => setTagPickerOpen((open) => !open)}
-            className="flex w-full items-center justify-between rounded-2xl border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 py-2 text-left text-[13px] text-[var(--text,#1F1E1B)] shadow-sm"
-            aria-haspopup="dialog"
-            aria-expanded={tagPickerOpen}
-          >
-            <span className="flex items-center gap-2">
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 20 20"
-                fill="none"
-                aria-hidden
-                className="text-[var(--text-muted,#6B645B)]"
+          <div className="w-[160px]">
+            <label className="block text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">
+              <span className="mb-1 block">Client</span>
+              <select
+                value={client}
+                onChange={(e) => setClient(e.target.value)}
+                className="w-full rounded-2xl border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 py-2 text-[13px] outline-none"
               >
-                <path
-                  d="M5 3h10a1 1 0 0 1 .94.66l2.5 7a1 1 0 0 1-.94 1.34H2.5a1 1 0 0 1-.95-1.31l2.5-7A1 1 0 0 1 5 3zm5 12.5a1.5 1.5 0 1 1-1.5 1.5A1.5 1.5 0 0 1 10 15.5z"
-                  stroke="currentColor"
-                  strokeWidth="1.4"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-              <span>{tags.length ? `${tags.length} selected` : 'Choose tags'}</span>
+                <option value="">All clients</option>
+                {clients.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <div className="w-[140px]">
+            <label className="block text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">
+              <span className="mb-1 block">Year</span>
+              <select
+                value={year}
+                onChange={(e) => setYear(e.target.value)}
+                className="w-full rounded-2xl border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 py-2 text-[13px] outline-none"
+              >
+                <option value="">All years</option>
+                {years.map((optionYear) => (
+                  <option key={optionYear} value={optionYear}>
+                    {optionYear}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <div className="w-[150px]">
+            <label className="block text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">
+              <span className="mb-1 block">Month</span>
+              <select
+                value={month}
+                onChange={(e) => setMonth(e.target.value)}
+                className="w-full rounded-2xl border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 py-2 text-[13px] outline-none"
+              >
+                <option value="">All months</option>
+                {MONTHS.map((label, idx) => {
+                  const value = String(idx + 1)
+                  return (
+                    <option key={label} value={value}>
+                      {label}
+                    </option>
+                  )
+                })}
+              </select>
+            </label>
+          </div>
+
+          <div className="relative w-[160px]">
+            <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">
+              Tags
             </span>
-            <span className="text-[var(--text-muted,#6B645B)]">{tagPickerOpen ? '▲' : '▼'}</span>
-          </button>
-          {tagPickerOpen && (
-            <div
-              ref={popoverRef}
-              className="absolute right-0 z-30 mt-2 w-64 rounded-2xl border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-3 shadow-xl"
-            >
-              <div className="mb-2">
-                <input
-                  value={tagSearch}
-                  onChange={(e) => setTagSearch(e.target.value)}
-                  placeholder="Find tag…"
-                  className="w-full rounded-xl border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-2 py-1.5 text-[12px] outline-none placeholder:text-[var(--text-muted,#6B645B)]"
-                  autoFocus
-                />
-              </div>
-              <div className="max-h-56 overflow-y-auto pr-1">
-                {filteredTags.length ? (
-                  filteredTags.map((tag) => (
-                    <label
-                      key={tag}
-                      className="flex cursor-pointer items-center gap-2 rounded-lg px-1.5 py-1 text-[13px] text-[var(--text,#1F1E1B)] hover:bg-[var(--surface-subtle,#FBF7EF)]"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={tags.includes(tag)}
-                        onChange={() => toggleTag(tag)}
-                        className="accent-[var(--primary,#A56A4A)]"
-                      />
-                      <span className="flex-1">{tag}</span>
-                    </label>
-                  ))
-                ) : (
-                  <div className="px-1.5 py-2 text-[12px] text-[var(--text-muted,#6B645B)]">
-                    No tags found
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="mt-4 flex flex-wrap items-start gap-4">
-        <div className="flex-1 min-w-[240px] rounded-2xl border border-[var(--border,#E1D3B9)] bg-[var(--surface-subtle,#FBF7EF)] px-3 py-2">
-          <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">
-            Selected tags
-          </div>
-          <div className="tag-strip flex w-full flex-nowrap gap-1.5">
-            {tags.length ? (
-              tags.map((tag) => (
-                <button
-                  key={tag}
-                  type="button"
-                  onClick={() => toggleTag(tag)}
-                  className="inline-flex shrink-0 items-center gap-1 rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-2.5 py-0.5 text-[11px] text-[var(--text,#1F1E1B)]"
-                >
-                  <span>{tag}</span>
-                  <span aria-hidden>×</span>
-                </button>
-              ))
-            ) : (
-              <span className="inline-flex items-center text-[12px] text-[var(--text-muted,#6B645B)]">
-                No tags selected
-              </span>
-            )}
-          </div>
-        </div>
-
-        <div className="flex min-w-[200px] flex-1 flex-col gap-2">
-          <div className="flex flex-wrap gap-2">
-            {activePills.length ? (
-              activePills.map((pill) => (
-                <button
-                  key={pill.label}
-                  type="button"
-                  onClick={pill.onClear}
-                  className="inline-flex items-center gap-1 rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface-subtle,#FBF7EF)] px-3 py-1 text-[11px] text-[var(--text,#1F1E1B)]"
-                >
-                  <span>{pill.label}</span>
-                  <span aria-hidden>×</span>
-                </button>
-              ))
-            ) : (
-              <span className="text-[12px] text-[var(--text-muted,#6B645B)]">
-                No additional filters
-              </span>
-            )}
-          </div>
-          <div>
             <button
               type="button"
-              onClick={handleClearAll}
-              disabled={!hasFilterSelections}
-              className="inline-flex items-center gap-2 rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 py-1.5 text-[12px] text-[var(--text,#1F1E1B)] disabled:opacity-60"
+              ref={tagButtonRef}
+              onClick={() => setTagPickerOpen((open) => !open)}
+              className="flex w-full items-center justify-between rounded-2xl border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 py-2 text-left text-[13px] text-[var(--text,#1F1E1B)] shadow-sm"
+              aria-haspopup="dialog"
+              aria-expanded={tagPickerOpen}
             >
-              Clear filters
+              <span className="flex items-center gap-2">
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 20 20"
+                  fill="none"
+                  aria-hidden
+                  className="text-[var(--text-muted,#6B645B)]"
+                >
+                  <path
+                    d="M5 3h10a1 1 0 0 1 .94.66l2.5 7a1 1 0 0 1-.94 1.34H2.5a1 1 0 0 1-.95-1.31l2.5-7A1 1 0 0 1 5 3zm5 12.5a1.5 1.5 0 1 1-1.5 1.5A1.5 1.5 0 0 1 10 15.5z"
+                    stroke="currentColor"
+                    strokeWidth="1.4"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+                <span>{tags.length ? `${tags.length} selected` : 'Choose tags'}</span>
+              </span>
+              <span className="text-[var(--text-muted,#6B645B)]">{tagPickerOpen ? '▲' : '▼'}</span>
             </button>
+            {tagPickerOpen && (
+              <div
+                ref={popoverRef}
+                className="absolute right-0 z-30 mt-2 w-64 rounded-2xl border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] p-3 shadow-xl"
+              >
+                <div className="mb-2">
+                  <input
+                    value={tagSearch}
+                    onChange={(e) => setTagSearch(e.target.value)}
+                    placeholder="Find tag…"
+                    className="w-full rounded-xl border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-2 py-1.5 text-[12px] outline-none placeholder:text-[var(--text-muted,#6B645B)]"
+                    autoFocus
+                  />
+                </div>
+                <div className="max-h-56 overflow-y-auto pr-1">
+                  {filteredTags.length ? (
+                    filteredTags.map((tag) => (
+                      <label
+                        key={tag}
+                        className="flex cursor-pointer items-center gap-2 rounded-lg px-1.5 py-1 text-[13px] text-[var(--text,#1F1E1B)] hover:bg-[var(--surface-subtle,#FBF7EF)]"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={tags.includes(tag)}
+                          onChange={() => toggleTag(tag)}
+                          className="accent-[var(--primary,#A56A4A)]"
+                        />
+                        <span className="flex-1">{tag}</span>
+                      </label>
+                    ))
+                  ) : (
+                    <div className="px-1.5 py-2 text-[12px] text-[var(--text-muted,#6B645B)]">
+                      No tags found
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-start gap-4">
+          <div className="flex-1 min-w-[240px] rounded-2xl border border-[var(--border,#E1D3B9)] bg-[var(--surface-subtle,#FBF7EF)] px-3 py-2">
+            <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">
+              Selected tags
+            </div>
+            <div className="tag-strip flex w-full flex-nowrap gap-1.5">
+              {tags.length ? (
+                tags.map((tag) => (
+                  <button
+                    key={tag}
+                    type="button"
+                    onClick={() => toggleTag(tag)}
+                    className="inline-flex shrink-0 items-center gap-1 rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-2.5 py-0.5 text-[11px] text-[var(--text,#1F1E1B)]"
+                  >
+                    <span>{tag}</span>
+                    <span aria-hidden>×</span>
+                  </button>
+                ))
+              ) : (
+                <span className="inline-flex items-center text-[12px] text-[var(--text-muted,#6B645B)]">
+                  No tags selected
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="flex min-w-[200px] flex-1 flex-col gap-2">
+            <div className="flex flex-wrap gap-2">
+              {activePills.length ? (
+                activePills.map((pill) => (
+                  <button
+                    key={pill.label}
+                    type="button"
+                    onClick={pill.onClear}
+                    className="inline-flex items-center gap-1 rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface-subtle,#FBF7EF)] px-3 py-1 text-[11px] text-[var(--text,#1F1E1B)]"
+                  >
+                    <span>{pill.label}</span>
+                    <span aria-hidden>×</span>
+                  </button>
+                ))
+              ) : (
+                <span className="text-[12px] text-[var(--text-muted,#6B645B)]">
+                  No additional filters
+                </span>
+              )}
+            </div>
+            <div>
+              <button
+                type="button"
+                onClick={handleClearAll}
+                disabled={!hasFilterSelections}
+                className="inline-flex items-center gap-2 rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 py-1.5 text-[12px] text-[var(--text,#1F1E1B)] disabled:opacity-60"
+              >
+                Clear filters
+              </button>
+            </div>
           </div>
         </div>
       </div>
-    </div>
-  )
-}
+    )
+  }
 
 const ArchiveIcon: React.FC<{ className?: string }> = ({ className = 'h-5 w-5' }) => (
   <svg
@@ -467,11 +472,10 @@ const MobileTopBar: React.FC<{
           <button
             type="button"
             onClick={onToggleFilters}
-            className={`inline-flex h-11 min-w-[120px] items-center justify-center rounded-full border px-4 text-[13px] font-medium transition ${
-              filterButtonActive
-                ? 'border-[var(--text,#1F1E1B)] text-[var(--text,#1F1E1B)]'
-                : 'border-[var(--border,#E1D3B9)] text-[var(--text-muted,#6B645B)] hover:border-[var(--text-muted,#6B645B)]'
-            }`}
+            className={`inline-flex h-11 min-w-[120px] items-center justify-center rounded-full border px-4 text-[13px] font-medium transition ${filterButtonActive
+              ? 'border-[var(--text,#1F1E1B)] text-[var(--text,#1F1E1B)]'
+              : 'border-[var(--border,#E1D3B9)] text-[var(--text-muted,#6B645B)] hover:border-[var(--text-muted,#6B645B)]'
+              }`}
             aria-expanded={filtersOpen}
             aria-controls={filterPanelId}
           >
@@ -494,9 +498,8 @@ const MobileActionBar: React.FC<{
       <button
         type="button"
         onClick={onToggleArchive}
-        className={`flex h-14 flex-1 flex-col items-center justify-center rounded-2xl border border-transparent text-[12px] font-semibold ${
-          archiveMode ? 'text-[var(--text,#1F1E1B)]' : 'text-[var(--text-muted,#6B645B)]'
-        }`}
+        className={`flex h-14 flex-1 flex-col items-center justify-center rounded-2xl border border-transparent text-[12px] font-semibold ${archiveMode ? 'text-[var(--text,#1F1E1B)]' : 'text-[var(--text-muted,#6B645B)]'
+          }`}
         aria-pressed={archiveMode}
       >
         <ArchiveIcon className="h-5 w-5" />

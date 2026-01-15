@@ -9,7 +9,7 @@ import type {
 
 export type QuickFixCropState = {
   rotation: number
-  aspectRatio: number | string | null
+  aspectRatio: number | null
 }
 
 export type QuickFixExposureState = {
@@ -85,12 +85,24 @@ const sanitizeNumber = (value: unknown, fallback: number): number => {
 
 function sanitizeCropSettings(payload: unknown): QuickFixCropState {
   const data = (payload ?? {}) as QuickFixCropSettingsPayload
-  let aspectRatio: number | string | null = null
+  let aspectRatio: number | null = null
+
   if (typeof data.aspect_ratio === 'string') {
-    aspectRatio = data.aspect_ratio
+    if (data.aspect_ratio.includes(':')) {
+      const [w, h] = data.aspect_ratio.split(':').map(Number)
+      if (w > 0 && h > 0) {
+        aspectRatio = w / h
+      }
+    } else {
+      const parsed = parseFloat(data.aspect_ratio)
+      if (Number.isFinite(parsed) && parsed > 0) {
+        aspectRatio = parsed
+      }
+    }
   } else if (typeof data.aspect_ratio === 'number' && data.aspect_ratio > 0) {
     aspectRatio = data.aspect_ratio
   }
+
   return {
     rotation: sanitizeNumber(data.rotation, DEFAULT_STATE.crop.rotation),
     aspectRatio,

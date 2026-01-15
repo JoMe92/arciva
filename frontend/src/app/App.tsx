@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import ProjectIndex from '../pages/ProjectIndex'
 import ProjectWorkspace from '../features/workspace'
+import ImageHub from '../pages/ImageHub'
 import { BulkExportProvider } from '../shared/bulkExport/BulkImageExportContext'
 import BulkExportIndicator from '../components/BulkExportIndicator'
 import PwaInstallPrompt from '../components/PwaInstallPrompt'
@@ -15,6 +16,7 @@ const AppRoutes: React.FC = () => (
     <Routes>
       <Route path="/" element={<ProjectIndex />} />
       <Route path="/projects/:id" element={<ProjectWorkspace />} />
+      <Route path="/hub" element={<ImageHub />} />
       {/* fallback */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

@@ -29,6 +29,12 @@ export type ImageHubAsset = {
   pair_id?: string | null
   rating?: number | null
   label?: ColorLabelValue | null
+  projects?: {
+    project_id: string
+    title: string
+    linked_at: string
+    metadata_state?: unknown | null
+  }[]
 }
 
 export type ImageHubDateBucket = {

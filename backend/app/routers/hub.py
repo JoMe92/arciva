@@ -58,7 +58,7 @@ async def list_hub_assets(
     day: int | None = Query(None),
     filters: str | None = Query(None),
     cursor: str | None = Query(None),
-    limit: int = Query(100, ge=1, le=500),
+    limit: int = Query(100, ge=0, le=500),
     view: str = Query("grid"),
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(get_current_user),

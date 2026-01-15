@@ -170,6 +170,20 @@ class UploadCompleteIn(BaseModel):
     asset_id: UUID
 
 
+class MetadataStateOut(BaseModel):
+    id: UUID
+    link_id: UUID
+    project_id: UUID
+    rating: int
+    color_label: ColorLabel
+    picked: bool
+    rejected: bool
+    edits: Optional[Dict[str, Any]] = None
+    source_project_id: Optional[UUID] = None
+    created_at: datetime
+    updated_at: datetime
+
+
 class AssetListItem(BaseModel):
     id: UUID
     link_id: UUID
@@ -248,18 +262,7 @@ class AssetProjectUsage(BaseModel):
     last_modified: Optional[datetime] = None
 
 
-class MetadataStateOut(BaseModel):
-    id: UUID
-    link_id: UUID
-    project_id: UUID
-    rating: int
-    color_label: ColorLabel
-    picked: bool
-    rejected: bool
-    edits: Optional[Dict[str, Any]] = None
-    source_project_id: Optional[UUID] = None
-    created_at: datetime
-    updated_at: datetime
+
 
 
 # Project-asset linking

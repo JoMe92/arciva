@@ -69,14 +69,14 @@ def apply_crop_rotate(
         if target_ratio > 0:
             current_ratio = result.width / result.height
             if abs(current_ratio - target_ratio) > 1e-3:
-            if current_ratio > target_ratio:
-                new_width = int(result.height * target_ratio)
-                offset = max((result.width - new_width) // 2, 0)
-                result = result.crop((offset, 0, offset + new_width, result.height))
-            else:
-                new_height = int(result.width / target_ratio)
-                offset = max((result.height - new_height) // 2, 0)
-                result = result.crop((0, offset, result.width, offset + new_height))
+                if current_ratio > target_ratio:
+                    new_width = int(result.height * target_ratio)
+                    offset = max((result.width - new_width) // 2, 0)
+                    result = result.crop((offset, 0, offset + new_width, result.height))
+                else:
+                    new_height = int(result.width / target_ratio)
+                    offset = max((result.height - new_height) // 2, 0)
+                    result = result.crop((0, offset, result.width, offset + new_height))
 
     return result
 

@@ -161,7 +161,7 @@ export async function fetchImageHubProjects(
       cursor: params.cursor,
       limit: params.limit,
     })
-    const url = withBase(`/imagehub/projects${search.toString() ? `?${search.toString()}` : ''}`)
+    const url = withBase(`/v1/image-hub/projects${search.toString() ? `?${search.toString()}` : ''}`)
     if (!url) throw new Error('Missing API base for ImageHub projects endpoint')
     const res = await fetch(url, { credentials: 'include' })
     if (res.status === 404) {
@@ -193,7 +193,7 @@ export async function fetchImageHubAssets(
     if (filters) {
       search.set('filters', filters)
     }
-    const url = withBase(`/imagehub/assets${search.toString() ? `?${search.toString()}` : ''}`)
+    const url = withBase(`/v1/image-hub/assets${search.toString() ? `?${search.toString()}` : ''}`)
     if (!url) throw new Error('Missing API base for ImageHub assets endpoint')
     const res = await fetch(url, { credentials: 'include' })
     if (res.status === 404) {
@@ -217,7 +217,7 @@ export async function fetchImageHubAssetStatus(
       current_project_id: currentProjectId ?? undefined,
     })
     const url = withBase(
-      `/imagehub/asset-status${search.toString() ? `?${search.toString()}` : ''}`
+      `/v1/image-hub/asset-status${search.toString() ? `?${search.toString()}` : ''}`
     )
     if (!url) throw new Error('Missing API base for ImageHub asset status endpoint')
     const res = await fetch(url, { credentials: 'include' })

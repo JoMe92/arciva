@@ -335,9 +335,7 @@ class ExportJobSettings(BaseModel):
     long_edge: Optional[int] = Field(default=None, ge=32, le=50_000)
     jpeg_quality: Optional[int] = Field(default=90, ge=10, le=100)
     contact_sheet_enabled: bool = False
-    contact_sheet_format: ExportContactSheetFormat = (
-        ExportContactSheetFormat.PDF
-    )
+    contact_sheet_format: ExportContactSheetFormat = ExportContactSheetFormat.PDF
 
     @model_validator(mode="after")
     def validate_resize(self):

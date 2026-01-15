@@ -82,17 +82,10 @@ async def list_hub_assets(
             models.Project,
             models.MetadataState,
         )
-        .join(
-            models.ProjectAsset,
-            models.ProjectAsset.asset_id == models.Asset.id
-        )
-        .join(
-            models.Project,
-            models.Project.id == models.ProjectAsset.project_id
-        )
+        .join(models.ProjectAsset, models.ProjectAsset.asset_id == models.Asset.id)
+        .join(models.Project, models.Project.id == models.ProjectAsset.project_id)
         .outerjoin(
-            models.MetadataState,
-            models.MetadataState.link_id == models.ProjectAsset.id
+            models.MetadataState, models.MetadataState.link_id == models.ProjectAsset.id
         )
         .where(
             models.Asset.status == models.AssetStatus.READY,
@@ -109,11 +102,11 @@ async def list_hub_assets(
     date_col = func.coalesce(models.Asset.taken_at, models.Asset.created_at)
 
     if year:
-        query = query.where(func.extract('year', date_col) == year)
+        query = query.where(func.extract("year", date_col) == year)
     if month:
-        query = query.where(func.extract('month', date_col) == month)
+        query = query.where(func.extract("month", date_col) == month)
     if day:
-        query = query.where(func.extract('day', date_col) == day)
+        query = query.where(func.extract("day", date_col) == day)
 
     # Additional filters from JSON
     if search_term := filter_data.get("search"):
@@ -130,16 +123,16 @@ async def list_hub_assets(
 
     if ratings := filter_data.get("ratings"):
         min_rating = ratings[0]
-        query = query.where(
-            func.coalesce(models.MetadataState.rating, 0) >= min_rating
-        )
+        query = query.where(func.coalesce(models.MetadataState.rating, 0) >= min_rating)
 
     if labels := filter_data.get("labels"):
         if "None" in labels:
-            query = query.where(or_(
-                models.MetadataState.color_label.in_(labels),
-                models.MetadataState.color_label.is_(None)
-            ))
+            query = query.where(
+                or_(
+                    models.MetadataState.color_label.in_(labels),
+                    models.MetadataState.color_label.is_(None),
+                )
+            )
         else:
             query = query.where(models.MetadataState.color_label.in_(labels))
 
@@ -155,7 +148,7 @@ async def list_hub_assets(
         offset = int(cursor)
 
     # Sorting
-    if mode == 'date':
+    if mode == "date":
         query = query.order_by(date_col.desc())
     else:
         # Sort by link time for project view
@@ -202,32 +195,34 @@ async def list_hub_assets(
             project_id=project.id,
             title=project.title,
             linked_at=link.added_at,
-            metadata_state=schemas.MetadataStateOut(
-                id=metadata.id,
-                link_id=link.id,
-                rating=int(metadata.rating or 0) if metadata else 0,
-                color_label=_color_label_to_schema(
-                    metadata.color_label if metadata else None
-                ),
-                project_id=project.id,
-                picked=bool(metadata.picked) if metadata else False,
-                rejected=bool(metadata.rejected) if metadata else False,
-                edits=metadata.edits if metadata else None,
-                source_project_id=(
-                    metadata.source_project_id if metadata else None
-                ),
-                created_at=metadata.created_at if metadata else None,
-                updated_at=metadata.updated_at if metadata else None,
-            ) if metadata else None
+            metadata_state=(
+                schemas.MetadataStateOut(
+                    id=metadata.id,
+                    link_id=link.id,
+                    rating=int(metadata.rating or 0) if metadata else 0,
+                    color_label=_color_label_to_schema(
+                        metadata.color_label if metadata else None
+                    ),
+                    project_id=project.id,
+                    picked=bool(metadata.picked) if metadata else False,
+                    rejected=bool(metadata.rejected) if metadata else False,
+                    edits=metadata.edits if metadata else None,
+                    source_project_id=(
+                        metadata.source_project_id if metadata else None
+                    ),
+                    created_at=metadata.created_at if metadata else None,
+                    updated_at=metadata.updated_at if metadata else None,
+                )
+                if metadata
+                else None
+            ),
         )
 
         output_assets.append(
             schemas.HubAsset(
                 asset_id=asset.id,
                 original_filename=asset.original_filename,
-                type=(
-                    "RAW" if (asset.format or "").upper() == "RAW" else "JPEG"
-                ),
+                type=("RAW" if (asset.format or "").upper() == "RAW" else "JPEG"),
                 width=asset.width,
                 height=asset.height,
                 created_at=asset.created_at,
@@ -236,22 +231,20 @@ async def list_hub_assets(
                 is_paired=False,  # TODO: Resolve pairs
                 pair_id=None,
                 rating=(
-                    proj_ref.metadata_state.rating
-                    if proj_ref.metadata_state
-                    else 0
+                    proj_ref.metadata_state.rating if proj_ref.metadata_state else 0
                 ),
                 label=(
                     proj_ref.metadata_state.color_label
                     if proj_ref.metadata_state
                     else schemas.ColorLabel.NONE
                 ),
-                projects=[proj_ref]
+                projects=[proj_ref],
             )
         )
 
     # Date Buckets (only if requesting a drilldown level)
     buckets = []
-    if mode == 'date' and (
+    if mode == "date" and (
         not year or (year and not month) or (year and month and not day)
     ):
         # Determine strictness of drilldown
@@ -264,13 +257,10 @@ async def list_hub_assets(
         bucket_query = (
             select(func.count())
             .select_from(models.Asset)
-            .join(
-                models.ProjectAsset,
-                models.ProjectAsset.asset_id == models.Asset.id
-            )
+            .join(models.ProjectAsset, models.ProjectAsset.asset_id == models.Asset.id)
             .where(
                 models.Asset.status == models.AssetStatus.READY,
-                models.ProjectAsset.user_id == current_user.id
+                models.ProjectAsset.user_id == current_user.id,
             )
         )
 
@@ -291,13 +281,11 @@ async def list_hub_assets(
         # Simplified for MVP: Buckets currently ignore some complex filters
         # in legacy code logic too, but let's try to be correct.
 
-        b_date_col = func.coalesce(
-            models.Asset.taken_at, models.Asset.created_at
-        )
+        b_date_col = func.coalesce(models.Asset.taken_at, models.Asset.created_at)
 
         if not year:
             # Group by Year
-            b_year = func.extract('year', b_date_col).label('year')
+            b_year = func.extract("year", b_date_col).label("year")
             rows = await db.execute(
                 bucket_query.add_columns(b_year)
                 .group_by(b_year)
@@ -305,19 +293,16 @@ async def list_hub_assets(
             )
             for count, y_val in rows:
                 y_int = int(y_val)
-                buckets.append(schemas.ImageHubDateBucket(
-                    key=str(y_int),
-                    year=y_int,
-                    label=str(y_int),
-                    asset_count=count
-                ))
+                buckets.append(
+                    schemas.ImageHubDateBucket(
+                        key=str(y_int), year=y_int, label=str(y_int), asset_count=count
+                    )
+                )
 
         elif year and not month:
             # Group by Month
-            bucket_query = bucket_query.where(
-                func.extract('year', b_date_col) == year
-            )
-            b_month = func.extract('month', b_date_col).label('month')
+            bucket_query = bucket_query.where(func.extract("year", b_date_col) == year)
+            b_month = func.extract("month", b_date_col).label("month")
             rows = await db.execute(
                 bucket_query.add_columns(b_month)
                 .group_by(b_month)
@@ -325,45 +310,46 @@ async def list_hub_assets(
             )
 
             import calendar
+
             for count, m_val in rows:
                 m_int = int(m_val)
-                buckets.append(schemas.ImageHubDateBucket(
-                    key=f"{year}-{m_int:02d}",
-                    year=year,
-                    month=m_int,
-                    label=f"{calendar.month_name[m_int]} {year}",
-                    asset_count=count
-                ))
+                buckets.append(
+                    schemas.ImageHubDateBucket(
+                        key=f"{year}-{m_int:02d}",
+                        year=year,
+                        month=m_int,
+                        label=f"{calendar.month_name[m_int]} {year}",
+                        asset_count=count,
+                    )
+                )
 
         elif year and month and not day:
             # Group by Day
             bucket_query = bucket_query.where(
-                func.extract('year', b_date_col) == year,
-                func.extract('month', b_date_col) == month
+                func.extract("year", b_date_col) == year,
+                func.extract("month", b_date_col) == month,
             )
-            b_day = func.extract('day', b_date_col).label('day')
+            b_day = func.extract("day", b_date_col).label("day")
             rows = await db.execute(
-                bucket_query.add_columns(b_day)
-                .group_by(b_day)
-                .order_by(b_day.desc())
+                bucket_query.add_columns(b_day).group_by(b_day).order_by(b_day.desc())
             )
 
             for count, d_val in rows:
                 d_int = int(d_val)
                 dt = datetime(year, month, d_int)
-                buckets.append(schemas.ImageHubDateBucket(
-                    key=f"{year}-{month:02d}-{d_int:02d}",
-                    year=year,
-                    month=month,
-                    day=d_int,
-                    label=dt.strftime("%b %d, %Y"),
-                    asset_count=count
-                ))
+                buckets.append(
+                    schemas.ImageHubDateBucket(
+                        key=f"{year}-{month:02d}-{d_int:02d}",
+                        year=year,
+                        month=month,
+                        day=d_int,
+                        label=dt.strftime("%b %d, %Y"),
+                        asset_count=count,
+                    )
+                )
 
     return schemas.ImageHubAssetsPage(
-        assets=output_assets,
-        next_cursor=next_cursor,
-        buckets=buckets
+        assets=output_assets, next_cursor=next_cursor, buckets=buckets
     )
 
 
@@ -379,21 +365,17 @@ async def get_asset_status(
         select(models.ProjectAsset.project_id)
         .join(models.Asset, models.Asset.id == models.ProjectAsset.asset_id)
         .where(
-            models.Asset.id == asset_id,
-            models.ProjectAsset.user_id == current_user.id
+            models.Asset.id == asset_id, models.ProjectAsset.user_id == current_user.id
         )
     )
     project_ids = result.scalars().all()
     project_ids_str = [str(pid) for pid in project_ids]
 
     already_linked = (
-        str(current_project_id) in project_ids_str
-        if current_project_id
-        else False
+        str(current_project_id) in project_ids_str if current_project_id else False
     )
     other = [pid for pid in project_ids_str if pid != str(current_project_id)]
 
     return schemas.ImageHubAssetStatus(
-        already_linked=already_linked,
-        other_projects=other
+        already_linked=already_linked, other_projects=other
     )

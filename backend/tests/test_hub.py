@@ -15,7 +15,7 @@ async def test_list_hub_assets_basic(client, TestSessionLocal):
             user_id=user_id,
             title="Hub Test Project",
             created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow()
+            updated_at=datetime.utcnow(),
         )
         session.add(project)
         asset = models.Asset(
@@ -27,7 +27,7 @@ async def test_list_hub_assets_basic(client, TestSessionLocal):
             status=models.AssetStatus.READY,
             created_at=datetime.utcnow(),
             width=800,
-            height=600
+            height=600,
         )
         session.add(asset)
 
@@ -36,14 +36,12 @@ async def test_list_hub_assets_basic(client, TestSessionLocal):
             user_id=user_id,
             project_id=project.id,
             asset_id=asset.id,
-            added_at=datetime.utcnow()
+            added_at=datetime.utcnow(),
         )
         session.add(link)
         await session.commit()
     # Test - Filter by project to ensure isolation
-    response = await client.get(
-        f"/v1/image-hub/assets?project_id={project.id}"
-    )
+    response = await client.get(f"/v1/image-hub/assets?project_id={project.id}")
     assert response.status_code == 200
     data = response.json()
     assert len(data["assets"]) >= 1
@@ -66,7 +64,7 @@ async def test_list_hub_assets_filtering(client, TestSessionLocal):
             original_filename="a1.jpg",
             status=models.AssetStatus.READY,
             mime="image/jpeg",
-            size_bytes=100
+            size_bytes=100,
         )
         asset2 = models.Asset(
             id=uuid.uuid4(),
@@ -74,7 +72,7 @@ async def test_list_hub_assets_filtering(client, TestSessionLocal):
             original_filename="a2.jpg",
             status=models.AssetStatus.READY,
             mime="image/jpeg",
-            size_bytes=100
+            size_bytes=100,
         )
         session.add_all([asset1, asset2])
 
@@ -88,9 +86,7 @@ async def test_list_hub_assets_filtering(client, TestSessionLocal):
         await session.flush()
 
         # Add metadata for filtering
-        meta1 = models.MetadataState(
-            link_id=link1.id, rating=5, color_label="Red"
-        )
+        meta1 = models.MetadataState(link_id=link1.id, rating=5, color_label="Red")
         session.add(meta1)
 
         await session.commit()
@@ -131,9 +127,7 @@ async def test_list_hub_date_buckets(client, TestSessionLocal):
     # Setup test data with different dates
     async with TestSessionLocal() as session:
         user_id = uuid.UUID("12345678-1234-5678-1234-567812345678")
-        proj = models.Project(
-            id=uuid.uuid4(), user_id=user_id, title="Date Proj"
-        )
+        proj = models.Project(id=uuid.uuid4(), user_id=user_id, title="Date Proj")
         session.add(proj)
 
         # Year 2023
@@ -146,11 +140,9 @@ async def test_list_hub_date_buckets(client, TestSessionLocal):
             taken_at=d1,
             created_at=d1,
             mime="image/jpeg",
-            size_bytes=100
+            size_bytes=100,
         )
-        l1 = models.ProjectAsset(
-            project_id=proj.id, asset_id=a1.id, user_id=user_id
-        )
+        l1 = models.ProjectAsset(project_id=proj.id, asset_id=a1.id, user_id=user_id)
 
         # Year 2024
         d2 = datetime(2024, 1, 15)
@@ -162,11 +154,9 @@ async def test_list_hub_date_buckets(client, TestSessionLocal):
             taken_at=d2,
             created_at=d2,
             mime="image/jpeg",
-            size_bytes=100
+            size_bytes=100,
         )
-        l2 = models.ProjectAsset(
-            project_id=proj.id, asset_id=a2.id, user_id=user_id
-        )
+        l2 = models.ProjectAsset(project_id=proj.id, asset_id=a2.id, user_id=user_id)
 
         session.add_all([proj, a1, a2, l1, l2])
         await session.commit()
@@ -181,9 +171,7 @@ async def test_list_hub_date_buckets(client, TestSessionLocal):
     assert 2024 in years
 
     # Drill down to 2024 (Month level)
-    r = await client.get(
-        "/v1/image-hub/assets?mode=date&year=2024&limit=0"
-    )
+    r = await client.get("/v1/image-hub/assets?mode=date&year=2024&limit=0")
     data = r.json()
     buckets = data["buckets"]
     months = [b["month"] for b in buckets]

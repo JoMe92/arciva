@@ -112,6 +112,7 @@ import { useExperimentalStorageSettings } from '../../shared/settings/experiment
 import type { GeneralSettings } from '../../shared/settings/general'
 import { withBase } from '../../shared/api/base'
 import UserMenu from '../auth/UserMenu'
+import { SocialMediaExportModal } from './modals/SocialMediaExportModal'
 
 const LEFT_MIN_WIDTH = 300
 const LEFT_MAX_WIDTH = 560
@@ -692,6 +693,7 @@ export default function ProjectWorkspace() {
   const selectionAnchorRef = useRef<string | null>(null)
   const suppressSelectionSyncRef = useRef(false)
   const [exportDialogOpen, setExportDialogOpen] = useState(false)
+  const [socialExportOpen, setSocialExportOpen] = useState(false)
   const { settings: generalSettings, setSettings: setGeneralSettings } = useGeneralSettings()
   const experimentalUiEnabled = import.meta.env.DEV
   const { data: experimentalStorageSettings } = useExperimentalStorageSettings({
@@ -2584,6 +2586,7 @@ export default function ProjectWorkspace() {
         stackTogglePending={stackToggleMutation.isPending}
         selectedCount={selectedPhotoIds.size}
         onOpenExport={() => setExportDialogOpen(true)}
+        onOpenSocialExport={() => setSocialExportOpen(true)}
         onOpenSettings={openGeneralSettings}
         onQuickFix={handleQuickFix}
         layout={isMobileLayout ? 'mobile' : 'desktop'}
@@ -2921,6 +2924,11 @@ export default function ProjectWorkspace() {
         photos={selectedPhotos}
         projectId={projectId ?? null}
         onClose={() => setExportDialogOpen(false)}
+      />
+      <SocialMediaExportModal
+        isOpen={socialExportOpen}
+        onClose={() => setSocialExportOpen(false)}
+        photo={photos[current] ?? null}
       />
     </div >
   )

@@ -389,7 +389,7 @@ function detectAspect(
   return 'square'
 }
 
-function mapAssetToPhoto(item: AssetListItem, existing?: Photo): Photo {
+export function mapAssetToPhoto(item: AssetListItem, existing?: Photo): Photo {
   const name = item.original_filename ?? existing?.name ?? 'Untitled asset'
   const type = inferTypeFromName(name)
   const capturedAt = item.taken_at ?? existing?.capturedAt ?? null

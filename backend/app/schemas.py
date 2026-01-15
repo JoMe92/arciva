@@ -406,17 +406,19 @@ class HubAssetProjectRef(BaseModel):
 
 class HubAsset(BaseModel):
     asset_id: UUID
-    format: Optional[str]
-    mime: str
+    original_filename: Optional[str] = None
+    type: Literal["JPEG", "RAW"]
     width: Optional[int]
     height: Optional[int]
-    original_filename: Optional[str] = None
-    taken_at: Optional[datetime]
     created_at: datetime
     thumb_url: Optional[str] = None
     preview_url: Optional[str] = None
+    is_paired: bool = False
+    pair_id: Optional[str] = None
+    rating: int = 0
+    label: ColorLabel = ColorLabel.NONE
     projects: List[HubAssetProjectRef] = Field(default_factory=list)
-    pair_asset_id: Optional[UUID] = None
+    pair_asset_id: Optional[UUID] = None  # Legacy/Internal use
 
 
 class HubProjectSummary(BaseModel):
@@ -431,7 +433,28 @@ class HubDateSummary(BaseModel):
     asset_count: int
 
 
+class ImageHubDateBucket(BaseModel):
+    key: str
+    year: int
+    month: Optional[int] = None
+    day: Optional[int] = None
+    label: str
+    asset_count: int
+
+
+class ImageHubAssetsPage(BaseModel):
+    assets: List[HubAsset]
+    next_cursor: Optional[str] = None
+    buckets: Optional[List[ImageHubDateBucket]] = None
+
+
+class ImageHubAssetStatus(BaseModel):
+    already_linked: bool
+    other_projects: List[str]
+
+
 class ImageHubAssetsResponse(BaseModel):
+    # Deprecated/Legacy support
     assets: List[HubAsset]
     projects: List[HubProjectSummary]
     dates: List[HubDateSummary]

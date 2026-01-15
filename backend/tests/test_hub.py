@@ -232,7 +232,9 @@ async def test_hub_pagination_distinct_ids(client, TestSessionLocal):
     cursor = data["next_cursor"]
     assert cursor is not None
 
-    r2 = await client.get(f"/v1/image-hub/assets?limit=3&cursor={cursor}&filters={filters}")
+    r2 = await client.get(
+        f"/v1/image-hub/assets?limit=3&cursor={cursor}&filters={filters}"
+    )
     data2 = r2.json()
 
     # Should get remaining 2
@@ -291,10 +293,7 @@ async def test_hub_bucket_filtering(client, TestSessionLocal):
     import json
 
     # 1. Filter by Rating >= 5 AND Search unique name
-    filters = json.dumps({
-        "ratings": [5],
-        "search": f"bucktest_{unique_marker}"
-    })
+    filters = json.dumps({"ratings": [5], "search": f"bucktest_{unique_marker}"})
 
     r = await client.get(f"/v1/image-hub/assets?mode=date&limit=0&filters={filters}")
     data = r.json()
@@ -306,9 +305,7 @@ async def test_hub_bucket_filtering(client, TestSessionLocal):
     assert b2025["asset_count"] == 1
 
     # 2. Filter Search only (Rating ignored/all). Should see 2 assets.
-    filters2 = json.dumps({
-        "search": f"bucktest_{unique_marker}"
-    })
+    filters2 = json.dumps({"search": f"bucktest_{unique_marker}"})
     r2 = await client.get(f"/v1/image-hub/assets?mode=date&limit=0&filters={filters2}")
     data2 = r2.json()
     buckets2 = data2["buckets"]

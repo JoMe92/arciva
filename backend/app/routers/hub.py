@@ -108,10 +108,8 @@ async def list_hub_assets(
             min_rating = ratings[0]
             # Requires join with MetadataState.
             # If for buckets, we need to ensure MetadataState is part of query or join it.
-        # Assuming base query has the joins setup correctly.
-            q = q.where(
-                func.coalesce(models.MetadataState.rating, 0) >= min_rating
-            )
+            # Assuming base query has the joins setup correctly.
+            q = q.where(func.coalesce(models.MetadataState.rating, 0) >= min_rating)
 
         # Labels filter
         if labels := filter_data.get("labels"):
@@ -149,8 +147,7 @@ async def list_hub_assets(
         select(models.Asset.id)
         .join(models.ProjectAsset, models.ProjectAsset.asset_id == models.Asset.id)
         .outerjoin(
-            models.MetadataState,
-            models.MetadataState.link_id == models.ProjectAsset.id
+            models.MetadataState, models.MetadataState.link_id == models.ProjectAsset.id
         )
         .where(
             models.Asset.status == models.AssetStatus.READY,
@@ -304,9 +301,7 @@ async def list_hub_assets(
                 schemas.HubAsset(
                     asset_id=asset.id,
                     original_filename=asset.original_filename,
-                    type=(
-                        "RAW" if (asset.format or "").upper() == "RAW" else "JPEG"
-                    ),
+                    type=("RAW" if (asset.format or "").upper() == "RAW" else "JPEG"),
                     width=asset.width,
                     height=asset.height,
                     created_at=asset.created_at,

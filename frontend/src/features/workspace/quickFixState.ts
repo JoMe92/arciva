@@ -9,7 +9,7 @@ import type {
 
 export type QuickFixCropState = {
   rotation: number
-  aspectRatio: number | null
+  aspectRatio: number | string | null
 }
 
 export type QuickFixExposureState = {
@@ -85,9 +85,15 @@ const sanitizeNumber = (value: unknown, fallback: number): number => {
 
 function sanitizeCropSettings(payload: unknown): QuickFixCropState {
   const data = (payload ?? {}) as QuickFixCropSettingsPayload
+  let aspectRatio: number | string | null = null
+  if (typeof data.aspect_ratio === 'string') {
+    aspectRatio = data.aspect_ratio
+  } else if (typeof data.aspect_ratio === 'number' && data.aspect_ratio > 0) {
+    aspectRatio = data.aspect_ratio
+  }
   return {
     rotation: sanitizeNumber(data.rotation, DEFAULT_STATE.crop.rotation),
-    aspectRatio: isNumber(data.aspect_ratio) && data.aspect_ratio > 0 ? data.aspect_ratio : null,
+    aspectRatio,
   }
 }
 
@@ -148,10 +154,14 @@ const colorDefaults = DEFAULT_STATE.color
 const grainDefaults = DEFAULT_STATE.grain
 const geometryDefaults = DEFAULT_STATE.geometry
 
-const cropEqual = (a: QuickFixCropState, b: QuickFixCropState) =>
-  Math.abs(a.rotation - b.rotation) < 1e-3 &&
-  ((a.aspectRatio === null && b.aspectRatio === null) ||
-    (a.aspectRatio !== null && b.aspectRatio !== null && Math.abs(a.aspectRatio - b.aspectRatio) < 1e-4))
+const cropEqual = (a: QuickFixCropState, b: QuickFixCropState) => {
+  if (Math.abs(a.rotation - b.rotation) >= 1e-3) return false
+  if (a.aspectRatio === b.aspectRatio) return true
+  if (typeof a.aspectRatio === 'number' && typeof b.aspectRatio === 'number') {
+    return Math.abs(a.aspectRatio - b.aspectRatio) < 1e-4
+  }
+  return false
+}
 
 const exposureEqual = (a: QuickFixExposureState, b: QuickFixExposureState) =>
   Math.abs(a.exposure - b.exposure) < 1e-3 &&

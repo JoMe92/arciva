@@ -789,6 +789,29 @@ export default function ProjectWorkspace() {
           nextIndex = Math.max(0, Math.min(nextIndex, mapped.length - 1))
         }
 
+        // Pre-populate quick fix states from the list response to prevent flickering
+        const nextQuickFixStates: Record<string, QuickFixState> = {}
+        const nextCropSettings: Record<string, CropSettings> = {}
+
+        items.forEach(item => {
+          const serverPayload = item.metadata_state?.edits?.quick_fix ?? null
+          const state = quickFixStateFromApi(serverPayload) ?? createDefaultQuickFixState()
+          nextQuickFixStates[item.id] = state
+
+          // Also pre-calculate crop settings labels/IDs based on the state
+          const existingCrop = cropSettingsByPhoto[item.id] ?? createDefaultCropSettings()
+          const ratioInfo = inferAspectRatioSelection(state.crop.aspectRatio, 1) // 1 is a safe default, will be refined on detail load
+          nextCropSettings[item.id] = {
+            ...existingCrop,
+            angle: state.crop.rotation,
+            aspectRatioId: ratioInfo.id,
+            orientation: ratioInfo.orientation,
+          }
+        })
+
+        setQuickFixStateByPhoto(prev => ({ ...prev, ...nextQuickFixStates }))
+        setCropSettingsByPhoto(prev => ({ ...prev, ...nextCropSettings }))
+
         setCurrent(nextIndex)
       } catch (err) {
         console.error(err)

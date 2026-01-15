@@ -53,3 +53,54 @@ export function calculateCanvasDimensions(
         };
     }
 }
+
+/**
+ * Renders the source image onto a canvas with the target dimensions,
+ * applying the specified background color and centering the image (object-fit: contain).
+ */
+export function renderToCanvas(
+    source: CanvasImageSource,
+    canvas: HTMLCanvasElement,
+    targetDimensions: Dimensions,
+    backgroundColor: string = '#ffffff'
+): void {
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Could not get canvas context');
+
+    // Set canvas size
+    canvas.width = targetDimensions.width;
+    canvas.height = targetDimensions.height;
+
+    // Fill background
+    ctx.fillStyle = backgroundColor;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Calculate draw position (Center image)
+    let srcWidth = 0;
+    let srcHeight = 0;
+
+    if (typeof ImageBitmap !== 'undefined' && source instanceof ImageBitmap) {
+        srcWidth = source.width;
+        srcHeight = source.height;
+    } else if (typeof HTMLImageElement !== 'undefined' && source instanceof HTMLImageElement) {
+        srcWidth = source.naturalWidth;
+        srcHeight = source.naturalHeight;
+    } else if (typeof HTMLCanvasElement !== 'undefined' && source instanceof HTMLCanvasElement) {
+        srcWidth = source.width;
+        srcHeight = source.height;
+    } else if (typeof HTMLVideoElement !== 'undefined' && source instanceof HTMLVideoElement) {
+        srcWidth = source.videoWidth;
+        srcHeight = source.videoHeight;
+    } else {
+        // Fallback
+        if ('width' in source) srcWidth = (source as any).width;
+        if ('height' in source) srcHeight = (source as any).height;
+    }
+
+    // Draw centered
+    const dstX = (targetDimensions.width - srcWidth) / 2;
+    const dstY = (targetDimensions.height - srcHeight) / 2;
+
+    ctx.drawImage(source, dstX, dstY, srcWidth, srcHeight);
+}
+

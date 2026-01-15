@@ -262,9 +262,6 @@ class AssetProjectUsage(BaseModel):
     last_modified: Optional[datetime] = None
 
 
-
-
-
 # Project-asset linking
 class ProjectAssetsLinkIn(BaseModel):
     asset_ids: List[UUID]
@@ -442,7 +439,9 @@ class ImageHubAssetsResponse(BaseModel):
 
 # Quick-Fix Adjustments
 class CropSettings(BaseModel):
-    aspect_ratio: Optional[Union[float, str]] = 0.0  # 0.0 = Original/Free? Or use specific values like "1:1".
+    aspect_ratio: Optional[Union[float, str]] = (
+        0.0  # 0.0 = Original/Free? Or use specific values like "1:1".
+    )
     rotation: float = 0.0
 
 

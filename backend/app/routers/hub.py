@@ -73,19 +73,84 @@ async def list_hub_assets(
         except json.JSONDecodeError:
             pass
 
-    # Base query for assets joined with projects
-    # We need to filter based on ProjectAsset linkage
-    query = (
-        select(
-            models.Asset,
-            models.ProjectAsset,
-            models.Project,
-            models.MetadataState,
-        )
+    # Helper to apply standard filters to any Asset-based query
+    def apply_filters(base_query, for_buckets=False):
+        q = base_query
+
+        # Project filter (always applied if present)
+        if project_id:
+            # If filtering by project, we must join/filter ProjectAsset
+            # Note: base_query might already be joined
+            # For bucket query, ensuring we check project linkage
+            q = q.where(models.ProjectAsset.project_id == project_id)
+
+        # Date filtering
+        date_col = func.coalesce(models.Asset.taken_at, models.Asset.created_at)
+        if year:
+            q = q.where(func.extract("year", date_col) == year)
+        if month:
+            q = q.where(func.extract("month", date_col) == month)
+        if day:
+            q = q.where(func.extract("day", date_col) == day)
+
+        # Additional filters
+        if search_term := filter_data.get("search"):
+            term = f"%{search_term}%"
+            q = q.where(models.Asset.original_filename.ilike(term))
+
+        # Types filter (placeholder logic)
+        if filter_data.get("types"):
+            # logic for types would go here based on asset.format/extension
+            pass
+
+        # Ratings filter
+        if ratings := filter_data.get("ratings"):
+            min_rating = ratings[0]
+            # Requires join with MetadataState.
+            # If for buckets, we need to ensure MetadataState is part of query or join it.
+        # Assuming base query has the joins setup correctly.
+            q = q.where(
+                func.coalesce(models.MetadataState.rating, 0) >= min_rating
+            )
+
+        # Labels filter
+        if labels := filter_data.get("labels"):
+            if "None" in labels:
+                q = q.where(
+                    or_(
+                        models.MetadataState.color_label.in_(labels),
+                        models.MetadataState.color_label.is_(None),
+                    )
+                )
+            else:
+                q = q.where(models.MetadataState.color_label.in_(labels))
+
+        # Date range filter
+        if date_from := filter_data.get("dateFrom"):
+            q = q.where(date_col >= datetime.fromisoformat(date_from))
+        if date_to := filter_data.get("dateTo"):
+            q = q.where(date_col <= datetime.fromisoformat(date_to))
+
+        return q
+
+    # Common Joins
+    # We join Asset -> ProjectAsset -> Project -> Metadata
+    # This structure is needed for most filters.
+    # Note: For strict 'Asset' listing (date mode), duplication due to ProjectAsset
+    # is the issue.
+
+    # --- Step 1: Paginate on Distinct IDs ---
+
+    # We want a list of Asset.id that match the criteria.
+    # Because one asset can have multiple ProjectAssets (and thus multiple rows),
+    # we group by Asset.id (or select distinct).
+
+    base_asset_query = (
+        select(models.Asset.id)
         .join(models.ProjectAsset, models.ProjectAsset.asset_id == models.Asset.id)
-        .join(models.Project, models.Project.id == models.ProjectAsset.project_id)
         .outerjoin(
-            models.MetadataState, models.MetadataState.link_id == models.ProjectAsset.id
+            models.MetadataState,
+            models.MetadataState.link_id == models.ProjectAsset.id
         )
         .where(
             models.Asset.status == models.AssetStatus.READY,
@@ -93,195 +158,234 @@ async def list_hub_assets(
         )
     )
 
-    # Apply filters
-    if project_id:
-        query = query.where(models.ProjectAsset.project_id == project_id)
+    # Apply filters to ID Selection
+    id_query = apply_filters(base_asset_query)
 
-    # Date filtering
-    # Use taken_at, falling back to created_at
+    # Sorting/Pagination on IDs
+    # Sorting is tricky with distinct.
+    # If mode='date', sort by taken_at.
+    # If mode='project', sorting by 'added_at' is ambiguous if multiple links exist.
+    # We will grab the MAX/MIN added_at or just distinct IDs?
+
     date_col = func.coalesce(models.Asset.taken_at, models.Asset.created_at)
 
-    if year:
-        query = query.where(func.extract("year", date_col) == year)
-    if month:
-        query = query.where(func.extract("month", date_col) == month)
-    if day:
-        query = query.where(func.extract("day", date_col) == day)
+    if mode == "date":
+        # Sort by date. Use group_by to ensure unique asset IDs
+        id_query = id_query.group_by(models.Asset.id).order_by(
+            func.max(date_col).desc()
+        )
+    else:
+        # Project mode: Sort by recently added.
+        # Because we join ProjectAsset, we use max(ProjectAsset.added_at) per asset
+        id_query = id_query.group_by(models.Asset.id).order_by(
+            func.max(models.ProjectAsset.added_at).desc()
+        )
 
-    # Additional filters from JSON
-    if search_term := filter_data.get("search"):
-        term = f"%{search_term}%"
-        query = query.where(models.Asset.original_filename.ilike(term))
-
-        query = query.where(models.Asset.original_filename.ilike(term))
-        # Map 'JPEG'/'RAW' to file extensions or formats if needed
-        # Assuming format column stores extension or similar
-        # For now, let's assume strict mapping isn't fully defined in schema,
-        # but if types means ['RAW'], we check for raw extension?
-        # Re-using logic: format "RAW" vs others.
-        pass  # To be refined if schema supports 'type' column directly
-
-    if ratings := filter_data.get("ratings"):
-        min_rating = ratings[0]
-        query = query.where(func.coalesce(models.MetadataState.rating, 0) >= min_rating)
-
-    if labels := filter_data.get("labels"):
-        if "None" in labels:
-            query = query.where(
-                or_(
-                    models.MetadataState.color_label.in_(labels),
-                    models.MetadataState.color_label.is_(None),
-                )
-            )
-        else:
-            query = query.where(models.MetadataState.color_label.in_(labels))
-
-    if date_from := filter_data.get("dateFrom"):
-        query = query.where(date_col >= datetime.fromisoformat(date_from))
-    if date_to := filter_data.get("dateTo"):
-        query = query.where(date_col <= datetime.fromisoformat(date_to))
-
-    # Pagination
-    # For simplicity, using OFFSET based on integer cursor
+    # Apply Pagination
     offset = 0
     if cursor and cursor.isdigit():
         offset = int(cursor)
 
-    # Sorting
-    if mode == "date":
-        query = query.order_by(date_col.desc())
-    else:
-        # Sort by link time for project view
-        query = query.order_by(models.ProjectAsset.added_at.desc())
+    paged_id_query = id_query.limit(limit + 1).offset(offset)
 
-    # Execution
-    # Only fetch total if needed?
+    id_result = await db.execute(paged_id_query)
+    target_ids = id_result.scalars().all()
 
-    # Allow fetching one more to check for next page
-    result = await db.execute(query.limit(limit + 1).offset(offset))
-    rows = result.all()
-
-    has_more = len(rows) > limit
+    has_more = len(target_ids) > limit
     if has_more:
-        rows = rows[:limit]
+        target_ids = target_ids[:limit]
         next_cursor = str(offset + limit)
     else:
         next_cursor = None
 
-    # Process results
-    # We need to group by Asset ID because one asset can be in multiple
-    # projects requested?
-    # If project_id is set, it's unique.
-    # If not, an asset might appear multiple times.
-    # The frontend expects a list of assets.
-    # If mode is 'date', we want unique assets.
-
-    seen_assets = set()
+    # --- Step 2: Fetch Details for Selected IDs ---
     output_assets = []
 
-    storage = PosixStorage.from_env()
+    if target_ids:
+        # Fetch full data for these IDs.
+        # We need the Asset data + Project/Metadata info.
+        # This will return multiple rows per asset if it is in multiple projects.
+        # But we only requested specific Assets, so the set is bounded.
 
-    # Need a separate query for pairs if we want to show pair info
-    # For now, simplistic approach:
-
-    for asset, link, project, metadata in rows:
-        if asset.id in seen_assets:
-            continue
-        seen_assets.add(asset.id)
-
-        # We need "Primary" project ref if we are in date mode,
-        # or the specific one in project mode
-        proj_ref = schemas.HubAssetProjectRef(
-            project_id=project.id,
-            title=project.title,
-            linked_at=link.added_at,
-            metadata_state=(
-                schemas.MetadataStateOut(
-                    id=metadata.id,
-                    link_id=link.id,
-                    rating=int(metadata.rating or 0) if metadata else 0,
-                    color_label=_color_label_to_schema(
-                        metadata.color_label if metadata else None
-                    ),
-                    project_id=project.id,
-                    picked=bool(metadata.picked) if metadata else False,
-                    rejected=bool(metadata.rejected) if metadata else False,
-                    edits=metadata.edits if metadata else None,
-                    source_project_id=(
-                        metadata.source_project_id if metadata else None
-                    ),
-                    created_at=metadata.created_at if metadata else None,
-                    updated_at=metadata.updated_at if metadata else None,
-                )
-                if metadata
-                else None
-            ),
-        )
-
-        output_assets.append(
-            schemas.HubAsset(
-                asset_id=asset.id,
-                original_filename=asset.original_filename,
-                type=("RAW" if (asset.format or "").upper() == "RAW" else "JPEG"),
-                width=asset.width,
-                height=asset.height,
-                created_at=asset.created_at,
-                thumb_url=_thumb_url(asset, storage),
-                preview_url=_preview_url(asset, storage),
-                is_paired=False,  # TODO: Resolve pairs
-                pair_id=None,
-                rating=(
-                    proj_ref.metadata_state.rating if proj_ref.metadata_state else 0
-                ),
-                label=(
-                    proj_ref.metadata_state.color_label
-                    if proj_ref.metadata_state
-                    else schemas.ColorLabel.NONE
-                ),
-                projects=[proj_ref],
+        detail_query = (
+            select(
+                models.Asset,
+                models.ProjectAsset,
+                models.Project,
+                models.MetadataState,
             )
+            .join(models.ProjectAsset, models.ProjectAsset.asset_id == models.Asset.id)
+            .join(models.Project, models.Project.id == models.ProjectAsset.project_id)
+            .outerjoin(
+                models.MetadataState,
+                models.MetadataState.link_id == models.ProjectAsset.id,
+            )
+            .where(models.Asset.id.in_(target_ids))
         )
 
-    # Date Buckets (only if requesting a drilldown level)
+        # We might want to re-apply project_id filter here just to narrow the *links* shown?
+        # If I am in "All Projects" mode, I want to see all links for the asset.
+        # If I am in "Project A" mode, I only want to see the link to Project A?
+        # The Step 1 query filtered IDs. Step 2 fetches details.
+
+        # If project_id is set, Step 1 only picked assets in Project A.
+        # But Step 2 without filter would show links to Project B too?
+        # Usually, if I filter by Project A, I expect to see the asset in context of Project A.
+        # Let's optionally filter details if strict context is needed.
+        # For Hub, seeing all contexts is nice, but 'project_id' usually implies specific view.
+        # Let's apply project_id to detail query if present.
+
+        if project_id:
+            detail_query = detail_query.where(
+                models.ProjectAsset.project_id == project_id
+            )
+
+        # Ensure consistent order in output list (matching the ID order)?
+        # SQL IN(...) does not guarantee order. We should sort result in python or query.
+
+        details_result = await db.execute(detail_query)
+        details_rows = details_result.all()
+
+        # Group rows by Asset
+        assets_map = {}  # ID -> { asset_obj, links: [] }
+
+        storage = PosixStorage.from_env()
+
+        for asset, link, project, metadata in details_rows:
+            if asset.id not in assets_map:
+                assets_map[asset.id] = {"asset": asset, "links": []}
+
+            # Construct ProjectRef
+            proj_ref = schemas.HubAssetProjectRef(
+                project_id=project.id,
+                title=project.title,
+                linked_at=link.added_at,
+                metadata_state=(
+                    schemas.MetadataStateOut(
+                        id=metadata.id,
+                        link_id=link.id,
+                        rating=int(metadata.rating or 0) if metadata else 0,
+                        color_label=_color_label_to_schema(
+                            metadata.color_label if metadata else None
+                        ),
+                        project_id=project.id,
+                        picked=bool(metadata.picked) if metadata else False,
+                        rejected=bool(metadata.rejected) if metadata else False,
+                        edits=metadata.edits if metadata else None,
+                        source_project_id=(
+                            metadata.source_project_id if metadata else None
+                        ),
+                        created_at=metadata.created_at if metadata else None,
+                        updated_at=metadata.updated_at if metadata else None,
+                    )
+                    if metadata
+                    else None
+                ),
+            )
+            assets_map[asset.id]["links"].append(proj_ref)
+
+        # Build Output List matching target_ids order
+        for aid in target_ids:
+            if aid not in assets_map:
+                continue  # Should not happen if data consistency holds
+
+            data = assets_map[aid]
+            asset = data["asset"]
+            links = data["links"]
+
+            # Pick a "primary" link for top-level rating/label?
+            # Logic: If filtering by project, use that link. Else, use most recent?
+            # For now, just use the first one found (or max rated?)
+            # Let's use the first one as 'primary' for display
+
+            primary_ref = links[0] if links else None
+
+            output_assets.append(
+                schemas.HubAsset(
+                    asset_id=asset.id,
+                    original_filename=asset.original_filename,
+                    type=(
+                        "RAW" if (asset.format or "").upper() == "RAW" else "JPEG"
+                    ),
+                    width=asset.width,
+                    height=asset.height,
+                    created_at=asset.created_at,
+                    thumb_url=_thumb_url(asset, storage),
+                    preview_url=_preview_url(asset, storage),
+                    is_paired=False,
+                    pair_id=None,
+                    rating=(
+                        primary_ref.metadata_state.rating
+                        if primary_ref and primary_ref.metadata_state
+                        else 0
+                    ),
+                    label=(
+                        primary_ref.metadata_state.color_label
+                        if primary_ref and primary_ref.metadata_state
+                        else schemas.ColorLabel.NONE
+                    ),
+                    projects=links,
+                )
+            )
+
+    # --- Step 3: Date Buckets ---
     buckets = []
     if mode == "date" and (
         not year or (year and not month) or (year and month and not day)
     ):
-        # Determine strictness of drilldown
-        # Level 1: Key = Year
-        # Level 2: Key = Year-Month
-        # Level 3: Key = Year-Month-Day
 
-        # Base bucket query matches the main filtering query but validation
-        # of group by
-        bucket_query = (
-            select(func.count())
-            .select_from(models.Asset)
+        # Base bucket query matches the main filtering query using same logic
+        # Count distinct assets!
+
+        # Using a subquery approach for distinct IDs might be safest for counting
+        # if filters involve joins.
+        # But for 'count(*)', we usually want count of ASSETS.
+
+        # Start with base join structure again
+        bucket_base = (
+            select(
+                models.Asset.id
+            )  # We will group by date vals + count(distinct asset.id)
             .join(models.ProjectAsset, models.ProjectAsset.asset_id == models.Asset.id)
+            .outerjoin(
+                models.MetadataState,
+                models.MetadataState.link_id == models.ProjectAsset.id,
+            )
             .where(
                 models.Asset.status == models.AssetStatus.READY,
                 models.ProjectAsset.user_id == current_user.id,
             )
         )
 
-        # Re-apply filters to bucket query (code duplication here is minimal
-        # trade-off for clarity)
-        # Note: We should ideally refactor filter application if it grows.
+        # Apply filters (Consolidated logic!)
+        bucket_base = apply_filters(bucket_base, for_buckets=True)
 
-        if search_term := filter_data.get("search"):
-            bucket_query = bucket_query.where(
-                models.Asset.original_filename.ilike(f"%{search_term}%")
-            )
+        # Now we need to aggregate this.
+        # We can turn bucket_base into a subquery or CTE, then group by date.
 
-        # ... Other filters ...
-        # For brevity/safety, let's assume filters apply same way.
-        # Ideally we'd extract the "filter application" to a function
-        # that takes a query and returns modified query.
-
-        # Simplified for MVP: Buckets currently ignore some complex filters
-        # in legacy code logic too, but let's try to be correct.
-
+        # However, we need to extract date from the asset in the row.
         b_date_col = func.coalesce(models.Asset.taken_at, models.Asset.created_at)
+
+        # SQLAlchemy Group By on Joined query with Distinct Count
+
+        # Construct the aggregation query directly on the joined set
+        agg_val = func.count(models.Asset.id.distinct())
+
+        # We reuse the same query structure but select different columns
+        bucket_query = (
+            select(agg_val)
+            .join(models.ProjectAsset, models.ProjectAsset.asset_id == models.Asset.id)
+            .outerjoin(
+                models.MetadataState,
+                models.MetadataState.link_id == models.ProjectAsset.id,
+            )
+            .where(
+                models.Asset.status == models.AssetStatus.READY,
+                models.ProjectAsset.user_id == current_user.id,
+            )
+        )
+
+        bucket_query = apply_filters(bucket_query, for_buckets=True)
 
         if not year:
             # Group by Year
@@ -308,7 +412,6 @@ async def list_hub_assets(
                 .group_by(b_month)
                 .order_by(b_month.desc())
             )
-
             import calendar
 
             for count, m_val in rows:
@@ -333,7 +436,6 @@ async def list_hub_assets(
             rows = await db.execute(
                 bucket_query.add_columns(b_day).group_by(b_day).order_by(b_day.desc())
             )
-
             for count, d_val in rows:
                 d_int = int(d_val)
                 dt = datetime(year, month, d_int)

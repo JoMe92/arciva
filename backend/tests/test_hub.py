@@ -313,3 +313,121 @@ async def test_hub_bucket_filtering(client, TestSessionLocal):
     b2025_2 = next((b for b in buckets2 if b["year"] == 2025), None)
     assert b2025_2 is not None
     assert b2025_2["asset_count"] == 2
+
+
+@pytest.mark.asyncio
+async def test_list_hub_projects(client, app, TestSessionLocal):
+    # Setup: Create UNIQUE User for this test to avoid collision with other tests in session DB
+    from backend.app.security import get_current_user
+    
+    unique_user_id = uuid.uuid4()
+    
+    # Override the dependency for this test
+    async def override_get_current_user():
+        return models.User(
+            id=unique_user_id,
+            email=f"test_{unique_user_id}@example.com",
+            password_hash="mock",
+        )
+    
+    app.dependency_overrides[get_current_user] = override_get_current_user
+
+    try:
+        async with TestSessionLocal() as session:
+            # Create user in DB (optional if not enforcing FK strictly, but good practice)
+            # Models usually enforce FK to users table
+            u = models.User(id=unique_user_id, email=f"test_{unique_user_id}@example.com", password_hash="mock")
+            session.add(u)
+
+            # Proj 1: 2 assets
+            p1 = models.Project(id=uuid.uuid4(), user_id=unique_user_id, title="Hub Project 1")
+            session.add(p1)
+
+            # Proj 2: 1 asset, updated later
+            p2 = models.Project(id=uuid.uuid4(), user_id=unique_user_id, title="Hub Project 2")
+            session.add(p2)
+
+            # Proj 3: 0 assets (should not show up)
+            p3 = models.Project(id=uuid.uuid4(), user_id=unique_user_id, title="Empty Project")
+            session.add(p3)
+
+            # Assets
+            a1 = models.Asset(
+                id=uuid.uuid4(),
+                user_id=unique_user_id,
+                mime="image/jpeg",
+                status=models.AssetStatus.READY,
+                size_bytes=100,
+                original_filename="a1",
+            )
+            a2 = models.Asset(
+                id=uuid.uuid4(),
+                user_id=unique_user_id,
+                mime="image/jpeg",
+                status=models.AssetStatus.READY,
+                size_bytes=100,
+                original_filename="a2",
+            )
+            a3 = models.Asset(
+                id=uuid.uuid4(),
+                user_id=unique_user_id,
+                mime="image/jpeg",
+                status=models.AssetStatus.READY,
+                size_bytes=100,
+                original_filename="a3",
+            )
+
+            session.add_all([a1, a2, a3])
+            await session.flush()
+
+            # Links
+            # P1 linked at T-100 and T-50
+            t1 = datetime(2025, 1, 1, 10, 0, 0)  # P1 link 1
+            t2 = datetime(2025, 1, 1, 12, 0, 0)  # P1 link 2
+
+            # P2 linked at T-10 (Most recent)
+            t3 = datetime(2025, 1, 2, 10, 0, 0)  # P2 link 1
+
+            l1 = models.ProjectAsset(
+                project_id=p1.id, asset_id=a1.id, user_id=unique_user_id, added_at=t1
+            )
+            l2 = models.ProjectAsset(
+                project_id=p1.id, asset_id=a2.id, user_id=unique_user_id, added_at=t2
+            )
+            l3 = models.ProjectAsset(
+                project_id=p2.id, asset_id=a3.id, user_id=unique_user_id, added_at=t3
+            )
+
+            session.add_all([l1, l2, l3])
+            await session.commit()
+
+            p1_id = str(p1.id)
+            p2_id = str(p2.id)
+
+        # Test
+        response = await client.get("/v1/image-hub/projects")
+        assert response.status_code == 200, response.text
+        data = response.json()
+        projects = data["projects"]
+
+        # Needs to match frontend schema
+        # expect P2 first (latest), then P1. P3 should not be there.
+        # Check lengths strictly now that we have isolation
+        assert len(projects) == 2
+        assert projects[0]["project_id"] == p2_id
+        assert projects[0]["asset_count"] == 1
+
+        assert projects[1]["project_id"] == p1_id
+        assert projects[1]["asset_count"] == 2
+
+        # Test Search
+        response = await client.get("/v1/image-hub/projects?query=Project 1")
+        data = response.json()
+        assert len(data["projects"]) == 1
+        assert data["projects"][0]["project_id"] == p1_id
+    finally:
+        # Restore dependency
+        # Removing the key restores the original dependency if it was in the map, 
+        # or we assume clean slate. But app is session scoped, so we must clean up.
+        if get_current_user in app.dependency_overrides:
+            del app.dependency_overrides[get_current_user]

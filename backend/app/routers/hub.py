@@ -49,6 +49,79 @@ def _preview_url(asset: models.Asset, storage: PosixStorage) -> str | None:
     return None
 
 
+@router.get("/projects", response_model=schemas.ImageHubProjectListResponse)
+async def list_hub_projects(
+    query: str | None = Query(None),
+    sort: str | None = Query("-updated_at"),
+    cursor: str | None = Query(None),
+    limit: int = Query(100, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+) -> schemas.ImageHubProjectListResponse:
+    # Query Projects that have at least one asset linked by this user
+    # We join ProjectAsset to check user ownership of the link
+    # Group by Project to count assets
+
+    # Base query for aggregation
+    # We want: project_id, title, max(added_at), count(asset_id)
+    # Filter by user_id in ProjectAsset
+
+    q = (
+        select(
+            models.Project.id,
+            models.Project.title,
+            func.max(models.ProjectAsset.added_at).label("last_linked"),
+            func.count(models.ProjectAsset.asset_id).label("asset_count"),
+        )
+        .join(models.ProjectAsset, models.ProjectAsset.project_id == models.Project.id)
+        .where(
+            models.ProjectAsset.user_id == current_user.id,
+        )
+        .group_by(models.Project.id)
+    )
+
+    if query:
+        term = f"%{query}%"
+        q = q.where(models.Project.title.ilike(term))
+
+    # Apply sorting
+    # Default is recently updated (linked) first
+    q = q.order_by(func.max(models.ProjectAsset.added_at).desc())
+
+    # Pagination relies on offset here since cursor logic for grouped agg is complex
+    offset = 0
+    if cursor and cursor.isdigit():
+        offset = int(cursor)
+
+    paged_q = q.limit(limit + 1).offset(offset)
+    result = await db.execute(paged_q)
+    rows = result.all()
+
+    projects = []
+    has_more = False
+
+    if len(rows) > limit:
+        has_more = True
+        rows = rows[:limit]
+
+    for pid, title, last_linked, count in rows:
+        projects.append(
+            schemas.ImageHubProject(
+                project_id=pid,
+                name=title,
+                cover_thumb=None,  # Placeholder, could fetch a cover
+                asset_count=count,
+                updated_at=last_linked,
+            )
+        )
+
+    next_cursor = str(offset + limit) if has_more else None
+
+    return schemas.ImageHubProjectListResponse(
+        projects=projects, next_cursor=next_cursor
+    )
+
+
 @router.get("/assets", response_model=schemas.ImageHubAssetsPage)
 async def list_hub_assets(
     mode: str = Query("project"),  # 'project' or 'date'

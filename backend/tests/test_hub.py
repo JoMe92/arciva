@@ -344,15 +344,21 @@ async def test_list_hub_projects(client, app, TestSessionLocal):
             session.add(u)
 
             # Proj 1: 2 assets
-            p1 = models.Project(id=uuid.uuid4(), user_id=unique_user_id, title="Hub Project 1")
+            p1 = models.Project(
+                id=uuid.uuid4(), user_id=unique_user_id, title="Hub Project 1"
+            )
             session.add(p1)
 
             # Proj 2: 1 asset, updated later
-            p2 = models.Project(id=uuid.uuid4(), user_id=unique_user_id, title="Hub Project 2")
+            p2 = models.Project(
+                id=uuid.uuid4(), user_id=unique_user_id, title="Hub Project 2"
+            )
             session.add(p2)
 
             # Proj 3: 0 assets (should not show up)
-            p3 = models.Project(id=uuid.uuid4(), user_id=unique_user_id, title="Empty Project")
+            p3 = models.Project(
+                id=uuid.uuid4(), user_id=unique_user_id, title="Empty Project"
+            )
             session.add(p3)
 
             # Assets

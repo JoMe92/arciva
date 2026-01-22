@@ -162,9 +162,7 @@ async def list_hub_assets(
             q = q.where(models.ProjectAsset.project_id == project_id)
 
         # Date filtering
-        date_col = func.coalesce(
-            models.Asset.taken_at, models.Asset.created_at
-        )
+        date_col = func.coalesce(models.Asset.taken_at, models.Asset.created_at)
         if year:
             q = q.where(func.extract("year", date_col) == year)
         if month:
@@ -188,9 +186,7 @@ async def list_hub_assets(
             # Requires join with MetadataState.
             # If for buckets, we need to ensure MetadataState is part of query
             # or join it. Assuming base query has the joins setup correctly.
-            q = q.where(
-                func.coalesce(models.MetadataState.rating, 0) >= min_rating
-            )
+            q = q.where(func.coalesce(models.MetadataState.rating, 0) >= min_rating)
 
         # Labels filter
         if labels := filter_data.get("labels"):
@@ -367,9 +363,7 @@ async def list_hub_assets(
                         ),
                         project_id=project.id,
                         picked=bool(metadata.picked) if metadata else False,
-                        rejected=(
-                            bool(metadata.rejected) if metadata else False
-                        ),
+                        rejected=(bool(metadata.rejected) if metadata else False),
                         edits=metadata.edits if metadata else None,
                         source_project_id=(
                             metadata.source_project_id if metadata else None
@@ -403,11 +397,7 @@ async def list_hub_assets(
                 schemas.HubAsset(
                     asset_id=asset.id,
                     original_filename=asset.original_filename,
-                    type=(
-                        "RAW"
-                        if (asset.format or "").upper() == "RAW"
-                        else "JPEG"
-                    ),
+                    type=("RAW" if (asset.format or "").upper() == "RAW" else "JPEG"),
                     width=asset.width,
                     height=asset.height,
                     created_at=asset.created_at,
@@ -468,9 +458,7 @@ async def list_hub_assets(
         # We can turn bucket_base into a subquery or CTE, then group by date.
 
         # However, we need to extract date from the asset in the row.
-        b_date_col = func.coalesce(
-            models.Asset.taken_at, models.Asset.created_at
-        )
+        b_date_col = func.coalesce(models.Asset.taken_at, models.Asset.created_at)
 
         # SQLAlchemy Group By on Joined query with Distinct Count
 
@@ -517,9 +505,7 @@ async def list_hub_assets(
 
         elif year and not month:
             # Group by Month
-            bucket_query = bucket_query.where(
-                func.extract("year", b_date_col) == year
-            )
+            bucket_query = bucket_query.where(func.extract("year", b_date_col) == year)
             b_month = func.extract("month", b_date_col).label("month")
             rows = await db.execute(
                 bucket_query.add_columns(b_month)
@@ -548,9 +534,7 @@ async def list_hub_assets(
             )
             b_day = func.extract("day", b_date_col).label("day")
             rows = await db.execute(
-                bucket_query.add_columns(b_day)
-                .group_by(b_day)
-                .order_by(b_day.desc())
+                bucket_query.add_columns(b_day).group_by(b_day).order_by(b_day.desc())
             )
             for count, d_val in rows:
                 d_int = int(d_val)
@@ -591,9 +575,7 @@ async def get_asset_status(
     project_ids_str = [str(pid) for pid in project_ids]
 
     already_linked = (
-        str(current_project_id) in project_ids_str
-        if current_project_id
-        else False
+        str(current_project_id) in project_ids_str if current_project_id else False
     )
     other = [pid for pid in project_ids_str if pid != str(current_project_id)]
 

@@ -41,9 +41,7 @@ async def test_list_hub_assets_basic(client, TestSessionLocal):
         session.add(link)
         await session.commit()
     # Test - Filter by project to ensure isolation
-    response = await client.get(
-        f"/v1/image-hub/assets?project_id={project.id}"
-    )
+    response = await client.get(f"/v1/image-hub/assets?project_id={project.id}")
     assert response.status_code == 200
     data = response.json()
     assert len(data["assets"]) >= 1
@@ -88,9 +86,7 @@ async def test_list_hub_assets_filtering(client, TestSessionLocal):
         await session.flush()
 
         # Add metadata for filtering
-        meta1 = models.MetadataState(
-            link_id=link1.id, rating=5, color_label="Red"
-        )
+        meta1 = models.MetadataState(link_id=link1.id, rating=5, color_label="Red")
         session.add(meta1)
 
         await session.commit()
@@ -131,9 +127,7 @@ async def test_list_hub_date_buckets(client, TestSessionLocal):
     # Setup test data with different dates
     async with TestSessionLocal() as session:
         user_id = uuid.UUID("12345678-1234-5678-1234-567812345678")
-        proj = models.Project(
-            id=uuid.uuid4(), user_id=user_id, title="Date Proj"
-        )
+        proj = models.Project(id=uuid.uuid4(), user_id=user_id, title="Date Proj")
         session.add(proj)
 
         # Year 2023
@@ -148,9 +142,7 @@ async def test_list_hub_date_buckets(client, TestSessionLocal):
             mime="image/jpeg",
             size_bytes=100,
         )
-        l1 = models.ProjectAsset(
-            project_id=proj.id, asset_id=a1.id, user_id=user_id
-        )
+        l1 = models.ProjectAsset(project_id=proj.id, asset_id=a1.id, user_id=user_id)
 
         # Year 2024
         d2 = datetime(2024, 1, 15)
@@ -164,9 +156,7 @@ async def test_list_hub_date_buckets(client, TestSessionLocal):
             mime="image/jpeg",
             size_bytes=100,
         )
-        l2 = models.ProjectAsset(
-            project_id=proj.id, asset_id=a2.id, user_id=user_id
-        )
+        l2 = models.ProjectAsset(project_id=proj.id, asset_id=a2.id, user_id=user_id)
 
         session.add_all([proj, a1, a2, l1, l2])
         await session.commit()
@@ -220,12 +210,8 @@ async def test_hub_pagination_distinct_ids(client, TestSessionLocal):
             await session.flush()
 
             # Link to P1 and P2
-            l1 = models.ProjectAsset(
-                project_id=p1.id, asset_id=a.id, user_id=user_id
-            )
-            l2 = models.ProjectAsset(
-                project_id=p2.id, asset_id=a.id, user_id=user_id
-            )
+            l1 = models.ProjectAsset(project_id=p1.id, asset_id=a.id, user_id=user_id)
+            l2 = models.ProjectAsset(project_id=p2.id, asset_id=a.id, user_id=user_id)
             session.add_all([l1, l2])
 
         await session.commit()
@@ -278,9 +264,7 @@ async def test_hub_bucket_filtering(client, TestSessionLocal):
             size_bytes=100,
             taken_at=datetime(2025, 1, 1),
         )
-        l1 = models.ProjectAsset(
-            project_id=p1.id, asset_id=a1.id, user_id=user_id
-        )
+        l1 = models.ProjectAsset(project_id=p1.id, asset_id=a1.id, user_id=user_id)
         session.add_all([a1, l1])
         await session.flush()
 
@@ -297,9 +281,7 @@ async def test_hub_bucket_filtering(client, TestSessionLocal):
             size_bytes=100,
             taken_at=datetime(2025, 1, 1),
         )
-        l2 = models.ProjectAsset(
-            project_id=p1.id, asset_id=a2.id, user_id=user_id
-        )
+        l2 = models.ProjectAsset(project_id=p1.id, asset_id=a2.id, user_id=user_id)
         session.add_all([a2, l2])
         await session.flush()
 
@@ -311,13 +293,9 @@ async def test_hub_bucket_filtering(client, TestSessionLocal):
     import json
 
     # 1. Filter by Rating >= 5 AND Search unique name
-    filters = json.dumps(
-        {"ratings": [5], "search": f"bucktest_{unique_marker}"}
-    )
+    filters = json.dumps({"ratings": [5], "search": f"bucktest_{unique_marker}"})
 
-    r = await client.get(
-        f"/v1/image-hub/assets?mode=date&limit=0&filters={filters}"
-    )
+    r = await client.get(f"/v1/image-hub/assets?mode=date&limit=0&filters={filters}")
     data = r.json()
     buckets = data["buckets"]
 
@@ -328,9 +306,7 @@ async def test_hub_bucket_filtering(client, TestSessionLocal):
 
     # 2. Filter Search only (Rating ignored/all). Should see 2 assets.
     filters2 = json.dumps({"search": f"bucktest_{unique_marker}"})
-    r2 = await client.get(
-        f"/v1/image-hub/assets?mode=date&limit=0&filters={filters2}"
-    )
+    r2 = await client.get(f"/v1/image-hub/assets?mode=date&limit=0&filters={filters2}")
     data2 = r2.json()
     buckets2 = data2["buckets"]
 

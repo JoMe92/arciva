@@ -83,6 +83,7 @@ export default function ImageHubImportPane({
 
   // Clear selection when reset signal changes (e.g. after successful import)
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSelectedItemsMap(new Map())
   }, [resetSignal])
 

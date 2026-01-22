@@ -81,6 +81,11 @@ export default function ImageHubImportPane({
     onSelectionChange(Array.from(selectedItemsMap.values()).flat())
   }, [selectedItemsMap, onSelectionChange])
 
+  // Clear selection when reset signal changes (e.g. after successful import)
+  useEffect(() => {
+    setSelectedItemsMap(new Map())
+  }, [resetSignal])
+
   // Handle status snapshot if needed (we can't easily do this if we don't know which assets are visible)
   // ImageHubBrowser handles visible assets status. ImageHubImportPane used to inspect `statusMap` from hook.
   // If parent strictly needs it, we might need to expose it from Browser.

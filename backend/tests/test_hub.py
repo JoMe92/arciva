@@ -319,9 +319,9 @@ async def test_hub_bucket_filtering(client, TestSessionLocal):
 async def test_list_hub_projects(client, app, TestSessionLocal):
     # Setup: Create UNIQUE User for this test to avoid collision with other tests in session DB
     from backend.app.security import get_current_user
-    
+
     unique_user_id = uuid.uuid4()
-    
+
     # Override the dependency for this test
     async def override_get_current_user():
         return models.User(
@@ -329,14 +329,18 @@ async def test_list_hub_projects(client, app, TestSessionLocal):
             email=f"test_{unique_user_id}@example.com",
             password_hash="mock",
         )
-    
+
     app.dependency_overrides[get_current_user] = override_get_current_user
 
     try:
         async with TestSessionLocal() as session:
             # Create user in DB (optional if not enforcing FK strictly, but good practice)
             # Models usually enforce FK to users table
-            u = models.User(id=unique_user_id, email=f"test_{unique_user_id}@example.com", password_hash="mock")
+            u = models.User(
+                id=unique_user_id,
+                email=f"test_{unique_user_id}@example.com",
+                password_hash="mock",
+            )
             session.add(u)
 
             # Proj 1: 2 assets
@@ -427,7 +431,7 @@ async def test_list_hub_projects(client, app, TestSessionLocal):
         assert data["projects"][0]["project_id"] == p1_id
     finally:
         # Restore dependency
-        # Removing the key restores the original dependency if it was in the map, 
+        # Removing the key restores the original dependency if it was in the map,
         # or we assume clean slate. But app is session scoped, so we must clean up.
         if get_current_user in app.dependency_overrides:
             del app.dependency_overrides[get_current_user]

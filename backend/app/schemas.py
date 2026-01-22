@@ -442,6 +442,19 @@ class ImageHubDateBucket(BaseModel):
     asset_count: int
 
 
+class ImageHubProject(BaseModel):
+    project_id: UUID
+    name: str
+    cover_thumb: Optional[str] = None
+    asset_count: int
+    updated_at: Optional[datetime] = None
+
+
+class ImageHubProjectListResponse(BaseModel):
+    projects: List[ImageHubProject]
+    next_cursor: Optional[str] = None
+
+
 class ImageHubAssetsPage(BaseModel):
     assets: List[HubAsset]
     next_cursor: Optional[str] = None

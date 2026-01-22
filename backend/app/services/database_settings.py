@@ -11,7 +11,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..schemas import DatabasePathSettings, DatabasePathStatus
 from ..deps import get_settings
 
-
 _DEFAULT_FILENAME = "arciva.db"
 _MIN_FREE_BYTES = 512 * 1024 * 1024  # 512 MB safety buffer
 _PROTECTED_UNIX_PREFIXES = [

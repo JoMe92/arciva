@@ -73,7 +73,10 @@ async def list_hub_projects(
             func.max(models.ProjectAsset.added_at).label("last_linked"),
             func.count(models.ProjectAsset.asset_id).label("asset_count"),
         )
-        .join(models.ProjectAsset, models.ProjectAsset.project_id == models.Project.id)
+        .join(
+            models.ProjectAsset,
+            models.ProjectAsset.project_id == models.Project.id,
+        )
         .where(
             models.ProjectAsset.user_id == current_user.id,
         )
@@ -88,7 +91,8 @@ async def list_hub_projects(
     # Default is recently updated (linked) first
     q = q.order_by(func.max(models.ProjectAsset.added_at).desc())
 
-    # Pagination relies on offset here since cursor logic for grouped agg is complex
+    # Pagination relies on offset here since cursor logic for grouped agg
+    # is complex
     offset = 0
     if cursor and cursor.isdigit():
         offset = int(cursor)
@@ -158,7 +162,9 @@ async def list_hub_assets(
             q = q.where(models.ProjectAsset.project_id == project_id)
 
         # Date filtering
-        date_col = func.coalesce(models.Asset.taken_at, models.Asset.created_at)
+        date_col = func.coalesce(
+            models.Asset.taken_at, models.Asset.created_at
+        )
         if year:
             q = q.where(func.extract("year", date_col) == year)
         if month:
@@ -180,9 +186,11 @@ async def list_hub_assets(
         if ratings := filter_data.get("ratings"):
             min_rating = ratings[0]
             # Requires join with MetadataState.
-            # If for buckets, we need to ensure MetadataState is part of query or join it.
-            # Assuming base query has the joins setup correctly.
-            q = q.where(func.coalesce(models.MetadataState.rating, 0) >= min_rating)
+            # If for buckets, we need to ensure MetadataState is part of query
+            # or join it. Assuming base query has the joins setup correctly.
+            q = q.where(
+                func.coalesce(models.MetadataState.rating, 0) >= min_rating
+            )
 
         # Labels filter
         if labels := filter_data.get("labels"):
@@ -207,20 +215,25 @@ async def list_hub_assets(
     # Common Joins
     # We join Asset -> ProjectAsset -> Project -> Metadata
     # This structure is needed for most filters.
-    # Note: For strict 'Asset' listing (date mode), duplication due to ProjectAsset
-    # is the issue.
+    # Note: For strict 'Asset' listing (date mode), duplication due to
+    # ProjectAsset is the issue.
 
     # --- Step 1: Paginate on Distinct IDs ---
 
     # We want a list of Asset.id that match the criteria.
-    # Because one asset can have multiple ProjectAssets (and thus multiple rows),
+    # Because one asset can have multiple ProjectAssets
+    # (and thus multiple rows),
     # we group by Asset.id (or select distinct).
 
     base_asset_query = (
         select(models.Asset.id)
-        .join(models.ProjectAsset, models.ProjectAsset.asset_id == models.Asset.id)
+        .join(
+            models.ProjectAsset,
+            models.ProjectAsset.asset_id == models.Asset.id,
+        )
         .outerjoin(
-            models.MetadataState, models.MetadataState.link_id == models.ProjectAsset.id
+            models.MetadataState,
+            models.MetadataState.link_id == models.ProjectAsset.id,
         )
         .where(
             models.Asset.status == models.AssetStatus.READY,
@@ -234,8 +247,9 @@ async def list_hub_assets(
     # Sorting/Pagination on IDs
     # Sorting is tricky with distinct.
     # If mode='date', sort by taken_at.
-    # If mode='project', sorting by 'added_at' is ambiguous if multiple links exist.
-    # We will grab the MAX/MIN added_at or just distinct IDs?
+    # If mode='project', sorting by 'added_at' is ambiguous if multiple links
+    # exist. We will grab the MAX/MIN added_at
+    # or just distinct IDs?
 
     date_col = func.coalesce(models.Asset.taken_at, models.Asset.created_at)
 
@@ -246,7 +260,9 @@ async def list_hub_assets(
         )
     else:
         # Project mode: Sort by recently added.
-        # Because we join ProjectAsset, we use max(ProjectAsset.added_at) per asset
+        # Because we join ProjectAsset, we use max(ProjectAsset.added_at)
+        # per asset
+
         id_query = id_query.group_by(models.Asset.id).order_by(
             func.max(models.ProjectAsset.added_at).desc()
         )
@@ -274,7 +290,8 @@ async def list_hub_assets(
     if target_ids:
         # Fetch full data for these IDs.
         # We need the Asset data + Project/Metadata info.
-        # This will return multiple rows per asset if it is in multiple projects.
+        # This will return multiple rows per asset if it is in
+        # multiple projects.
         # But we only requested specific Assets, so the set is bounded.
 
         detail_query = (
@@ -284,8 +301,14 @@ async def list_hub_assets(
                 models.Project,
                 models.MetadataState,
             )
-            .join(models.ProjectAsset, models.ProjectAsset.asset_id == models.Asset.id)
-            .join(models.Project, models.Project.id == models.ProjectAsset.project_id)
+            .join(
+                models.ProjectAsset,
+                models.ProjectAsset.asset_id == models.Asset.id,
+            )
+            .join(
+                models.Project,
+                models.Project.id == models.ProjectAsset.project_id,
+            )
             .outerjoin(
                 models.MetadataState,
                 models.MetadataState.link_id == models.ProjectAsset.id,
@@ -293,16 +316,19 @@ async def list_hub_assets(
             .where(models.Asset.id.in_(target_ids))
         )
 
-        # We might want to re-apply project_id filter here just to narrow the *links* shown?
-        # If I am in "All Projects" mode, I want to see all links for the asset.
-        # If I am in "Project A" mode, I only want to see the link to Project A?
+        # We might want to re-apply project_id filter here just to narrow
+        # the *links* shown? If I am in "All Projects" mode, I want to see
+        # all links for the asset. If I am in "Project A" mode, I only want
+        # to see the link to Project A?
         # The Step 1 query filtered IDs. Step 2 fetches details.
 
         # If project_id is set, Step 1 only picked assets in Project A.
         # But Step 2 without filter would show links to Project B too?
-        # Usually, if I filter by Project A, I expect to see the asset in context of Project A.
-        # Let's optionally filter details if strict context is needed.
-        # For Hub, seeing all contexts is nice, but 'project_id' usually implies specific view.
+        # Usually, if I filter by Project A, I expect to see the asset in
+        # context of Project A. Let's optionally filter details if strict
+        # context is needed.
+        # For Hub, seeing all contexts is nice, but 'project_id' usually
+        # implies specific view.
         # Let's apply project_id to detail query if present.
 
         if project_id:
@@ -311,7 +337,8 @@ async def list_hub_assets(
             )
 
         # Ensure consistent order in output list (matching the ID order)?
-        # SQL IN(...) does not guarantee order. We should sort result in python or query.
+        # SQL IN(...) does not guarantee order. We should sort result in python
+        # or query.
 
         details_result = await db.execute(detail_query)
         details_rows = details_result.all()
@@ -340,7 +367,9 @@ async def list_hub_assets(
                         ),
                         project_id=project.id,
                         picked=bool(metadata.picked) if metadata else False,
-                        rejected=bool(metadata.rejected) if metadata else False,
+                        rejected=(
+                            bool(metadata.rejected) if metadata else False
+                        ),
                         edits=metadata.edits if metadata else None,
                         source_project_id=(
                             metadata.source_project_id if metadata else None
@@ -364,8 +393,8 @@ async def list_hub_assets(
             links = data["links"]
 
             # Pick a "primary" link for top-level rating/label?
-            # Logic: If filtering by project, use that link. Else, use most recent?
-            # For now, just use the first one found (or max rated?)
+            # Logic: If filtering by project, use that link. Else, use most
+            # recent? For now, just use the first one found (or max rated?)
             # Let's use the first one as 'primary' for display
 
             primary_ref = links[0] if links else None
@@ -374,7 +403,11 @@ async def list_hub_assets(
                 schemas.HubAsset(
                     asset_id=asset.id,
                     original_filename=asset.original_filename,
-                    type=("RAW" if (asset.format or "").upper() == "RAW" else "JPEG"),
+                    type=(
+                        "RAW"
+                        if (asset.format or "").upper() == "RAW"
+                        else "JPEG"
+                    ),
                     width=asset.width,
                     height=asset.height,
                     created_at=asset.created_at,
@@ -405,8 +438,8 @@ async def list_hub_assets(
         # Base bucket query matches the main filtering query using same logic
         # Count distinct assets!
 
-        # Using a subquery approach for distinct IDs might be safest for counting
-        # if filters involve joins.
+        # Using a subquery approach for distinct IDs might be safest for
+        # counting if filters involve joins.
         # But for 'count(*)', we usually want count of ASSETS.
 
         # Start with base join structure again
@@ -414,7 +447,10 @@ async def list_hub_assets(
             select(
                 models.Asset.id
             )  # We will group by date vals + count(distinct asset.id)
-            .join(models.ProjectAsset, models.ProjectAsset.asset_id == models.Asset.id)
+            .join(
+                models.ProjectAsset,
+                models.ProjectAsset.asset_id == models.Asset.id,
+            )
             .outerjoin(
                 models.MetadataState,
                 models.MetadataState.link_id == models.ProjectAsset.id,
@@ -432,7 +468,9 @@ async def list_hub_assets(
         # We can turn bucket_base into a subquery or CTE, then group by date.
 
         # However, we need to extract date from the asset in the row.
-        b_date_col = func.coalesce(models.Asset.taken_at, models.Asset.created_at)
+        b_date_col = func.coalesce(
+            models.Asset.taken_at, models.Asset.created_at
+        )
 
         # SQLAlchemy Group By on Joined query with Distinct Count
 
@@ -442,7 +480,10 @@ async def list_hub_assets(
         # We reuse the same query structure but select different columns
         bucket_query = (
             select(agg_val)
-            .join(models.ProjectAsset, models.ProjectAsset.asset_id == models.Asset.id)
+            .join(
+                models.ProjectAsset,
+                models.ProjectAsset.asset_id == models.Asset.id,
+            )
             .outerjoin(
                 models.MetadataState,
                 models.MetadataState.link_id == models.ProjectAsset.id,
@@ -467,13 +508,18 @@ async def list_hub_assets(
                 y_int = int(y_val)
                 buckets.append(
                     schemas.ImageHubDateBucket(
-                        key=str(y_int), year=y_int, label=str(y_int), asset_count=count
+                        key=str(y_int),
+                        year=y_int,
+                        label=str(y_int),
+                        asset_count=count,
                     )
                 )
 
         elif year and not month:
             # Group by Month
-            bucket_query = bucket_query.where(func.extract("year", b_date_col) == year)
+            bucket_query = bucket_query.where(
+                func.extract("year", b_date_col) == year
+            )
             b_month = func.extract("month", b_date_col).label("month")
             rows = await db.execute(
                 bucket_query.add_columns(b_month)
@@ -502,7 +548,9 @@ async def list_hub_assets(
             )
             b_day = func.extract("day", b_date_col).label("day")
             rows = await db.execute(
-                bucket_query.add_columns(b_day).group_by(b_day).order_by(b_day.desc())
+                bucket_query.add_columns(b_day)
+                .group_by(b_day)
+                .order_by(b_day.desc())
             )
             for count, d_val in rows:
                 d_int = int(d_val)
@@ -535,14 +583,17 @@ async def get_asset_status(
         select(models.ProjectAsset.project_id)
         .join(models.Asset, models.Asset.id == models.ProjectAsset.asset_id)
         .where(
-            models.Asset.id == asset_id, models.ProjectAsset.user_id == current_user.id
+            models.Asset.id == asset_id,
+            models.ProjectAsset.user_id == current_user.id,
         )
     )
     project_ids = result.scalars().all()
     project_ids_str = [str(pid) for pid in project_ids]
 
     already_linked = (
-        str(current_project_id) in project_ids_str if current_project_id else False
+        str(current_project_id) in project_ids_str
+        if current_project_id
+        else False
     )
     other = [pid for pid in project_ids_str if pid != str(current_project_id)]
 

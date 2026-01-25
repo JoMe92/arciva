@@ -503,12 +503,94 @@ class GeometrySettings(BaseModel):
     horizontal: float = 0.0
 
 
+class CurvePoint(BaseModel):
+    x: float
+    y: float
+
+
+class ChannelCurve(BaseModel):
+    points: List[CurvePoint]
+
+
+class CurvesSettings(BaseModel):
+    intensity: float = 1.0
+    master: Optional[ChannelCurve] = None
+    red: Optional[ChannelCurve] = None
+    green: Optional[ChannelCurve] = None
+    blue: Optional[ChannelCurve] = None
+
+
+class HslRangeSettings(BaseModel):
+    hue: float = 0.0
+    saturation: float = 0.0
+    luminance: float = 0.0
+
+
+class HslSettings(BaseModel):
+    red: Optional[HslRangeSettings] = None
+    orange: Optional[HslRangeSettings] = None
+    yellow: Optional[HslRangeSettings] = None
+    green: Optional[HslRangeSettings] = None
+    aqua: Optional[HslRangeSettings] = None
+    blue: Optional[HslRangeSettings] = None
+    purple: Optional[HslRangeSettings] = None
+    magenta: Optional[HslRangeSettings] = None
+
+
+class SplitToningSettings(BaseModel):
+    shadowHue: float = 0.0
+    shadowSat: float = 0.0
+    highlightHue: float = 0.0
+    highlightSat: float = 0.0
+    balance: float = 0.0
+
+
+class VignetteSettings(BaseModel):
+    amount: float = 0.0
+    midpoint: float = 0.5
+    roundness: float = 0.5
+    feather: float = 0.5
+
+
+class SharpenSettings(BaseModel):
+    amount: float = 0.0
+    radius: float = 1.0
+    threshold: float = 0.0
+
+
+class ClaritySettings(BaseModel):
+    amount: float = 0.0
+
+
+class DehazeSettings(BaseModel):
+    amount: float = 0.0
+
+
+class DenoiseSettings(BaseModel):
+    luminance: float = 0.0
+    color: float = 0.0
+
+
+class LensDistortionSettings(BaseModel):
+    k1: float = 0.0
+    k2: float = 0.0
+
+
 class QuickFixAdjustments(BaseModel):
     crop: Optional[CropSettings] = None
     exposure: Optional[ExposureSettings] = None
     color: Optional[ColorSettings] = None
     grain: Optional[GrainSettings] = None
     geometry: Optional[GeometrySettings] = None
+    curves: Optional[CurvesSettings] = None
+    hsl: Optional[HslSettings] = None
+    splitToning: Optional[SplitToningSettings] = None
+    vignette: Optional[VignetteSettings] = None
+    sharpen: Optional[SharpenSettings] = None
+    clarity: Optional[ClaritySettings] = None
+    dehaze: Optional[DehazeSettings] = None
+    denoise: Optional[DenoiseSettings] = None
+    distortion: Optional[LensDistortionSettings] = None
 
 
 class QuickFixBatchApply(BaseModel):

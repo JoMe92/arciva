@@ -10,82 +10,10 @@ import {
   createDefaultQuickFixState,
   hasQuickFixAdjustments,
 } from '../quickFixState'
-
-type SliderControlProps = {
-  label: string
-  value: number
-  min: number
-  max: number
-  step: number
-  disabled: boolean
-  onChange: (value: number) => void
-  format?: (value: number) => string
-  onPointerDown?: (event: React.PointerEvent<HTMLInputElement>) => void
-  onPointerUp?: (event: React.PointerEvent<HTMLInputElement>) => void
-  onPointerCancel?: (event: React.PointerEvent<HTMLInputElement>) => void
-  onBlur?: () => void
-}
-
-const isZeroCenteredRange = (min: number, max: number) => min < 0 && max > 0
-
-const getSliderTrackBackground = (value: number, min: number, max: number) => {
-  if (!isZeroCenteredRange(min, max)) return undefined
-  const zeroPercent = ((0 - min) / (max - min)) * 100
-  const currentPercent = ((value - min) / (max - min)) * 100
-  const neutral = 'var(--border,#EDE1C6)'
-  const emphasis = 'var(--focus-ring,#1A73E8)'
-  if (value >= 0) {
-    return `linear-gradient(90deg, ${neutral} 0%, ${neutral} ${zeroPercent}%, ${emphasis} ${zeroPercent}%, ${emphasis} ${currentPercent}%, ${neutral} ${currentPercent}%, ${neutral} 100%)`
-  }
-  return `linear-gradient(90deg, ${neutral} 0%, ${neutral} ${currentPercent}%, ${emphasis} ${currentPercent}%, ${emphasis} ${zeroPercent}%, ${neutral} ${zeroPercent}%, ${neutral} 100%)`
-}
-
-function SliderControl({
-  label,
-  value,
-  min,
-  max,
-  step,
-  disabled,
-  onChange,
-  format,
-  onPointerDown,
-  onPointerUp,
-  onPointerCancel,
-  onBlur,
-}: SliderControlProps) {
-  const displayValue = format ? format(value) : value.toFixed(2)
-  const zeroCentered = isZeroCenteredRange(min, max)
-  const trackBackground = getSliderTrackBackground(value, min, max)
-  return (
-    <div className="space-y-2">
-      <div className="flex justify-between text-xs">
-        <span className="font-medium text-[var(--text,#1F1E1B)]">{label}</span>
-        <span className="text-[var(--text-muted,#6B645B)]">{displayValue}</span>
-      </div>
-      <div className="relative">
-        {zeroCentered ? (
-          <span className="pointer-events-none absolute inset-y-0 left-1/2 -translate-x-1/2 border-l border-dashed border-[var(--border,#EDE1C6)]" aria-hidden="true" />
-        ) : null}
-        <input
-          type="range"
-          min={min}
-          max={max}
-          step={step}
-          value={value}
-          disabled={disabled}
-          onChange={(event) => onChange(Number(event.target.value))}
-          onPointerDown={onPointerDown}
-          onPointerUp={onPointerUp}
-          onPointerCancel={onPointerCancel}
-          onBlur={onBlur}
-          className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-[var(--border,#EDE1C6)] accent-[var(--focus-ring,#1A73E8)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring,#1A73E8)] focus-visible:ring-offset-2"
-          style={trackBackground ? { backgroundImage: trackBackground } : undefined}
-        />
-      </div>
-    </div>
-  )
-}
+import { SliderControl } from './QuickFixSlider'
+import { QuickFixHSL } from './QuickFixHSL'
+import { QuickFixCurves } from './QuickFixCurves'
+import { QuickFixSplitToning } from './QuickFixSplitToning'
 
 type QuickFixPanelProps = {
   hasSelection: boolean
@@ -580,6 +508,19 @@ function QuickFixPanelComponent({
         </div>
       </QuickFixGroup>
 
+      <QuickFixCurves
+        state={displayedState.curves}
+        onChange={(updater) =>
+          updateLiveState((prev) => ({
+            ...prev,
+            curves: updater(prev.curves),
+          }))
+        }
+        disabled={controlsDisabled}
+        onReset={() => onQuickFixGroupReset('curves')}
+        sliderEvents={sliderEvents}
+      />
+
       <QuickFixGroup title="Color">
         <div className="space-y-4">
           <SliderControl
@@ -622,6 +563,146 @@ function QuickFixPanelComponent({
               disabled={controlsDisabled}
             >
               Reset color
+            </button>
+          </div>
+        </div>
+      </QuickFixGroup>
+
+      <QuickFixHSL
+        state={displayedState.hsl}
+        onChange={(updater) =>
+          updateLiveState((prev) => ({
+            ...prev,
+            hsl: updater(prev.hsl),
+          }))
+        }
+        disabled={controlsDisabled}
+        onReset={() => onQuickFixGroupReset('hsl')}
+        sliderEvents={sliderEvents}
+      />
+
+      <QuickFixSplitToning
+        state={displayedState.splitToning}
+        onChange={(updater) =>
+          updateLiveState((prev) => ({
+            ...prev,
+            splitToning: updater(prev.splitToning),
+          }))
+        }
+        disabled={controlsDisabled}
+        onReset={() => onQuickFixGroupReset('splitToning')}
+        sliderEvents={sliderEvents}
+      />
+
+      <QuickFixGroup title="Detail & Denoise">
+        <div className="space-y-4">
+          <SliderControl
+            label="Sharpen Amount"
+            value={displayedState.detail.sharpenAmount}
+            min={0}
+            max={1}
+            step={0.05}
+            disabled={controlsDisabled}
+            onChange={(value) =>
+              updateLiveState((prev) => ({
+                ...prev,
+                detail: { ...prev.detail, sharpenAmount: value },
+              }))
+            }
+            format={(value) => value.toFixed(2)}
+            {...sliderEvents}
+          />
+          <SliderControl
+            label="Sharpen Radius"
+            value={displayedState.detail.sharpenRadius}
+            min={0.1}
+            max={3.0}
+            step={0.1}
+            disabled={controlsDisabled}
+            onChange={(value) =>
+              updateLiveState((prev) => ({
+                ...prev,
+                detail: { ...prev.detail, sharpenRadius: value },
+              }))
+            }
+            format={(value) => value.toFixed(1)}
+            {...sliderEvents}
+          />
+          <SliderControl
+            label="Clarity"
+            value={displayedState.detail.clarity}
+            min={0}
+            max={1}
+            step={0.05}
+            disabled={controlsDisabled}
+            onChange={(value) =>
+              updateLiveState((prev) => ({
+                ...prev,
+                detail: { ...prev.detail, clarity: value },
+              }))
+            }
+            format={(value) => value.toFixed(2)}
+            {...sliderEvents}
+          />
+          <SliderControl
+            label="Dehaze"
+            value={displayedState.detail.dehaze}
+            min={0}
+            max={1}
+            step={0.05}
+            disabled={controlsDisabled}
+            onChange={(value) =>
+              updateLiveState((prev) => ({
+                ...prev,
+                detail: { ...prev.detail, dehaze: value },
+              }))
+            }
+            format={(value) => value.toFixed(2)}
+            {...sliderEvents}
+          />
+          <div className="border-t border-[var(--border,#EDE1C6)] pt-2" />
+          <h4 className="text-xs font-medium text-[var(--text,#1F1E1B)]">Denoise</h4>
+          <SliderControl
+            label="Luminance"
+            value={displayedState.detail.denoiseLuminance}
+            min={0}
+            max={1}
+            step={0.05}
+            disabled={controlsDisabled}
+            onChange={(value) =>
+              updateLiveState((prev) => ({
+                ...prev,
+                detail: { ...prev.detail, denoiseLuminance: value },
+              }))
+            }
+            format={(value) => value.toFixed(2)}
+            {...sliderEvents}
+          />
+          <SliderControl
+            label="Color"
+            value={displayedState.detail.denoiseColor}
+            min={0}
+            max={1}
+            step={0.05}
+            disabled={controlsDisabled}
+            onChange={(value) =>
+              updateLiveState((prev) => ({
+                ...prev,
+                detail: { ...prev.detail, denoiseColor: value },
+              }))
+            }
+            format={(value) => value.toFixed(2)}
+            {...sliderEvents}
+          />
+
+          <div className="flex justify-end">
+            <button
+              type="button"
+              className="text-xs font-medium text-[var(--text,#1F1E1B)] underline-offset-2 hover:underline disabled:opacity-60"
+              onClick={() => onQuickFixGroupReset('detail' as QuickFixGroupKey)}
+              disabled={controlsDisabled}
+            >
+              Reset detail
             </button>
           </div>
         </div>
@@ -687,6 +768,81 @@ function QuickFixPanelComponent({
         </div>
       </QuickFixGroup>
 
+      <QuickFixGroup title="Vignette">
+        <div className="space-y-4">
+          <SliderControl
+            label="Amount"
+            value={displayedState.vignette.amount}
+            min={-1}
+            max={1}
+            step={0.05}
+            disabled={controlsDisabled}
+            onChange={(value) =>
+              updateLiveState((prev) => ({
+                ...prev,
+                vignette: { ...prev.vignette, amount: value },
+              }))
+            }
+            {...sliderEvents}
+          />
+          <SliderControl
+            label="Midpoint"
+            value={displayedState.vignette.midpoint}
+            min={0}
+            max={1}
+            step={0.05}
+            disabled={controlsDisabled}
+            onChange={(value) =>
+              updateLiveState((prev) => ({
+                ...prev,
+                vignette: { ...prev.vignette, midpoint: value },
+              }))
+            }
+            {...sliderEvents}
+          />
+          <SliderControl
+            label="Roundness"
+            value={displayedState.vignette.roundness}
+            min={-1}
+            max={1}
+            step={0.05}
+            disabled={controlsDisabled}
+            onChange={(value) =>
+              updateLiveState((prev) => ({
+                ...prev,
+                vignette: { ...prev.vignette, roundness: value },
+              }))
+            }
+            {...sliderEvents}
+          />
+          <SliderControl
+            label="Feather"
+            value={displayedState.vignette.feather}
+            min={0}
+            max={1}
+            step={0.05}
+            disabled={controlsDisabled}
+            onChange={(value) =>
+              updateLiveState((prev) => ({
+                ...prev,
+                vignette: { ...prev.vignette, feather: value },
+              }))
+            }
+            {...sliderEvents}
+          />
+          <div className="flex justify-end">
+            <button
+              type="button"
+              className="text-xs font-medium text-[var(--text,#1F1E1B)] underline-offset-2 hover:underline disabled:opacity-60"
+              onClick={() => onQuickFixGroupReset('vignette')}
+              disabled={controlsDisabled}
+            >
+              Reset vignette
+            </button>
+          </div>
+        </div>
+      </QuickFixGroup>
+
       <QuickFixGroup title="Geometry">
         <div className="space-y-4">
           <SliderControl
@@ -721,6 +877,41 @@ function QuickFixPanelComponent({
             format={(value) => formatSigned(value)}
             {...sliderEvents}
           />
+          <div className="border-t border-[var(--border,#EDE1C6)] pt-2" />
+          <h4 className="text-xs font-medium text-[var(--text,#1F1E1B)]">Distortion</h4>
+          <SliderControl
+            label="K1 (Main)"
+            value={displayedState.geometry.distortionK1}
+            min={-1}
+            max={1}
+            step={0.05}
+            disabled={controlsDisabled}
+            onChange={(value) =>
+              updateLiveState((prev) => ({
+                ...prev,
+                geometry: { ...prev.geometry, distortionK1: value },
+              }))
+            }
+            format={(value) => formatSigned(value)}
+            {...sliderEvents}
+          />
+          <SliderControl
+            label="K2 (Fine)"
+            value={displayedState.geometry.distortionK2}
+            min={-1}
+            max={1}
+            step={0.05}
+            disabled={controlsDisabled}
+            onChange={(value) =>
+              updateLiveState((prev) => ({
+                ...prev,
+                geometry: { ...prev.geometry, distortionK2: value },
+              }))
+            }
+            format={(value) => formatSigned(value)}
+            {...sliderEvents}
+          />
+
           <div className="flex justify-end">
             <button
               type="button"

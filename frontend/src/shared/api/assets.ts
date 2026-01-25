@@ -298,6 +298,16 @@ export type QuickFixAdjustmentsPayload = {
   color?: QuickFixColorSettingsPayload | null
   grain?: QuickFixGrainSettingsPayload | null
   geometry?: QuickFixGeometrySettingsPayload | null
+  // New v0.3.0
+  curves?: any | null // Simplified for shared type, ideally strict
+  hsl?: any | null
+  splitToning?: any | null
+  vignette?: any | null
+  sharpen?: any | null
+  clarity?: any | null
+  dehaze?: any | null
+  denoise?: any | null
+  distortion?: any | null
 }
 
 export async function previewQuickFix(

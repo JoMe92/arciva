@@ -98,6 +98,50 @@ async def upload_init(
         asset_id=asset.id, upload_token=token, max_bytes=body.size_bytes
     )
 
+@router.post(
+    "/uploads/init",
+    response_model=schemas.UploadInitOut,
+    status_code=201,
+)
+async def upload_init_direct(
+    body: schemas.UploadInitIn,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    asset_format = detect_asset_format(body.filename, body.mime)
+    asset = models.Asset(
+        user_id=current_user.id,
+        original_filename=body.filename,
+        mime=body.mime,
+        size_bytes=body.size_bytes,
+        status=models.AssetStatus.UPLOADING,
+        format=asset_format or "UNKNOWN",
+    )
+    db.add(asset)
+    await db.flush()  # get asset.id
+    
+    # Direct upload has no project link initially
+    await db.commit()
+
+    logger.info(
+        "upload_init_direct: asset=%s filename=%s size=%s mime=%s",
+        asset.id,
+        body.filename,
+        body.size_bytes,
+        body.mime,
+    )
+
+    token = secrets.token_urlsafe(24)
+    UPLOAD_TOKENS[str(asset.id)] = {
+        "token": token,
+        "sha256": None,
+        "bytes": 0,
+        "duplicate_asset_id": None,
+        "temp_removed": False,
+    }
+    return schemas.UploadInitOut(
+        asset_id=asset.id, upload_token=token, max_bytes=body.size_bytes
+    )
 
 @router.put("/uploads/{asset_id}")
 async def upload_file(

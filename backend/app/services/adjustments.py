@@ -44,7 +44,8 @@ def apply_crop_rotate(
 ) -> Image.Image:
     result = image
     if settings.rotation:
-        # Keep canvas size stable (expand=False) but use bicubic resampling for a smooth rotate.
+        # Keep canvas size stable (expand=False) but use bicubic resampling for a
+        # smooth rotate.
         result = result.rotate(
             -settings.rotation,
             resample=Image.Resampling.BICUBIC,
@@ -56,7 +57,8 @@ def apply_crop_rotate(
             target_ratio = float(settings.aspect_ratio)
         except (ValueError, TypeError):
             # If it's a string like "1:1", we might need a parser.
-            # For now, if it fails to convert to float directly, we skip or handle common presets.
+            # For now, if it fails to convert to float directly, we skip or handle
+            # common presets.
             if isinstance(settings.aspect_ratio, str) and ":" in settings.aspect_ratio:
                 try:
                     w, h = map(float, settings.aspect_ratio.split(":"))

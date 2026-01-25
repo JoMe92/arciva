@@ -80,7 +80,8 @@ def _render_sidecar_xml(state: models.MetadataState) -> str:
     if not payload:
         payload = "<lr:Pick>0</lr:Pick>"
 
-    return textwrap.dedent(f"""\
+    return textwrap.dedent(
+        f"""\
         <?xml version="1.0" encoding="UTF-8"?>
         <x:xmpmeta xmlns:x="adobe:ns:meta/">
           <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
@@ -91,7 +92,8 @@ def _render_sidecar_xml(state: models.MetadataState) -> str:
             </rdf:Description>
           </rdf:RDF>
         </x:xmpmeta>
-        """).strip()
+        """
+    ).strip()
 
 
 def _write_with_exiftool(

@@ -87,14 +87,18 @@ async def ensure_preview_columns(_: AsyncSession | None = None) -> None:
                     )
                     existing = (row[1] for row in pragma)
                 else:
-                    result = await conn.execute(text("""
+                    result = await conn.execute(
+                        text(
+                            """
                             SELECT column_name
                             FROM information_schema.columns
                             WHERE table_name = 'project_assets'
                               AND column_name IN (
                                 'is_preview', 'preview_order'
                               )
-                            """))
+                            """
+                        )
+                    )
                     existing = (row[0] for row in result)
 
                 statements = _build_statements(existing)
@@ -128,12 +132,16 @@ async def ensure_asset_metadata_column(_: AsyncSession | None = None) -> None:
                     pragma = await conn.execute(text("PRAGMA table_info('assets')"))
                     column_present = any(row[1] == "metadata_json" for row in pragma)
                 else:
-                    result = await conn.execute(text("""
+                    result = await conn.execute(
+                        text(
+                            """
                             SELECT column_name
                             FROM information_schema.columns
                             WHERE table_name = 'assets'
                               AND column_name = 'metadata_json'
-                            """))
+                            """
+                        )
+                    )
                     column_present = result.first() is not None
 
                 if not column_present:

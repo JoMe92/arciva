@@ -6,11 +6,7 @@ from backend.app import models
 @pytest.mark.asyncio
 async def test_upload_init_direct(client, TestSessionLocal):
     # Call the new direct upload endpoint
-    payload = {
-        "filename": "test_direct.jpg",
-        "size_bytes": 1024,
-        "mime": "image/jpeg"
-    }
+    payload = {"filename": "test_direct.jpg", "size_bytes": 1024, "mime": "image/jpeg"}
     response = await client.post("/v1/uploads/init", json=payload)
     assert response.status_code == 201
     data = response.json()

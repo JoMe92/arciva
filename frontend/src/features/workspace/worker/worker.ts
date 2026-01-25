@@ -159,7 +159,7 @@ ctx.onmessage = async (e: MessageEvent) => {
                 const result = renderer.process_frame(data, width, height, adjustments, procOpts);
                 const finalResult = (result instanceof Promise) ? await result : result;
 
-                procOpts.free();
+                // procOpts.free(); // ProcessOptions is consumed by process_frame in v0.3.0
 
                 const endTime = performance.now();
 

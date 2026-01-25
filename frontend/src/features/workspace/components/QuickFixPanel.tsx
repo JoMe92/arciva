@@ -625,6 +625,69 @@ function QuickFixPanelComponent({
         </div>
       </QuickFixGroup>
 
+      <QuickFixGroup title="Detail">
+        <div className="space-y-4">
+          <SliderControl
+            label="Sharpen"
+            value={displayedState.detail?.sharpen ?? 0}
+            min={0}
+            max={1}
+            step={0.05}
+            disabled={controlsDisabled}
+            onChange={(value) =>
+              updateLiveState((prev) => ({
+                ...prev,
+                detail: { ...prev.detail, sharpen: value },
+              }))
+            }
+            format={(value) => value.toFixed(2)}
+            {...sliderEvents}
+          />
+          <SliderControl
+            label="Clarity"
+            value={displayedState.detail?.clarity ?? 0}
+            min={0}
+            max={1}
+            step={0.05}
+            disabled={controlsDisabled}
+            onChange={(value) =>
+              updateLiveState((prev) => ({
+                ...prev,
+                detail: { ...prev.detail, clarity: value },
+              }))
+            }
+            format={(value) => value.toFixed(2)}
+            {...sliderEvents}
+          />
+          <SliderControl
+            label="Dehaze"
+            value={displayedState.detail?.dehaze ?? 0}
+            min={0}
+            max={1}
+            step={0.05}
+            disabled={controlsDisabled}
+            onChange={(value) =>
+              updateLiveState((prev) => ({
+                ...prev,
+                detail: { ...prev.detail, dehaze: value },
+              }))
+            }
+            format={(value) => value.toFixed(2)}
+            {...sliderEvents}
+          />
+          <div className="flex justify-end">
+            <button
+              type="button"
+              className="text-xs font-medium text-[var(--text,#1F1E1B)] underline-offset-2 hover:underline disabled:opacity-60"
+              onClick={() => onQuickFixGroupReset('detail' as QuickFixGroupKey)}
+              disabled={controlsDisabled}
+            >
+              Reset detail
+            </button>
+          </div>
+        </div>
+      </QuickFixGroup>
+
       <QuickFixGroup title="Grain">
         <div className="space-y-4">
           <SliderControl

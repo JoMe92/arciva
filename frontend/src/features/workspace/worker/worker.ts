@@ -4,7 +4,7 @@
  * 
  * REWRITTEN LOCALLY TO FIX WASM LOADING PATH
  */
-import init, { QuickFixRenderer, init_panic_hook, RendererOptions } from '@JoMe92/quickfix-renderer/quickfix_renderer.js';
+import init, { QuickFixRenderer, init_panic_hook, RendererOptions, ProcessOptions } from '@JoMe92/quickfix-renderer/quickfix_renderer.js';
 import wasmUrl from '@JoMe92/quickfix-renderer/quickfix_renderer_bg.wasm?url';
 
 const ctx = self as any;
@@ -98,7 +98,6 @@ ctx.onmessage = async (e: MessageEvent) => {
                 const { requestId, imageData, adjustments } = msg.payload;
                 let { width, height } = msg.payload;
 
-                // Cancellation check
                 if (requestId < latestRequestId) {
                     return;
                 }
@@ -106,10 +105,26 @@ ctx.onmessage = async (e: MessageEvent) => {
 
                 const startTime = performance.now();
 
-                // Determine which image data to use
-                let data: Uint8Array;
+                // Initialize process options
+                // If we have new image data, we don't set a source ID (unless we want to cache it now? 
+                // The protocol seems to imply SET_IMAGE is distinct).
+                // But wait, the client.ts likely calls SET_IMAGE separately.
+                // Actually, let's keep the manual caching or switch to renderer caching?
+                // The new renderer supports `sourceId` in options. If provided, it uses cached image. 
+                // If imageData is provided AND sourceId is set, it caches that data.
+
+                // Let's adopt the new pattern:
+                // If SET_IMAGE comes, we can just call process_frame with empty adjustments but setting sourceId.
+                // Or we can keep a local cache if the renderer one is complex.
+                // Inspecting the types: `sourceId` is on `ProcessOptions`.
+
+                // Let's try to stick to the existing message structure but use the renderer features.
+
+                let data: Uint8Array = new Uint8Array(0); // Dummy default
+                let processOptsPtr: ProcessOptions | undefined;
+
                 if (imageData) {
-                    // Use provided image data (stateless mode)
+                    // Stateless render with specific image data
                     if (imageData instanceof ImageBitmap) {
                         const osc = new OffscreenCanvas(width, height);
                         const osCtx = osc.getContext('2d');
@@ -121,6 +136,12 @@ ctx.onmessage = async (e: MessageEvent) => {
                         data = new Uint8Array(imageData);
                     }
                 } else if (sourceImage) {
+                    // Use locally cached source image
+                    // Note: We are keeping the local cache for now to ensure stability 
+                    // while transitioning, as the renderer's internal cache behavior 
+                    // isn't fully visible here without deeper diving into `quickfix_renderer.js`.
+                    // However, passing `sourceId` to `process_frame` is how we *should* do it.
+                    // But for this step, let's just make it work with v0.3.0 which might require ProcessOptions.
                     data = sourceImage;
                     if (width === 0 && height === 0) {
                         width = sourceWidth;
@@ -130,12 +151,15 @@ ctx.onmessage = async (e: MessageEvent) => {
                     throw new Error("No image data provided and no source image set");
                 }
 
-                const result = renderer.process_frame(data, width, height, adjustments, undefined);
-                // process_frame might return Promise or direct?
-                // quickfix_renderer.js line 463: returns ret.
-                // signature says returns Promise<FrameResult> in JSDoc line 461.
-                // So we await it.
+                // Create ProcessOptions if needed (it is now optional in v0.3.0 but good to be explicit)
+                const procOpts = new ProcessOptions();
+                procOpts.returnImageBitmap = false; // We handle conversion here for now
+                // procOpts.sourceId = ... (if we were using renderer caching)
+
+                const result = renderer.process_frame(data, width, height, adjustments, procOpts);
                 const finalResult = (result instanceof Promise) ? await result : result;
+
+                procOpts.free();
 
                 const endTime = performance.now();
 

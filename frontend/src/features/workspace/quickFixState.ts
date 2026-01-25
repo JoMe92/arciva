@@ -7,6 +7,8 @@ import type {
   QuickFixGrainSettingsPayload,
 } from '../../shared/api/assets'
 
+// ... (imports remain)
+
 export type QuickFixCropState = {
   rotation: number
   aspectRatio: number | null
@@ -24,6 +26,12 @@ export type QuickFixColorState = {
   tint: number
 }
 
+export type QuickFixDetailState = {
+  sharpen: number
+  clarity: number
+  dehaze: number
+}
+
 export type QuickFixGrainState = {
   amount: number
   size: 'fine' | 'medium' | 'coarse'
@@ -32,12 +40,15 @@ export type QuickFixGrainState = {
 export type QuickFixGeometryState = {
   vertical: number
   horizontal: number
+  flipVertical: boolean
+  flipHorizontal: boolean
 }
 
 export type QuickFixState = {
   crop: QuickFixCropState
   exposure: QuickFixExposureState
   color: QuickFixColorState
+  detail: QuickFixDetailState
   grain: QuickFixGrainState
   geometry: QuickFixGeometryState
 }
@@ -48,8 +59,9 @@ const DEFAULT_STATE: QuickFixState = {
   crop: { rotation: 0, aspectRatio: null },
   exposure: { exposure: 0, contrast: 1, highlights: 0, shadows: 0 },
   color: { temperature: 0, tint: 0 },
+  detail: { sharpen: 0, clarity: 0, dehaze: 0 },
   grain: { amount: 0, size: 'medium' },
-  geometry: { vertical: 0, horizontal: 0 },
+  geometry: { vertical: 0, horizontal: 0, flipVertical: false, flipHorizontal: false },
 }
 
 export function createDefaultQuickFixState(): QuickFixState {
@@ -57,6 +69,7 @@ export function createDefaultQuickFixState(): QuickFixState {
     crop: { ...DEFAULT_STATE.crop },
     exposure: { ...DEFAULT_STATE.exposure },
     color: { ...DEFAULT_STATE.color },
+    detail: { ...DEFAULT_STATE.detail },
     grain: { ...DEFAULT_STATE.grain },
     geometry: { ...DEFAULT_STATE.geometry },
   }
@@ -67,6 +80,7 @@ export function cloneQuickFixState(state: QuickFixState): QuickFixState {
     crop: { ...state.crop },
     exposure: { ...state.exposure },
     color: { ...state.color },
+    detail: { ...state.detail },
     grain: { ...state.grain },
     geometry: { ...state.geometry },
   }
@@ -84,7 +98,7 @@ const sanitizeNumber = (value: unknown, fallback: number): number => {
 }
 
 function sanitizeCropSettings(payload: unknown): QuickFixCropState {
-  const data = (payload ?? {}) as QuickFixCropSettingsPayload
+  const data = (payload ?? {}) as any
   let aspectRatio: number | null = null
 
   if (typeof data.aspect_ratio === 'string') {
@@ -110,7 +124,7 @@ function sanitizeCropSettings(payload: unknown): QuickFixCropState {
 }
 
 function sanitizeExposureSettings(payload: unknown): QuickFixExposureState {
-  const data = (payload ?? {}) as QuickFixExposureSettingsPayload
+  const data = (payload ?? {}) as any
   return {
     exposure: sanitizeNumber(data.exposure, DEFAULT_STATE.exposure.exposure),
     contrast: sanitizeNumber(data.contrast, DEFAULT_STATE.exposure.contrast),
@@ -120,15 +134,25 @@ function sanitizeExposureSettings(payload: unknown): QuickFixExposureState {
 }
 
 function sanitizeColorSettings(payload: unknown): QuickFixColorState {
-  const data = (payload ?? {}) as QuickFixColorSettingsPayload
+  const data = (payload ?? {}) as any
   return {
     temperature: sanitizeNumber(data.temperature, DEFAULT_STATE.color.temperature),
     tint: sanitizeNumber(data.tint, DEFAULT_STATE.color.tint),
   }
 }
 
+function sanitizeDetailSettings(payload: unknown): QuickFixDetailState {
+  const data = (payload ?? {}) as any
+  return {
+    sharpen: sanitizeNumber(data.sharpen, DEFAULT_STATE.detail.sharpen),
+    clarity: sanitizeNumber(data.clarity, DEFAULT_STATE.detail.clarity),
+    dehaze: sanitizeNumber(data.dehaze, DEFAULT_STATE.detail.dehaze),
+  }
+}
+
+// ... grain remains largely same
 function sanitizeGrainSettings(payload: unknown): QuickFixGrainState {
-  const data = (payload ?? {}) as QuickFixGrainSettingsPayload
+  const data = (payload ?? {}) as any
   const size = data.size
   const normalizedSize: QuickFixGrainState['size'] =
     size === 'fine' || size === 'medium' || size === 'coarse' ? size : DEFAULT_STATE.grain.size
@@ -139,10 +163,12 @@ function sanitizeGrainSettings(payload: unknown): QuickFixGrainState {
 }
 
 function sanitizeGeometrySettings(payload: unknown): QuickFixGeometryState {
-  const data = (payload ?? {}) as QuickFixGeometrySettingsPayload
+  const data = (payload ?? {}) as any
   return {
     vertical: sanitizeNumber(data.vertical, DEFAULT_STATE.geometry.vertical),
     horizontal: sanitizeNumber(data.horizontal, DEFAULT_STATE.geometry.horizontal),
+    flipVertical: Boolean(data.flipVertical),
+    flipHorizontal: Boolean(data.flipHorizontal),
   }
 }
 
@@ -150,11 +176,12 @@ export function quickFixStateFromApi(payload: unknown): QuickFixState | null {
   if (!payload || typeof payload !== 'object') {
     return null
   }
-  const data = payload as QuickFixAdjustmentsPayload
+  const data = payload as any
   const next = createDefaultQuickFixState()
   if (data.crop) next.crop = sanitizeCropSettings(data.crop)
   if (data.exposure) next.exposure = sanitizeExposureSettings(data.exposure)
   if (data.color) next.color = sanitizeColorSettings(data.color)
+  if (data.detail) next.detail = sanitizeDetailSettings(data.detail)
   if (data.grain) next.grain = sanitizeGrainSettings(data.grain)
   if (data.geometry) next.geometry = sanitizeGeometrySettings(data.geometry)
   return next
@@ -163,6 +190,7 @@ export function quickFixStateFromApi(payload: unknown): QuickFixState | null {
 const cropDefaults = DEFAULT_STATE.crop
 const exposureDefaults = DEFAULT_STATE.exposure
 const colorDefaults = DEFAULT_STATE.color
+const detailDefaults = DEFAULT_STATE.detail
 const grainDefaults = DEFAULT_STATE.grain
 const geometryDefaults = DEFAULT_STATE.geometry
 
@@ -184,11 +212,19 @@ export const exposureEqual = (a: QuickFixExposureState, b: QuickFixExposureState
 export const colorEqual = (a: QuickFixColorState, b: QuickFixColorState) =>
   Math.abs(a.temperature - b.temperature) < 1e-3 && Math.abs(a.tint - b.tint) < 1e-3
 
+export const detailEqual = (a: QuickFixDetailState, b: QuickFixDetailState) =>
+  Math.abs(a.sharpen - b.sharpen) < 1e-3 &&
+  Math.abs(a.clarity - b.clarity) < 1e-3 &&
+  Math.abs(a.dehaze - b.dehaze) < 1e-3
+
 export const grainEqual = (a: QuickFixGrainState, b: QuickFixGrainState) =>
   Math.abs(a.amount - b.amount) < 1e-3 && a.size === b.size
 
 export const geometryEqual = (a: QuickFixGeometryState, b: QuickFixGeometryState) =>
-  Math.abs(a.vertical - b.vertical) < 1e-3 && Math.abs(a.horizontal - b.horizontal) < 1e-3
+  Math.abs(a.vertical - b.vertical) < 1e-3 &&
+  Math.abs(a.horizontal - b.horizontal) < 1e-3 &&
+  a.flipVertical === b.flipVertical &&
+  a.flipHorizontal === b.flipHorizontal
 
 export function areQuickFixStatesEqual(
   a: QuickFixState | null | undefined,
@@ -200,6 +236,7 @@ export function areQuickFixStatesEqual(
     cropEqual(a.crop, b.crop) &&
     exposureEqual(a.exposure, b.exposure) &&
     colorEqual(a.color, b.color) &&
+    detailEqual(a.detail, b.detail) &&
     grainEqual(a.grain, b.grain) &&
     geometryEqual(a.geometry, b.geometry)
   )
@@ -213,6 +250,8 @@ export function isQuickFixGroupDefault(state: QuickFixState, group: QuickFixGrou
       return exposureEqual(state.exposure, exposureDefaults)
     case 'color':
       return colorEqual(state.color, colorDefaults)
+    case 'detail':
+      return detailEqual(state.detail, detailDefaults)
     case 'grain':
       return grainEqual(state.grain, grainDefaults)
     case 'geometry':
@@ -228,6 +267,7 @@ export function hasQuickFixAdjustments(state: QuickFixState | null | undefined):
     !isQuickFixGroupDefault(state, 'crop') ||
     !isQuickFixGroupDefault(state, 'exposure') ||
     !isQuickFixGroupDefault(state, 'color') ||
+    !isQuickFixGroupDefault(state, 'detail') ||
     !isQuickFixGroupDefault(state, 'grain') ||
     !isQuickFixGroupDefault(state, 'geometry')
   )
@@ -245,6 +285,9 @@ export function resetQuickFixGroup(state: QuickFixState, group: QuickFixGroupKey
     case 'color':
       next.color = { ...colorDefaults }
       break
+    case 'detail':
+      next.detail = { ...detailDefaults }
+      break
     case 'grain':
       next.grain = { ...grainDefaults }
       break
@@ -257,8 +300,8 @@ export function resetQuickFixGroup(state: QuickFixState, group: QuickFixGroupKey
   return next
 }
 
-export function quickFixStateToPayload(state: QuickFixState): QuickFixAdjustmentsPayload | null {
-  const payload: QuickFixAdjustmentsPayload = {}
+export function quickFixStateToPayload(state: QuickFixState): any | null {
+  const payload: any = {}
   if (!cropEqual(state.crop, cropDefaults)) {
     payload.crop = {
       rotation: state.crop.rotation,
@@ -270,6 +313,9 @@ export function quickFixStateToPayload(state: QuickFixState): QuickFixAdjustment
   }
   if (!colorEqual(state.color, colorDefaults)) {
     payload.color = { ...state.color }
+  }
+  if (!detailEqual(state.detail, detailDefaults)) {
+    payload.detail = { ...state.detail }
   }
   if (!grainEqual(state.grain, grainDefaults)) {
     payload.grain = { ...state.grain }

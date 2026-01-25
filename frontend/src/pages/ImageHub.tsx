@@ -13,10 +13,10 @@ export default function ImageHub() {
             {/* AppBar */}
             <header className="border-b border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]/90 backdrop-blur sticky top-0 z-50">
                 <div
-                    className="mx-auto max-w-7xl px-4 h-14 grid items-center gap-4"
+                    className="grid h-16 w-full items-center gap-4"
                     style={{ gridTemplateColumns: 'minmax(0,1fr) auto minmax(0,1fr)' }}
                 >
-                    <div className="flex items-center gap-2 min-w-0">
+                    <div className="flex min-w-0 items-center gap-3 pl-2 sm:pl-4">
                         <StoneTrailLogo
                             className="shrink-0"
                             showLabel={false}
@@ -26,7 +26,7 @@ export default function ImageHub() {
                         <span className="text-[var(--text-muted,#6B645B)]">›</span>
                         <Link
                             to="/"
-                            className="text-sm font-medium text-[var(--text-muted,#6B645B)] hover:text-[var(--text,#1F1E1B)] transition-colors"
+                            className="text-sm font-medium text-[var(--text-muted,#6B645B)] hover:text-[var(--text,#1F1E1B)] transition-colors whitespace-nowrap"
                         >
                             Project Cards
                         </Link>
@@ -36,8 +36,7 @@ export default function ImageHub() {
                         Image Hub
                     </div>
 
-                    <div className="flex items-center justify-end">
-                        <div className="h-6 w-px bg-[var(--border,#E1D3B9)] mx-4 hidden sm:block" />
+                    <div className="flex min-w-0 items-center justify-end gap-3 px-4 sm:px-6 lg:px-8">
                         <UserMenu />
                     </div>
                 </div>

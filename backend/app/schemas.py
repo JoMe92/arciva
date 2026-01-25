@@ -410,6 +410,7 @@ class HubAsset(BaseModel):
     type: Literal["JPEG", "RAW"]
     width: Optional[int]
     height: Optional[int]
+    camera_model: Optional[str] = None
     created_at: datetime
     thumb_url: Optional[str] = None
     preview_url: Optional[str] = None

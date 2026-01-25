@@ -38,8 +38,8 @@ export default function AssetTile({
     }
 
     const wrapperClass = `relative w-full overflow-hidden rounded border transition-colors ${selected
-            ? 'border-[var(--river-500,#6B7C7A)] bg-[var(--river-50,#F0F4F4)] ring-1 ring-[var(--river-500,#6B7C7A)]'
-            : 'border-[var(--border,#E1D3B9)] bg-white'
+        ? 'border-[var(--river-500,#6B7C7A)] bg-[var(--river-50,#F0F4F4)] ring-1 ring-[var(--river-500,#6B7C7A)]'
+        : 'border-[var(--border,#E1D3B9)] bg-white'
         } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:border-[var(--river-300,#A4C2C1)]'}`
 
     const content = (
@@ -78,27 +78,44 @@ export default function AssetTile({
 
     const listContent = (
         <div
-            className={`flex items-center gap-3 rounded border px-3 py-2 transition-colors ${selected
-                    ? 'border-[var(--river-500,#6B7C7A)] bg-[var(--river-50,#F0F4F4)]'
-                    : 'border-[var(--border,#E1D3B9)] bg-white'
+            className={`flex items-center gap-4 rounded border px-3 py-2 transition-colors ${selected
+                ? 'border-[var(--river-500,#6B7C7A)] bg-[var(--river-50,#F0F4F4)]'
+                : 'border-[var(--border,#E1D3B9)] bg-white'
                 } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:border-[var(--river-300,#A4C2C1)]'}`}
             onClick={handleClick}
         >
             <img
                 src={primary.thumb_url ?? ''}
                 alt=""
-                className="h-14 w-14 rounded object-cover"
+                className="h-12 w-16 rounded object-cover"
                 loading="lazy"
             />
-            <div className="flex-1">
-                <div className="truncate text-sm font-semibold">{primary.original_filename}</div>
-                <div className="text-xs text-[var(--text-muted,#6B645B)]">{createdAt}</div>
+
+            {/* Filename & Type */}
+            <div className="flex-1 min-w-[120px]">
+                <div className="truncate text-sm font-semibold text-[var(--text,#1F1E1B)]">
+                    {primary.original_filename}
+                </div>
+                <div className="text-xs font-medium text-[var(--text-muted,#6B645B)]">
+                    {tile.isPaired && secondary ? JPEG_RAW_OVERLAY : primary.type}
+                </div>
             </div>
-            <div className="text-xs font-medium text-[var(--text-muted,#6B645B)]">
-                {tile.isPaired && secondary ? JPEG_RAW_OVERLAY : primary.type}
+
+            {/* Metadata Columns */}
+            <div className="hidden sm:block w-32 text-xs text-[var(--text-muted,#6B645B)]">
+                {createdAt}
             </div>
+
+            <div className="hidden md:block w-24 text-xs text-[var(--text-muted,#6B645B)]">
+                {primary.width && primary.height ? `${primary.width} × ${primary.height}` : '—'}
+            </div>
+
+            <div className="hidden lg:block w-32 truncate text-xs text-[var(--text-muted,#6B645B)]" title={primary.camera_model ?? ''}>
+                {primary.camera_model ?? '—'}
+            </div>
+
             {selected && (
-                <div className="flex h-5 w-5 items-center justify-center rounded-full bg-[var(--river-500,#6B7C7A)] text-white">
+                <div className="flex h-5 w-5 items-center justify-center rounded-full bg-[var(--river-500,#6B7C7A)] text-white shrink-0">
                     <svg
                         xmlns="http://www.w3.org/2000/svg"
                         viewBox="0 0 20 20"

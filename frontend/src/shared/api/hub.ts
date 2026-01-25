@@ -22,6 +22,7 @@ export type ImageHubAsset = {
   type: ImageHubAssetType
   width?: number | null
   height?: number | null
+  camera_model?: string | null
   created_at?: string | null
   thumb_url?: string | null
   preview_url?: string | null
@@ -103,6 +104,7 @@ type LegacyHubAsset = {
   mime: string
   width?: number | null
   height?: number | null
+  camera_model?: string | null
   original_filename?: string | null
   taken_at?: string | null
   created_at: string

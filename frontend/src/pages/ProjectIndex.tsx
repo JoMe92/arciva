@@ -102,6 +102,7 @@ const AppBar: React.FC<{
             <button
               onClick={onCreate}
               className="inline-flex h-8 items-center rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 text-[12px] hover:border-[var(--text-muted,#6B645B)]"
+              data-testid="new-project-button"
             >
               <span className="mr-1">＋</span> New project
               <kbd className="ml-2 hidden lg:inline text-[10px] text-[var(--text-muted,#6B645B)]">
@@ -116,7 +117,7 @@ const AppBar: React.FC<{
             <UserMenu />
           </div>
         </div>
-      </div>
+      </div >
     )
   }
 
@@ -236,6 +237,7 @@ const FilterBar: React.FC<{
                 onChange={(e) => setQ(e.target.value)}
                 placeholder="Search projects…"
                 className="w-full rounded-2xl border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 py-2 text-[13px] outline-none placeholder:text-[var(--text-muted,#6B645B)]"
+                data-testid="project-filter-search"
               />
             </label>
           </div>
@@ -508,7 +510,7 @@ const MobileActionBar: React.FC<{
       <button
         type="button"
         onClick={onCreate}
-        className="inline-flex h-14 shrink-0 items-center rounded-full bg-[var(--primary,#A56A4A)] px-6 text-[var(--primary-contrast,#FFFFFF)] text-[13px] font-semibold tracking-tight shadow-[0_12px_24px_rgba(31,30,27,0.2)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus,#6B7C7A)]"
+        className="flex h-14 flex-1 flex-col items-center justify-center rounded-2xl border border-transparent text-[12px] font-semibold text-[var(--text,#1F1E1B)]"
       >
         <span className="mr-2 text-xl leading-none">＋</span>
         New project

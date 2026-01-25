@@ -11,17 +11,36 @@ export default function ImageHub() {
     return (
         <div className="flex h-screen flex-col bg-[var(--background,#FBF7EF)] text-[var(--text,#1F1E1B)] transition-colors duration-300">
             {/* AppBar */}
-            <div className="border-b border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]/90 backdrop-blur">
-                <div className="mx-auto max-w-7xl px-4 py-2 flex items-center gap-3">
-                    <Link to="/" className="flex items-center gap-2">
-                        <StoneTrailLogo className="shrink-0" mode={mode} onToggleTheme={toggle} />
-                        <span className="text-sm font-semibold tracking-wide">Image Hub</span>
-                    </Link>
-                    <div className="ml-auto">
+            <header className="border-b border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]/90 backdrop-blur sticky top-0 z-50">
+                <div
+                    className="grid h-16 w-full items-center gap-4"
+                    style={{ gridTemplateColumns: 'minmax(0,1fr) auto minmax(0,1fr)' }}
+                >
+                    <div className="flex min-w-0 items-center gap-3 pl-2 sm:pl-4">
+                        <StoneTrailLogo
+                            className="shrink-0"
+                            showLabel={false}
+                            mode={mode}
+                            onToggleTheme={toggle}
+                        />
+                        <span className="text-[var(--text-muted,#6B645B)]">›</span>
+                        <Link
+                            to="/"
+                            className="text-sm font-medium text-[var(--text-muted,#6B645B)] hover:text-[var(--text,#1F1E1B)] transition-colors whitespace-nowrap"
+                        >
+                            Project Cards
+                        </Link>
+                    </div>
+
+                    <div className="flex items-center justify-center font-semibold tracking-wide text-[var(--text,#1F1E1B)] whitespace-nowrap">
+                        Image Hub
+                    </div>
+
+                    <div className="flex min-w-0 items-center justify-end gap-3 px-4 sm:px-6 lg:px-8">
                         <UserMenu />
                     </div>
                 </div>
-            </div>
+            </header>
 
             {/* Content */}
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-4">

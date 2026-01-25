@@ -96,6 +96,7 @@ ctx.onmessage = async (e: MessageEvent) => {
                     throw new Error("Renderer not initialized");
 
                 const { requestId, imageData, adjustments } = msg.payload;
+                console.log('[Worker] Received adjustments:', JSON.stringify(adjustments).substring(0, 500));
                 let { width, height } = msg.payload;
 
                 if (requestId < latestRequestId) {

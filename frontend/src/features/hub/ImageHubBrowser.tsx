@@ -391,24 +391,28 @@ export default function ImageHubBrowser({
 
             {/* Split Pane Interface */}
             <div className="flex min-h-0 flex-1 gap-4 overflow-hidden">
-                <aside className="w-72 flex-shrink-0 rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] overflow-hidden">
+                <aside className="w-72 flex-shrink-0 rounded-lg border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] overflow-hidden flex flex-col">
                     {tab === 'project' ? (
-                        <ProjectList
-                            projects={projects}
-                            isLoading={projectQuery.isLoading}
-                            error={projectQuery.error instanceof Error ? projectQuery.error : null}
-                            activeProjectId={activeProjectId}
-                            onSelectProject={setSelectedProjectId}
-                            hasMore={!!projectQuery.hasNextPage}
-                            onLoadMore={() => projectQuery.fetchNextPage()}
-                            isFetchingMore={projectQuery.isFetchingNextPage}
-                        />
+                        <div className="flex-1 min-h-0 overflow-y-auto">
+                            <ProjectList
+                                projects={projects}
+                                isLoading={projectQuery.isLoading}
+                                error={projectQuery.error instanceof Error ? projectQuery.error : null}
+                                activeProjectId={activeProjectId}
+                                onSelectProject={setSelectedProjectId}
+                                hasMore={!!projectQuery.hasNextPage}
+                                onLoadMore={() => projectQuery.fetchNextPage()}
+                                isFetchingMore={projectQuery.isFetchingNextPage}
+                            />
+                        </div>
                     ) : (
-                        <DateTree
-                            filtersPayload={filtersPayload}
-                            selection={dateSelection}
-                            onSelect={setDateSelection}
-                        />
+                        <div className="flex-1 min-h-0 overflow-y-auto">
+                            <DateTree
+                                filtersPayload={filtersPayload}
+                                selection={dateSelection}
+                                onSelect={setDateSelection}
+                            />
+                        </div>
                     )}
                 </aside>
 

@@ -312,12 +312,6 @@ export function TopBar({
         style={{ gridTemplateColumns: 'minmax(0,1fr) auto minmax(0,1fr)' }}
       >
         <div className="flex min-w-0 items-center gap-3 pl-2 sm:pl-4">
-          <StoneTrailLogo
-            className="hidden lg:inline-flex shrink-0"
-            showLabel={false}
-            mode={mode}
-            onToggleTheme={toggle}
-          />
           <button
             type="button"
             onClick={onBack}
@@ -327,11 +321,23 @@ export function TopBar({
           >
             ← Projects
           </button>
-          <div className="flex min-w-0 flex-1 items-center gap-2">
+          <div className="hidden md:flex min-w-0 flex-1 items-center gap-2">
             <nav
-              className="flex min-w-0 items-center gap-3 text-sm text-[var(--text-muted,#6B645B)]"
+              className="flex min-w-0 items-center gap-2 text-sm text-[var(--text-muted,#6B645B)]"
               aria-label="Breadcrumb"
             >
+              <StoneTrailLogo
+                className="shrink-0"
+                showLabel={false}
+                mode={mode}
+                onToggleTheme={toggle}
+              />
+              <span
+                aria-hidden="true"
+                className="text-base leading-none text-[var(--text-muted,#6B645B)]"
+              >
+                ›
+              </span>
               <button
                 type="button"
                 onClick={onBack}
@@ -387,7 +393,7 @@ export function TopBar({
                 <button
                   type="button"
                   onDoubleClick={startEditing}
-                  className="truncate text-left text-sm font-semibold text-[var(--text,#1F1E1B)]"
+                  className="truncate text-left text-sm font-bold text-[var(--text,#1F1E1B)] px-2 py-1 rounded hover:bg-[var(--surface-subtle,#FBF7EF)]"
                   title="Rename project"
                 >
                   {projectName}

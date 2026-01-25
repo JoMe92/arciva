@@ -904,7 +904,7 @@ export default function ProjectIndex() {
   const headerTitle = archiveMode ? 'Archive' : 'Project Cards'
   const headerCopy = archiveMode
     ? 'Archived projects are hidden from the main view.'
-    : 'A Project Card is your project hub—context, assets, and progress, neatly linked and searchable.'
+    : 'Archive organized once, find forever.'
   const stateBlocks = (
     <>
       {projectsError && (

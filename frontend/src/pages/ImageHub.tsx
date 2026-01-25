@@ -11,28 +11,37 @@ export default function ImageHub() {
     return (
         <div className="flex h-screen flex-col bg-[var(--background,#FBF7EF)] text-[var(--text,#1F1E1B)] transition-colors duration-300">
             {/* AppBar */}
-            <div className="border-b border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]/90 backdrop-blur">
-                <div className="mx-auto max-w-7xl px-4 py-2 flex items-center gap-4">
-                    <Link
-                        to="/"
-                        className="group flex h-9 items-center gap-2 rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] pl-3 pr-4 text-[12px] font-medium transition-colors hover:border-[var(--text,#1F1E1B)]"
-                        title="Back to projects"
-                    >
-                        <span className="text-lg leading-none transition-transform group-hover:-translate-x-0.5" aria-hidden="true">←</span>
-                        <span>Projects</span>
-                    </Link>
-
-                    <div className="h-6 w-px bg-[var(--border,#E1D3B9)] mx-1" />
-
-                    <div className="flex items-center gap-2">
-                        <StoneTrailLogo className="shrink-0" mode={mode} onToggleTheme={toggle} />
-                        <span className="text-sm font-semibold tracking-wide">Image Hub</span>
+            <header className="border-b border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]/90 backdrop-blur sticky top-0 z-50">
+                <div
+                    className="mx-auto max-w-7xl px-4 h-14 grid items-center gap-4"
+                    style={{ gridTemplateColumns: 'minmax(0,1fr) auto minmax(0,1fr)' }}
+                >
+                    <div className="flex items-center gap-2 min-w-0">
+                        <StoneTrailLogo
+                            className="shrink-0"
+                            showLabel={false}
+                            mode={mode}
+                            onToggleTheme={toggle}
+                        />
+                        <span className="text-[var(--text-muted,#6B645B)]">›</span>
+                        <Link
+                            to="/"
+                            className="text-sm font-medium text-[var(--text-muted,#6B645B)] hover:text-[var(--text,#1F1E1B)] transition-colors"
+                        >
+                            Projects
+                        </Link>
                     </div>
-                    <div className="ml-auto">
+
+                    <div className="flex items-center justify-center font-semibold tracking-wide text-[var(--text,#1F1E1B)] whitespace-nowrap">
+                        Image Hub
+                    </div>
+
+                    <div className="flex items-center justify-end">
+                        <div className="h-6 w-px bg-[var(--border,#E1D3B9)] mx-4 hidden sm:block" />
                         <UserMenu />
                     </div>
                 </div>
-            </div>
+            </header>
 
             {/* Content */}
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-4">

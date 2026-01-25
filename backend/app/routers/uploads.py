@@ -98,6 +98,7 @@ async def upload_init(
         asset_id=asset.id, upload_token=token, max_bytes=body.size_bytes
     )
 
+
 @router.post(
     "/uploads/init",
     response_model=schemas.UploadInitOut,
@@ -119,7 +120,7 @@ async def upload_init_direct(
     )
     db.add(asset)
     await db.flush()  # get asset.id
-    
+
     # Direct upload has no project link initially
     await db.commit()
 
@@ -142,6 +143,7 @@ async def upload_init_direct(
     return schemas.UploadInitOut(
         asset_id=asset.id, upload_token=token, max_bytes=body.size_bytes
     )
+
 
 @router.put("/uploads/{asset_id}")
 async def upload_file(

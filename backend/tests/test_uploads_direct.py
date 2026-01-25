@@ -1,6 +1,7 @@
 import pytest
 import uuid
-from backend.app import models, schemas
+from backend.app import models
+
 
 @pytest.mark.asyncio
 async def test_upload_init_direct(client, TestSessionLocal):
@@ -15,7 +16,7 @@ async def test_upload_init_direct(client, TestSessionLocal):
     data = response.json()
     assert "asset_id" in data
     assert "upload_token" in data
-    
+
     asset_id = data["asset_id"]
 
     # Verify asset exists but has no project links
@@ -24,6 +25,6 @@ async def test_upload_init_direct(client, TestSessionLocal):
         assert asset is not None
         assert asset.original_filename == "test_direct.jpg"
         assert asset.status == models.AssetStatus.UPLOADING
-        
+
         # Check links - should be empty
         # (This requires a join or separate query. For unit test, we just check creation worked)

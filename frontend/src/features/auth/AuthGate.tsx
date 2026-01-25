@@ -76,6 +76,7 @@ export const AuthGate: React.FC = () => {
             <label className="mb-4 block text-sm font-medium text-[var(--text-muted,#6B645B)]">
               Email
               <input
+                data-testid="login-email"
                 type="email"
                 autoComplete="email"
                 required
@@ -87,6 +88,7 @@ export const AuthGate: React.FC = () => {
             <label className="mb-4 block text-sm font-medium text-[var(--text-muted,#6B645B)]">
               Password
               <input
+                data-testid="login-password"
                 type="password"
                 minLength={MIN_PASSWORD_LENGTH}
                 autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
@@ -102,6 +104,7 @@ export const AuthGate: React.FC = () => {
               </div>
             ) : null}
             <button
+              data-testid="login-submit"
               type="submit"
               disabled={isDisabled}
               className="inline-flex w-full items-center justify-center rounded-2xl border border-transparent bg-[var(--text,#1F1E1B)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[var(--text,#1F1E1B)]/90 disabled:cursor-not-allowed disabled:bg-[var(--border,#E1D3B9)]"

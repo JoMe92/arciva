@@ -499,7 +499,7 @@ function QuickFixPanelComponent({
         </div>
       </QuickFixGroup>
 
-      <QuickFixGroup title="Exposure">
+      <QuickFixGroup title="Exposure" data-testid="quickfix-group-exposure">
         <div className="space-y-4">
           <SliderControl
             label="Exposure"
@@ -516,6 +516,7 @@ function QuickFixPanelComponent({
             }
             format={(value) => `${formatSigned(value, 2)} EV`}
             {...sliderEvents}
+            data-testid="quickfix-exposure-slider"
           />
           <SliderControl
             label="Contrast"
@@ -532,6 +533,7 @@ function QuickFixPanelComponent({
             }
             format={(value) => value.toFixed(2)}
             {...sliderEvents}
+            data-testid="quickfix-contrast-slider"
           />
           <SliderControl
             label="Highlights"

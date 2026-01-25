@@ -510,7 +510,12 @@ function QuickFixPanelComponent({
 
       <QuickFixCurves
         state={displayedState.curves}
-        onChange={updateLiveState}
+        onChange={(updater) =>
+          updateLiveState((prev) => ({
+            ...prev,
+            curves: updater(prev.curves),
+          }))
+        }
         disabled={controlsDisabled}
         onReset={() => onQuickFixGroupReset('curves')}
         sliderEvents={sliderEvents}
@@ -565,7 +570,12 @@ function QuickFixPanelComponent({
 
       <QuickFixHSL
         state={displayedState.hsl}
-        onChange={updateLiveState}
+        onChange={(updater) =>
+          updateLiveState((prev) => ({
+            ...prev,
+            hsl: updater(prev.hsl),
+          }))
+        }
         disabled={controlsDisabled}
         onReset={() => onQuickFixGroupReset('hsl')}
         sliderEvents={sliderEvents}
@@ -573,7 +583,12 @@ function QuickFixPanelComponent({
 
       <QuickFixSplitToning
         state={displayedState.splitToning}
-        onChange={updateLiveState}
+        onChange={(updater) =>
+          updateLiveState((prev) => ({
+            ...prev,
+            splitToning: updater(prev.splitToning),
+          }))
+        }
         disabled={controlsDisabled}
         onReset={() => onQuickFixGroupReset('splitToning')}
         sliderEvents={sliderEvents}

@@ -460,7 +460,12 @@ export function quickFixStateToPayload(state: QuickFixState): any | null { // Re
 
   // HSL
   if (!isQuickFixGroupDefault(state, 'hsl')) {
-    payload.hsl = { ...state.hsl }
+    // Send both standard names and potential aliases to cover renderer mismatch
+    // (e.g. aqua vs cyan, purple vs violet)
+    const hsl = { ...state.hsl } as any
+    if (hsl.aqua) hsl.cyan = hsl.aqua
+    if (hsl.purple) hsl.violet = hsl.purple
+    payload.hsl = hsl
   }
 
   // Split Toning

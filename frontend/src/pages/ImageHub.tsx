@@ -28,7 +28,7 @@ export default function ImageHub() {
                             to="/"
                             className="text-sm font-medium text-[var(--text-muted,#6B645B)] hover:text-[var(--text,#1F1E1B)] transition-colors"
                         >
-                            Projects
+                            Project Cards
                         </Link>
                     </div>
 

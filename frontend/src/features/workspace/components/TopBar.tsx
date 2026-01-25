@@ -204,7 +204,7 @@ export function TopBar({
             aria-label="Back to projects"
           >
             <ChevronLeftIcon className="h-4 w-4" aria-hidden="true" />
-            <span>Projects</span>
+            <span>Project Cards</span>
           </button>
           <div className="flex min-w-0 flex-1 justify-center">
             {editing ? (
@@ -319,7 +319,7 @@ export function TopBar({
             aria-label="Back to projects"
             data-testid="topbar-back"
           >
-            ← Projects
+            ← Project Cards
           </button>
           <div className="hidden md:flex min-w-0 flex-1 items-center gap-2">
             <nav
@@ -341,9 +341,9 @@ export function TopBar({
               <button
                 type="button"
                 onClick={onBack}
-                className="font-medium text-[var(--text-muted,#6B645B)] transition-colors hover:text-[var(--text,#1F1E1B)]"
+                className="font-medium text-[var(--text-muted,#6B645B)] transition-colors hover:text-[var(--text,#1F1E1B)] whitespace-nowrap"
               >
-                Projects
+                Project Cards
               </button>
               <span
                 aria-hidden="true"
@@ -563,24 +563,28 @@ export function TopBar({
             <span aria-hidden="true">⌨</span>
             <span>Shortcuts</span>
           </button>
-          {accountControl ? <div className="flex items-center">{accountControl}</div> : null}
+          {accountControl ? <div className="flex items-center ml-auto">{accountControl}</div> : null}
         </div>
       </div>
-      {filtersOpen ? (
-        <FiltersDialog
-          controls={filters}
-          onReset={() => {
-            onResetFilters()
-            closeFilters()
-          }}
-          onClose={closeFilters}
-          anchorRect={filtersAnchorRect}
-        />
-      ) : null}
-      {shortcutsOpen ? (
-        <ShortcutsDialog onClose={closeShortcuts} anchorRect={shortcutsAnchorRect} />
-      ) : null}
-    </header>
+      {
+        filtersOpen ? (
+          <FiltersDialog
+            controls={filters}
+            onReset={() => {
+              onResetFilters()
+              closeFilters()
+            }}
+            onClose={closeFilters}
+            anchorRect={filtersAnchorRect}
+          />
+        ) : null
+      }
+      {
+        shortcutsOpen ? (
+          <ShortcutsDialog onClose={closeShortcuts} anchorRect={shortcutsAnchorRect} />
+        ) : null
+      }
+    </header >
   )
 }
 

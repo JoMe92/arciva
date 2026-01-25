@@ -8,7 +8,7 @@ import {
   CropRect,
   CropAspectRatioId,
 } from '../types'
-import { QuickFixState } from '../quickFixState'
+import { QuickFixState, quickFixStateToPayload } from '../quickFixState'
 import { useQuickFixRenderer } from '../worker/useQuickFixRenderer'
 import { computeCols, COLOR_MAP } from '../utils'
 import { resolveAspectRatioValue } from '../cropUtils'
@@ -466,9 +466,14 @@ export function DetailView({
   }, [cur])
 
   // Use the renderer hook
+  // Convert state to payload format expected by the worker
+  const quickFixPayload = useMemo(() => {
+    return quickFixState ? quickFixStateToPayload(quickFixState) : null
+  }, [quickFixState])
+
   const { previewUrl: workerPreviewUrl, isProcessing: workerBusy } = useQuickFixRenderer(
     workerAsset,
-    cur ? quickFixState ?? null : null
+    cur ? quickFixPayload : null
   )
 
   const detailImage = useMemo(() => {

@@ -12,11 +12,22 @@ export default function ImageHub() {
         <div className="flex h-screen flex-col bg-[var(--background,#FBF7EF)] text-[var(--text,#1F1E1B)] transition-colors duration-300">
             {/* AppBar */}
             <div className="border-b border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]/90 backdrop-blur">
-                <div className="mx-auto max-w-7xl px-4 py-2 flex items-center gap-3">
-                    <Link to="/" className="flex items-center gap-2">
+                <div className="mx-auto max-w-7xl px-4 py-2 flex items-center gap-4">
+                    <Link
+                        to="/"
+                        className="group flex h-9 items-center gap-2 rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] pl-3 pr-4 text-[12px] font-medium transition-colors hover:border-[var(--text,#1F1E1B)]"
+                        title="Back to projects"
+                    >
+                        <span className="text-lg leading-none transition-transform group-hover:-translate-x-0.5" aria-hidden="true">←</span>
+                        <span>Projects</span>
+                    </Link>
+
+                    <div className="h-6 w-px bg-[var(--border,#E1D3B9)] mx-1" />
+
+                    <div className="flex items-center gap-2">
                         <StoneTrailLogo className="shrink-0" mode={mode} onToggleTheme={toggle} />
                         <span className="text-sm font-semibold tracking-wide">Image Hub</span>
-                    </Link>
+                    </div>
                     <div className="ml-auto">
                         <UserMenu />
                     </div>

@@ -89,9 +89,9 @@ const AppBar: React.FC<{
                 }`}
               aria-expanded={filtersOpen}
               aria-controls={FILTER_PANEL_ID}
-              title="Toggle project filters"
+              title={filtersOpen ? 'Hide project filters' : 'Show project filters'}
             >
-              {filterCount ? `Filters (${filterCount})` : 'Filters'}
+              {filtersOpen ? 'Hide Filters' : (filterCount ? `Filters (${filterCount})` : 'Show Filters')}
             </button>
             <Link
               to="/hub"
@@ -114,7 +114,8 @@ const AppBar: React.FC<{
               label="Open application settings"
               title="Application settings"
             />
-            <UserMenu />
+            <div className="h-4 w-px bg-[var(--border,#E1D3B9)] mx-1" />
+            <UserMenu variant="compact" />
           </div>
         </div>
       </div >
@@ -134,6 +135,7 @@ const FilterBar: React.FC<{
   tags: string[]
   setTags: (t: string[]) => void
   onClearFilters: () => void
+  onEnter?: () => void
   id?: string
 }> = ({
   projects,
@@ -148,6 +150,7 @@ const FilterBar: React.FC<{
   tags,
   setTags,
   onClearFilters,
+  onEnter,
   id,
 }) => {
     const clients = useMemo(() => unique(projects.map((p) => p.client)), [projects])
@@ -235,6 +238,11 @@ const FilterBar: React.FC<{
               <input
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    onEnter?.()
+                  }
+                }}
                 placeholder="Search projects…"
                 className="w-full rounded-2xl border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 py-2 text-[13px] outline-none placeholder:text-[var(--text-muted,#6B645B)]"
                 data-testid="project-filter-search"
@@ -956,6 +964,11 @@ export default function ProjectIndex() {
               tags={tags}
               setTags={setTags}
               onClearFilters={clearFilters}
+              onEnter={() => {
+                if (filtered.length > 0) {
+                  onOpen(filtered[0].id)
+                }
+              }}
             />
           </div>
         </div>

@@ -526,31 +526,100 @@ export function quickFixStateToPayload(state: QuickFixState): any | null { // Re
 // Since we are primarily 'pushing' state to renderer, incoming from API is for loading presets?
 // Assuming yes.
 
+
 export function quickFixStateFromApi(payload: unknown): QuickFixState | null {
-  // This function needs to be robust, but for this step I'll return a basic safe implementation
-  // that merges with defaults.
   if (!payload || typeof payload !== 'object') return null
+  const p = payload as any
+  const next = createDefaultQuickFixState()
 
-  // TODO: Implement full full sanitization if we need to load from disk/presets
-  // For now, returning default to avoid breaking if called, or implement partial updates.
-  // The previous implementation had explicit sanitizers. I should probably keep them if possible,
-  // but the structure changed significantly.
-  // Given the time constraint, I will implement a safe merge.
+  // Crop
+  if (p.crop) {
+    next.crop = sanitizeCropSettings(p.crop)
+  }
 
-  const safe = createDefaultQuickFixState()
-  const p = payload as any;
+  // Exposure
+  if (p.exposure) {
+    next.exposure = sanitizeExposureSettings(p.exposure)
+  }
 
-  if (p.crop) Object.assign(safe.crop, p.crop); // TODO: sanitize
-  if (p.exposure) Object.assign(safe.exposure, p.exposure);
-  if (p.color) Object.assign(safe.color, p.color);
+  // Color
+  if (p.color) {
+    next.color = sanitizeColorSettings(p.color)
+  }
 
-  // ... map others ...
-  // This is risky without strict checking.
-  // However, since we are just enabling the UI -> Renderer flow, 
-  // `quickFixStateFromApi` is less critical unless the user loads existing edits.
+  // Curves (API: { intensity, master: { points: [] }, ... }) -> State: { intensity, master: [], ... }
+  if (p.curves) {
+    const c = p.curves
+    if (typeof c.intensity === 'number') next.curves.intensity = c.intensity
 
-  return safe
+    // Helper to extract points
+    const extractPoints = (channel: any) => {
+      if (channel && Array.isArray(channel.points)) {
+        return channel.points.map((pt: any) => ({ x: Number(pt.x), y: Number(pt.y) }))
+      }
+      return null
+    }
+
+    const m = extractPoints(c.master); if (m) next.curves.master = m
+    const r = extractPoints(c.red); if (r) next.curves.red = r
+    const g = extractPoints(c.green); if (g) next.curves.green = g
+    const b = extractPoints(c.blue); if (b) next.curves.blue = b
+  }
+
+  // HSL
+  if (p.hsl) {
+    next.hsl = sanitizeHslSettings(p.hsl)
+  }
+
+  // Split Toning
+  if (p.splitToning) {
+    next.splitToning = sanitizeSplitToningSettings(p.splitToning)
+  }
+
+  // Detail (Flattening)
+  // Sharpen
+  if (p.sharpen) {
+    if (typeof p.sharpen.amount === 'number') next.detail.sharpenAmount = p.sharpen.amount
+    if (typeof p.sharpen.radius === 'number') next.detail.sharpenRadius = p.sharpen.radius
+    if (typeof p.sharpen.threshold === 'number') next.detail.sharpenThreshold = p.sharpen.threshold
+  }
+  // Clarity
+  if (p.clarity && typeof p.clarity.amount === 'number') {
+    next.detail.clarity = p.clarity.amount
+  }
+  // Dehaze
+  if (p.dehaze && typeof p.dehaze.amount === 'number') {
+    next.detail.dehaze = p.dehaze.amount
+  }
+  // Denoise
+  if (p.denoise) {
+    if (typeof p.denoise.luminance === 'number') next.detail.denoiseLuminance = p.denoise.luminance
+    if (typeof p.denoise.color === 'number') next.detail.denoiseColor = p.denoise.color
+  }
+
+  // Grain
+  if (p.grain) {
+    next.grain = sanitizeGrainSettings(p.grain)
+  }
+
+  // Vignette
+  if (p.vignette) {
+    next.vignette = sanitizeVignetteSettings(p.vignette)
+  }
+
+  // Geometry
+  if (p.geometry) {
+    next.geometry = sanitizeGeometrySettings(p.geometry)
+  }
+  // Distortion (Merged into geometry in state)
+  if (p.distortion) {
+    if (typeof p.distortion.k1 === 'number') next.geometry.distortionK1 = p.distortion.k1
+    if (typeof p.distortion.k2 === 'number') next.geometry.distortionK2 = p.distortion.k2
+  }
+
+  return next
 }
+
 
 // ... (imports remain)
 

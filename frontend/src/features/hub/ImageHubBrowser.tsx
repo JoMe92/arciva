@@ -12,7 +12,7 @@ import type { HubBrowserTab, HubFilterState, HubViewMode, ImgType } from './type
 import { buildFilters, createDefaultFilters, groupAssetsByPair } from './utils'
 import { useAssetStatuses, useDebouncedValue } from './hooks'
 import ProjectList from './components/ProjectList'
-import DateDrilldown from './components/DateDrilldown'
+import DateTree from './components/DateTree'
 import VirtualizedAssetGrid from './components/VirtualizedAssetGrid'
 import AssetTile from './components/AssetTile'
 
@@ -136,43 +136,12 @@ export default function ImageHubBrowser({
         getNextPageParam: (last) => last.next_cursor ?? undefined,
     })
 
-    // --- Date Buckets ---
     const dateBucketLevel: 'year' | 'month' | 'day' | 'asset' = useMemo(() => {
         if (!dateSelection.year) return 'year'
         if (dateSelection.year && !dateSelection.month) return 'month'
         if (dateSelection.year && dateSelection.month && !dateSelection.day) return 'day'
         return 'asset'
     }, [dateSelection])
-
-    const drilldownLevel: 'year' | 'month' | 'day' = useMemo(() => {
-        if (!dateSelection.year) return 'year'
-        if (!dateSelection.month) return 'month'
-        return 'day'
-    }, [dateSelection])
-
-    const shouldLoadBuckets = tab === 'date'
-    const dateBuckets = useQuery({
-        queryKey: [
-            'imagehub-date-buckets',
-            drilldownLevel,
-            dateSelection.year ?? 'all',
-            dateSelection.month ?? 'all',
-            filtersPayload,
-        ],
-        enabled: shouldLoadBuckets,
-        queryFn: async () => {
-            const response = await fetchImageHubAssets({
-                mode: 'date',
-                year: drilldownLevel === 'year' ? undefined : dateSelection.year,
-                month: drilldownLevel === 'day' ? dateSelection.month : undefined,
-                day: undefined,
-                view: 'grid',
-                limit: 0,
-                filters: filtersPayload,
-            })
-            return response.buckets ?? []
-        },
-    })
 
     // Notify parent about date selection
     useEffect(() => {
@@ -435,11 +404,8 @@ export default function ImageHubBrowser({
                             isFetchingMore={projectQuery.isFetchingNextPage}
                         />
                     ) : (
-                        <DateDrilldown
-                            level={drilldownLevel}
-                            buckets={dateBuckets.data ?? []}
-                            isLoading={dateBuckets.isLoading}
-                            error={dateBuckets.error instanceof Error ? dateBuckets.error : null}
+                        <DateTree
+                            filtersPayload={filtersPayload}
                             selection={dateSelection}
                             onSelect={setDateSelection}
                         />

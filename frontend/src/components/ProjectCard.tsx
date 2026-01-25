@@ -238,9 +238,8 @@ const ProjectCard: React.FC<{
         onFocus={handleFocus}
         onBlur={handleBlur}
         onWheel={handleWheel}
-        className={`block focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus,#6B7C7A)] rounded-xl ${
-          feedMode ? 'cursor-pointer active:scale-[0.995]' : ''
-        }`}
+        className={`block focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus,#6B7C7A)] rounded-xl ${feedMode ? 'cursor-pointer active:scale-[0.995]' : ''
+          }`}
       >
         <div className="overflow-hidden rounded-t-xl bg-[var(--placeholder-bg-beige,#F3EBDD)] relative">
           {/* identischer Medien-Wrapper mit vertikalem Limit */}
@@ -252,9 +251,8 @@ const ProjectCard: React.FC<{
               <img
                 src={currentUrl ?? undefined}
                 alt={`${p.title} – ${p.client}`}
-                className={`absolute inset-0 h-full w-full object-center transition-[opacity,transform,filter] duration-500 ease-out ${
-                  shouldCoverCurrent ? 'object-cover' : 'object-contain'
-                } ${imageLoaded ? 'opacity-100 blur-0 scale-100' : 'opacity-0 blur-3xl scale-[1.03]'}`}
+                className={`absolute inset-0 h-full w-full object-center transition-[opacity,transform,filter] duration-500 ease-out ${shouldCoverCurrent ? 'object-cover' : 'object-contain'
+                  } ${imageLoaded ? 'opacity-100 blur-0 scale-100' : 'opacity-0 blur-3xl scale-[1.03]'}`}
                 loading="lazy"
                 decoding="async"
                 onLoad={handleImageLoad}
@@ -262,9 +260,8 @@ const ProjectCard: React.FC<{
             ) : null}
             <RawPlaceholder
               ratio={placeholderRatio}
-              className={`absolute inset-0 pointer-events-none ${hasImage ? 'transition-opacity duration-500 ease-out' : ''} ${
-                hasImage && imageLoaded ? 'opacity-0' : 'opacity-100'
-              }`}
+              className={`absolute inset-0 pointer-events-none ${hasImage ? 'transition-opacity duration-500 ease-out' : ''} ${hasImage && imageLoaded ? 'opacity-0' : 'opacity-100'
+                }`}
             />
             {canPromote && (
               <button
@@ -272,6 +269,7 @@ const ProjectCard: React.FC<{
                 className="pointer-events-auto absolute right-2 top-2 rounded-full bg-black/60 px-3 py-1 text-[11px] font-medium text-white shadow transition hover:bg-black/80 disabled:opacity-60"
                 onClick={promote}
                 disabled={promoting}
+                data-testid={`project-card-promote-${p.id}`}
               >
                 {promoting ? 'Setting…' : 'Use as cover'}
               </button>
@@ -288,6 +286,7 @@ const ProjectCard: React.FC<{
                 aria-label="Show previous preview"
                 onClick={handlePrev}
                 tabIndex={showNav ? 0 : -1}
+                data-testid={`project-card-preview-prev-${p.id}`}
               >
                 ‹
               </button>
@@ -297,6 +296,7 @@ const ProjectCard: React.FC<{
                 aria-label="Show next preview"
                 onClick={handleNext}
                 tabIndex={showNav ? 0 : -1}
+                data-testid={`project-card-preview-next-${p.id}`}
               >
                 ›
               </button>
@@ -338,7 +338,7 @@ const ProjectCard: React.FC<{
               onClick={() => onEdit(p)}
               className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] text-xl text-[var(--text-muted,#6B645B)] shadow-sm transition hover:border-[var(--text-muted,#6B645B)]"
               aria-label={`Edit ${p.title}`}
-              data-testid="card-footer-edit"
+              data-testid={`project-card-edit-${p.id}`}
             >
               ⋯
             </button>
@@ -349,7 +349,7 @@ const ProjectCard: React.FC<{
                 onClick={() => onOpen(p.id)}
                 className="h-8 px-3 rounded-full bg-[var(--primary,#A56A4A)] text-[var(--primary-contrast,#FFFFFF)] text-[12px] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus,#6B7C7A)]"
                 aria-label={`Open ${p.title}`}
-                data-testid="card-footer-open"
+                data-testid={`project-card-open-${p.id}`}
               >
                 Open
               </button>
@@ -358,7 +358,7 @@ const ProjectCard: React.FC<{
                 onClick={() => onEdit(p)}
                 className="h-8 px-3 rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] text-[12px] hover:border-[var(--text-muted,#6B645B)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus,#6B7C7A)]"
                 aria-label="Edit project"
-                data-testid="card-footer-edit"
+                data-testid={`project-card-edit-${p.id}`}
               >
                 Edit
               </button>
@@ -372,7 +372,7 @@ const ProjectCard: React.FC<{
               onClick={() => onOpen(p.id)}
               className="h-11 w-full rounded-full bg-[var(--primary,#A56A4A)] text-[var(--primary-contrast,#FFFFFF)] text-[13px] font-semibold tracking-tight shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus,#6B7C7A)]"
               aria-label={`Open ${p.title}`}
-              data-testid="card-footer-open"
+              data-testid={`project-card-open-${p.id}`}
             >
               Open project
             </button>

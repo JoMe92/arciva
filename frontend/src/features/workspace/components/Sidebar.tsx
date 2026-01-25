@@ -199,6 +199,7 @@ export function Sidebar({
               label="Overview"
               open={overviewSectionOpen}
               onToggle={() => setOverviewSectionOpen((open) => !open)}
+              data-testid="nav-overview"
             >
               {projectOverview ? (
                 <ProjectOverviewDetails
@@ -222,6 +223,7 @@ export function Sidebar({
               label="Import"
               open={importSectionOpen}
               onToggle={() => setImportSectionOpen((open) => !open)}
+              data-testid="nav-import"
             >
               <div className="space-y-3">
                 <p className="text-xs text-[var(--text-muted,#6B645B)]">
@@ -230,6 +232,7 @@ export function Sidebar({
                 <button
                   type="button"
                   onClick={onOpenImport}
+                  data-testid="nav-import-action"
                   className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-[var(--text,#1F1E1B)] px-4 py-2 text-sm font-semibold text-[var(--surface,#FFFFFF)] shadow-sm transition hover:bg-[var(--text-muted,#6B645B)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)]"
                 >
                   <ImportIcon className="h-4 w-4" aria-hidden="true" />
@@ -245,6 +248,7 @@ export function Sidebar({
               label="Date"
               open={dateSectionOpen}
               onToggle={() => setDateSectionOpen((open) => !open)}
+              data-testid="nav-date"
             >
               {dateTree.length ? (
                 <ul className="space-y-1">
@@ -334,6 +338,7 @@ export function Sidebar({
               label="Folders"
               open={folderSectionOpen}
               onToggle={() => setFolderSectionOpen((open) => !open)}
+              data-testid="nav-folders"
             >
               <p className="text-xs text-[var(--text-muted,#6B645B)]">Folder view coming soon.</p>
             </InspectorSection>

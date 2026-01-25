@@ -323,6 +323,7 @@ export function TopBar({
             onClick={onBack}
             className="inline-flex h-9 items-center rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 text-[12px] font-medium text-[var(--text,#1F1E1B)] shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-colors hover:border-[var(--text-muted,#6B645B)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--stone-trail-brand-focus,#4A463F)] md:hidden"
             aria-label="Back to projects"
+            data-testid="topbar-back"
           >
             ← Projects
           </button>
@@ -411,6 +412,7 @@ export function TopBar({
               type="button"
               className={`${viewButtonClasses('grid')} border-r border-[var(--border,#E1D3B9)]`}
               onClick={() => onChangeView('grid')}
+              data-testid="topbar-view-grid"
             >
               Grid
             </button>
@@ -418,6 +420,7 @@ export function TopBar({
               type="button"
               className={viewButtonClasses('detail')}
               onClick={() => onChangeView('detail')}
+              data-testid="topbar-view-detail"
             >
               Detail
             </button>
@@ -431,6 +434,7 @@ export function TopBar({
             aria-pressed={stackPairsEnabled}
             onClick={() => onToggleStackPairs(!stackPairsEnabled)}
             disabled={stackTogglePending}
+            data-testid="topbar-stack-toggle"
           >
             <span>{stackPairsEnabled ? 'Stacking' : 'Stack'}</span>
             <span>JPEG + RAW</span>
@@ -449,6 +453,7 @@ export function TopBar({
                 ? `Export ${selectedCount} photo${selectedCount === 1 ? '' : 's'}`
                 : 'Select at least one photo to enable exporting'
             }
+            data-testid="topbar-export"
           >
             <span aria-hidden="true">⇣</span>
             <span>Export…</span>
@@ -464,6 +469,7 @@ export function TopBar({
               }`}
             aria-disabled={!canExport}
             title="Create Social Media Canvas"
+            data-testid="topbar-social-export"
           >
             <span>Canvas</span>
           </button>
@@ -523,6 +529,7 @@ export function TopBar({
             aria-controls={FILTERS_DIALOG_ID}
             aria-expanded={filtersOpen}
             title={filterLabel}
+            data-testid="topbar-filters"
           >
             <span>Filters</span>
             {filterCount ? <CountBadge count={filterCount} /> : null}
@@ -545,6 +552,7 @@ export function TopBar({
             aria-haspopup="dialog"
             aria-expanded={shortcutsOpen}
             aria-controls={SHORTCUTS_LEGEND_ID}
+            data-testid="topbar-shortcuts"
           >
             <span aria-hidden="true">⌨</span>
             <span>Shortcuts</span>

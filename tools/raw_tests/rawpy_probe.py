@@ -24,7 +24,9 @@ import rawpy
 from PIL import Image
 
 
-def _render_preview(raw: rawpy.RawPy) -> tuple[Optional[bytes], Optional[int], Optional[int]]:
+def _render_preview(
+    raw: rawpy.RawPy,
+) -> tuple[Optional[bytes], Optional[int], Optional[int]]:
     """Render a JPEG preview from rawpy, returning the encoded bytes and dimensions."""
     try:
         rgb = raw.postprocess(
@@ -81,9 +83,13 @@ def probe(raw_path: Path) -> None:
             width = getattr(thumb, "width", None)
             height = getattr(thumb, "height", None)
             if width and height:
-                print(f"[probe] embedded thumbnail: {thumb.format.name} {width}x{height}")
+                print(
+                    f"[probe] embedded thumbnail: {thumb.format.name} {width}x{height}"
+                )
             else:
-                print(f"[probe] embedded thumbnail: {thumb.format.name} (dimensions unavailable)")
+                print(
+                    f"[probe] embedded thumbnail: {thumb.format.name} (dimensions unavailable)"
+                )
         except rawpy.LibRawNoThumbnailError:
             print("[probe] embedded thumbnail: none")
         except rawpy.LibRawUnsupportedThumbnailError:

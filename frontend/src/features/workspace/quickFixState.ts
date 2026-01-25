@@ -121,9 +121,24 @@ function sanitizeBoolean(value: unknown, defaultValue: boolean): boolean {
 function sanitizeCropSettings(payload: unknown): QuickFixCropState {
   const data = (payload ?? {}) as any
   const defaults = DEFAULT_STATE.crop
+
+  let ar = data.aspectRatio !== undefined ? data.aspectRatio : data.aspect_ratio
+
+  if (typeof ar === 'string' && ar.includes(':')) {
+    const parts = ar.split(':').map(Number)
+    if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1]) && parts[1] !== 0) {
+      ar = parts[0] / parts[1]
+    } else {
+      ar = null
+    }
+  }
+
+  // Treat 0 as null (Original/Free)
+  if (ar === 0) ar = null
+
   return {
     rotation: sanitizeNumber(data.rotation, defaults.rotation),
-    aspectRatio: typeof data.aspectRatio === 'number' || data.aspectRatio === null ? data.aspectRatio : defaults.aspectRatio,
+    aspectRatio: typeof ar === 'number' || ar === null ? ar : defaults.aspectRatio,
   }
 }
 

@@ -3,7 +3,7 @@
   "private": true,
   "dependencies": {
     "@JoMe92/quickfix-renderer": "^0.3.0",
-    "@tanstack/react-query": "^5.90.12",
+    "@tanstack/react-query": "^5.90.20",
     "framer-motion": "^12.23.25",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",

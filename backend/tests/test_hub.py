@@ -48,6 +48,8 @@ async def test_list_hub_assets_basic(client, TestSessionLocal):
     # Check if our asset is in the list
     asset_ids = [a["asset_id"] for a in data["assets"]]
     assert str(asset.id) in asset_ids
+    # Check schema field presence
+    assert "camera_model" in data["assets"][0]
 
 
 @pytest.mark.asyncio

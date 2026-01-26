@@ -77,6 +77,33 @@ export async function initUpload(
   }
 }
 
+export async function initDirectUpload(
+  payload: InitUploadPayload
+): Promise<InitUploadResponse> {
+  const res = await fetch(requireBase(`/v1/uploads/init`), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({
+      filename: payload.filename,
+      size_bytes: payload.sizeBytes,
+      mime: payload.mimeType,
+    }),
+  })
+
+  if (!res.ok) {
+    const body = await parseJsonSafe<Record<string, unknown>>(res)
+    throw new Error(extractErrorMessage(res.status, body, 'Failed to prepare upload'))
+  }
+
+  const data = (await res.json()) as { asset_id: string; upload_token: string; max_bytes: number }
+  return {
+    assetId: data.asset_id,
+    uploadToken: data.upload_token,
+    maxBytes: data.max_bytes,
+  }
+}
+
 export function putUpload(
   assetId: string,
   file: Blob,

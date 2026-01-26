@@ -10,6 +10,8 @@ import { QuickFixMenu, QuickFixAction } from './QuickFixMenu'
 const SHORTCUTS_LEGEND_ID = 'shortcuts-legend'
 const FILTERS_DIALOG_ID = 'workspace-filters-dialog'
 
+import { Button } from '../../../components/Button'
+
 export function TopBar({
   projectName,
   onBack,
@@ -118,7 +120,6 @@ export function TopBar({
 
   useEffect(() => {
     if (!editing) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setDraft(projectName)
     }
   }, [projectName, editing])
@@ -156,7 +157,7 @@ export function TopBar({
       await onRename(trimmed)
       setEditing(false)
     } catch {
-      // keep editing so the user can resolve the error surfaced below
+      // keep editing
     }
   }, [draft, onRename, projectName])
 
@@ -183,13 +184,6 @@ export function TopBar({
     return `Filters · ${filterCount}`
   }, [filterCount])
 
-  const viewButtonClasses = (mode: 'grid' | 'detail') =>
-    `inline-flex h-9 w-[88px] items-center justify-center text-[12px] font-medium transition-colors ${view === mode
-      ? 'bg-[var(--sand-100,#F3EBDD)] text-[var(--text,#1F1E1B)]'
-      : 'text-[var(--text-muted,#6B645B)]'
-    }`
-
-  const sizeControlWidth = 200
   const canExport = selectedCount > 0
   const isMobileLayout = layout === 'mobile'
 
@@ -197,15 +191,16 @@ export function TopBar({
     return (
       <header className="sticky top-0 z-50 border-b border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]/95 backdrop-blur">
         <div className="flex h-14 items-center gap-3 px-3">
-          <button
-            type="button"
+          <Button
+            variant="outline"
+            size="sm"
             onClick={onBack}
-            className="inline-flex items-center gap-1 rounded-full border border-[var(--border,#E1D3B9)] px-3 py-1 text-[12px] font-medium text-[var(--text,#1F1E1B)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--stone-trail-brand-focus,#4A463F)]"
+            leftIcon={<ChevronLeftIcon className="h-4 w-4" aria-hidden="true" />}
             aria-label="Back to projects"
           >
-            <ChevronLeftIcon className="h-4 w-4" aria-hidden="true" />
-            <span>Project Cards</span>
-          </button>
+            Project Cards
+          </Button>
+
           <div className="flex min-w-0 flex-1 justify-center">
             {editing ? (
               <div className="relative w-full max-w-[220px]">
@@ -237,23 +232,19 @@ export function TopBar({
             )}
           </div>
           <div className="flex items-center gap-2">
-            <button
-              type="button"
+            <Button
               ref={filtersButtonRef}
+              variant={filtersOpen ? 'ghost' : 'outline'}
+              size="icon"
               onClick={() => {
-                if (filtersOpen) {
-                  closeFilters()
-                } else {
+                if (filtersOpen) closeFilters()
+                else {
                   setFiltersOpen(true)
                   syncFiltersAnchor()
                 }
               }}
-              className={`relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border,#E1D3B9)] text-[var(--text,#1F1E1B)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--stone-trail-brand-focus,#4A463F)] ${filtersOpen ? 'bg-[var(--sand-100,#F3EBDD)]' : 'bg-[var(--surface,#FFFFFF)]'
-                }`}
-              aria-haspopup="dialog"
-              aria-expanded={filtersOpen}
-              aria-controls={FILTERS_DIALOG_ID}
               title={filterLabel}
+              className={filtersOpen ? 'bg-[var(--sand-100,#F3EBDD)]' : ''}
             >
               <FilterIcon className="h-5 w-5" aria-hidden="true" />
               {filterCount ? (
@@ -261,24 +252,19 @@ export function TopBar({
                   {filterCount}
                 </span>
               ) : null}
-              <span className="sr-only">{filterLabel}</span>
-            </button>
-            <button
-              type="button"
+            </Button>
+
+            <Button
+              variant={stackPairsEnabled ? 'ghost' : 'outline'}
+              size="icon"
               onClick={() => onToggleStackPairs(!stackPairsEnabled)}
               disabled={stackTogglePending}
-              aria-pressed={stackPairsEnabled}
-              className={`inline-flex h-10 w-10 items-center justify-center rounded-full border text-[var(--text,#1F1E1B)] transition ${stackPairsEnabled
-                ? 'border-[var(--text,#1F1E1B)] bg-[var(--sand-100,#F3EBDD)]'
-                : 'border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]'
-                } ${stackTogglePending ? 'cursor-not-allowed opacity-60' : ''}`}
+              className={stackPairsEnabled ? 'bg-[var(--sand-100,#F3EBDD)]' : ''}
               title="Toggle JPEG+RAW stacking"
             >
               <StackIcon className="h-4 w-4" aria-hidden="true" />
-              <span className="sr-only">
-                {stackPairsEnabled ? 'Disable JPEG+RAW stacking' : 'Enable JPEG+RAW stacking'}
-              </span>
-            </button>
+            </Button>
+
             <ProjectSettingsButton
               onClick={onOpenSettings}
               label="Open application settings"
@@ -307,284 +293,163 @@ export function TopBar({
 
   return (
     <header className="sticky top-0 z-40 border-b border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]/95 backdrop-blur">
-      <div
-        className="grid h-16 w-full items-center gap-4"
-        style={{ gridTemplateColumns: 'minmax(0,1fr) auto minmax(0,1fr)' }}
-      >
-        <div className="flex min-w-0 items-center gap-3 pl-2 sm:pl-4">
-          <button
-            type="button"
+      <div className="flex h-16 w-full items-center justify-between px-4 sm:px-6 lg:px-8 gap-4">
+        {/* Left: Branding & Back & Title */}
+        <div className="flex items-center gap-4 min-w-0">
+          <Button
+            variant="outline"
+            size="sm"
             onClick={onBack}
-            className="inline-flex h-9 items-center rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 text-[12px] font-medium text-[var(--text,#1F1E1B)] shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-colors hover:border-[var(--text-muted,#6B645B)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--stone-trail-brand-focus,#4A463F)] md:hidden"
-            aria-label="Back to projects"
-            data-testid="topbar-back"
+            className="md:hidden"
+            leftIcon={<span>←</span>}
           >
-            ← Project Cards
-          </button>
-          <div className="hidden md:flex min-w-0 flex-1 items-center gap-2">
-            <nav
-              className="flex min-w-0 items-center gap-2 text-sm text-[var(--text-muted,#6B645B)]"
-              aria-label="Breadcrumb"
-            >
-              <StoneTrailLogo
-                className="shrink-0"
-                showLabel={false}
-                mode={mode}
-                onToggleTheme={toggle}
-              />
-              <span
-                aria-hidden="true"
-                className="text-base leading-none text-[var(--text-muted,#6B645B)]"
-              >
-                ›
-              </span>
-              <button
-                type="button"
-                onClick={onBack}
-                className="font-medium text-[var(--text-muted,#6B645B)] transition-colors hover:text-[var(--text,#1F1E1B)] whitespace-nowrap"
-              >
-                Project Cards
-              </button>
-              <span
-                aria-hidden="true"
-                className="text-base leading-none text-[var(--text-muted,#6B645B)]"
-              >
-                ›
-              </span>
-              {editing ? (
-                <div className="flex items-center gap-2">
-                  <div className="relative">
-                    <input
-                      ref={inputRef}
-                      value={draft}
-                      onChange={(event) => setDraft(event.target.value)}
-                      onKeyDown={handleTitleKey}
-                      onBlur={handleBlur}
-                      disabled={renamePending}
-                      aria-label="Project name"
-                      className="h-9 min-w-[200px] max-w-[260px] rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-4 text-sm font-semibold text-[var(--text,#1F1E1B)] shadow-inner focus:outline-none focus:ring-2 focus:ring-[var(--stone-trail-brand-focus,#4A463F)]"
-                    />
-                    {renameError ? (
-                      <span className="absolute -bottom-5 left-0 text-xs text-[#B42318]">
-                        {renameError}
-                      </span>
-                    ) : null}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => void commitRename()}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border,#E1D3B9)] text-xs"
-                    disabled={renamePending}
-                    aria-label="Save project name"
-                  >
-                    ✓
-                  </button>
-                  <button
-                    type="button"
-                    onClick={cancelEditing}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border,#E1D3B9)] text-xs"
-                    disabled={renamePending}
-                    aria-label="Cancel renaming"
-                  >
-                    ✕
-                  </button>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onDoubleClick={startEditing}
-                  className="truncate text-left text-sm font-bold text-[var(--text,#1F1E1B)] px-2 py-1 rounded hover:bg-[var(--surface-subtle,#FBF7EF)]"
-                  title="Rename project"
-                >
-                  {projectName}
-                </button>
-              )}
-            </nav>
-            {!editing ? (
-              <button
-                type="button"
-                onClick={startEditing}
-                className="inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border border-[var(--border,#E1D3B9)] text-xs text-[var(--text-muted,#6B645B)] hover:text-[var(--text,#1F1E1B)]"
-                aria-label="Rename project"
-              >
-                ✎
-              </button>
-            ) : null}
-          </div>
-        </div>
-        <div className="flex min-w-0 items-center justify-center gap-3 px-4 sm:px-6 lg:px-8">
-          <div className="inline-flex items-center overflow-hidden rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)]">
+            Project Cards
+          </Button>
+
+          <div className="hidden md:flex items-center gap-3">
+            <StoneTrailLogo
+              className="shrink-0"
+              showLabel={false}
+              mode={mode}
+              onToggleTheme={toggle}
+            />
+            <span className="text-[var(--text-muted,#6B645B)]">/</span>
             <button
               type="button"
-              className={`${viewButtonClasses('grid')} border-r border-[var(--border,#E1D3B9)]`}
+              onClick={onBack}
+              className="font-medium text-[var(--text-muted,#6B645B)] hover:text-[var(--text,#1F1E1B)] transition-colors"
+            >
+              Project Cards
+            </button>
+            <span className="text-[var(--text-muted,#6B645B)]">/</span>
+
+            {editing ? (
+              <div className="flex items-center gap-2">
+                <div className="relative">
+                  <input
+                    ref={inputRef}
+                    value={draft}
+                    onChange={(event) => setDraft(event.target.value)}
+                    onKeyDown={handleTitleKey}
+                    onBlur={handleBlur}
+                    disabled={renamePending}
+                    className="h-8 min-w-[200px] max-w-[260px] rounded-full border border-[var(--border,#E1D3B9)] px-3 text-sm font-semibold text-[var(--text,#1F1E1B)] focus:outline-none focus:ring-2 focus:ring-[var(--stone-trail-brand-focus,#4A463F)]"
+                  />
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={startEditing}
+                className="text-sm font-bold text-[var(--text,#1F1E1B)] hover:bg-[var(--surface-subtle,#FBF7EF)] px-2 py-1 rounded transition-colors truncate max-w-[300px]"
+                title="Rename project"
+              >
+                {projectName}
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Center: Main Actions (Responsive) */}
+        <div className="flex items-center gap-2">
+          <div className="inline-flex items-center overflow-hidden rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] h-9">
+            <button
+              className={`px-3 h-full text-[12px] font-medium border-r border-[var(--border,#E1D3B9)] transition-colors ${view === 'grid' ? 'bg-[var(--sand-100,#F3EBDD)] text-[var(--text,#1F1E1B)]' : 'text-[var(--text-muted,#6B645B)] hover:text-[var(--text,#1F1E1B)]'}`}
               onClick={() => onChangeView('grid')}
-              data-testid="topbar-view-grid"
             >
               Grid
             </button>
             <button
-              type="button"
-              className={viewButtonClasses('detail')}
+              className={`px-3 h-full text-[12px] font-medium transition-colors ${view === 'detail' ? 'bg-[var(--sand-100,#F3EBDD)] text-[var(--text,#1F1E1B)]' : 'text-[var(--text-muted,#6B645B)] hover:text-[var(--text,#1F1E1B)]'}`}
               onClick={() => onChangeView('detail')}
-              data-testid="topbar-view-detail"
             >
               Detail
             </button>
           </div>
-          <button
-            type="button"
-            className={`inline-flex h-9 min-w-[170px] flex-shrink-0 items-center justify-center gap-3 rounded-full border border-[var(--border,#E1D3B9)] px-4 text-[12px] font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--stone-trail-brand-focus,#4A463F)] ${stackPairsEnabled
-              ? 'bg-[var(--sand-100,#F3EBDD)] text-[var(--text,#1F1E1B)]'
-              : 'text-[var(--text-muted,#6B645B)]'
-              } ${stackTogglePending ? 'cursor-not-allowed opacity-60' : ''}`}
-            aria-pressed={stackPairsEnabled}
+
+          <Button
+            variant={stackPairsEnabled ? 'ghost' : 'outline'}
             onClick={() => onToggleStackPairs(!stackPairsEnabled)}
             disabled={stackTogglePending}
-            data-testid="topbar-stack-toggle"
+            className={stackPairsEnabled ? 'bg-[var(--sand-100,#F3EBDD)]' : ''}
+            title="Toggle Stacking"
           >
-            <span>{stackPairsEnabled ? 'Stacking' : 'Stack'}</span>
-            <span>JPEG + RAW</span>
-          </button>
-          <button
-            type="button"
+            {stackPairsEnabled ? 'Stacking' : 'Stack'}
+          </Button>
+
+          <Button
+            variant="outline"
             onClick={onOpenExport}
             disabled={!canExport}
-            className={`inline-flex h-9 min-w-[150px] flex-shrink-0 items-center justify-center gap-2 rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-4 text-[12px] font-semibold text-[var(--text,#1F1E1B)] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--stone-trail-brand-focus,#4A463F)] ${canExport
-              ? 'hover:bg-[var(--sand-50,#F9F4EC)]'
-              : 'text-[var(--text-muted,#6B645B)] cursor-not-allowed opacity-60'
-              }`}
-            aria-disabled={!canExport}
-            title={
-              canExport
-                ? `Export ${selectedCount} photo${selectedCount === 1 ? '' : 's'}`
-                : 'Select at least one photo to enable exporting'
-            }
-            data-testid="topbar-export"
+            leftIcon={<span aria-hidden="true">⇣</span>}
           >
-            <span aria-hidden="true">⇣</span>
-            <span>Export…</span>
-            {canExport ? <CountBadge count={selectedCount} /> : null}
-          </button>
-          <button
-            type="button"
+            Export
+            {canExport ? <span className="ml-1"><CountBadge count={selectedCount} /></span> : null}
+          </Button>
+
+          <Button
+            variant="outline"
             onClick={onOpenSocialExport}
             disabled={!canExport}
-            className={`inline-flex h-9 min-w-[80px] flex-shrink-0 items-center justify-center gap-2 rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-4 text-[12px] font-semibold text-[var(--text,#1F1E1B)] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--stone-trail-brand-focus,#4A463F)] ${canExport
-              ? 'hover:bg-[var(--sand-50,#F9F4EC)]'
-              : 'text-[var(--text-muted,#6B645B)] cursor-not-allowed opacity-60'
-              }`}
-            aria-disabled={!canExport}
-            title="Create Social Media Canvas"
-            data-testid="topbar-social-export"
           >
-            <span>Canvas</span>
-          </button>
-          {
-            selectedCount > 0 && onQuickFix ? (
-              <QuickFixMenu
-                selectedCount={selectedCount}
-                onAction={onQuickFix}
-              />
-            ) : null
-          }
-          <div
-            data-testid="top-bar-size-control"
-            className="hidden h-9 flex-shrink-0 items-center gap-2 rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] px-3 text-[11px] text-[var(--text-muted,#6B645B)] lg:flex"
-            style={{ width: sizeControlWidth }}
-          >
-            <span className="text-[11px] font-medium text-[var(--text-muted,#6B645B)]">Size</span>
-            {view === 'grid' ? (
-              <input
-                type="range"
-                min={minGridSize}
-                max={240}
-                value={gridSize}
-                onChange={(event) => onGridSizeChange(Number(event.target.value))}
-                aria-label="Thumbnail size"
-                className="h-1.5 flex-1 accent-[var(--text,#1F1E1B)]"
-              />
-            ) : (
-              <span className="flex-1 text-right text-[10px] text-[var(--text-muted,#6B645B)]">
-                Unavailable in detail view
-              </span>
-            )}
-          </div>
+            Canvas
+          </Button>
+
+          {selectedCount > 0 && onQuickFix ? (
+            <QuickFixMenu selectedCount={selectedCount} onAction={onQuickFix} />
+          ) : null}
+
         </div>
-        <div className="flex min-w-0 items-center justify-end gap-3 px-4 sm:px-6 lg:px-8">
+
+        {/* Right: Secondary Actions */}
+        <div className="flex items-center gap-2">
+          <Button
+            ref={filtersButtonRef}
+            variant={filtersOpen ? 'solid' : 'outline'}
+            onClick={() => {
+              if (filtersOpen) closeFilters()
+              else { setFiltersOpen(true); syncFiltersAnchor() }
+            }}
+            className={filtersOpen ? 'bg-[var(--text,#1F1E1B)] text-white' : ''}
+          >
+            Filters
+            {filterCount ? <span className="ml-1"><CountBadge count={filterCount} /></span> : null}
+          </Button>
+
+          <Button
+            ref={shortcutsButtonRef}
+            variant={shortcutsOpen ? 'solid' : 'outline'}
+            onClick={() => {
+              if (shortcutsOpen) closeShortcuts()
+              else { setShortcutsOpen(true); syncShortcutsAnchor() }
+            }}
+            leftIcon={<span>⌨</span>}
+            className={shortcutsOpen ? 'bg-[var(--text,#1F1E1B)] text-white' : ''}
+          >
+            Shortcuts
+          </Button>
+
           <ProjectSettingsButton
             onClick={onOpenSettings}
-            label="Open application settings"
-            title="Application settings"
           />
-          <button
-            type="button"
-            ref={filtersButtonRef}
-            onClick={() => {
-              if (filtersOpen) {
-                closeFilters()
-              } else {
-                setFiltersOpen(true)
-                syncFiltersAnchor()
-              }
-            }}
-            className={`inline-flex h-9 min-w-[110px] items-center justify-center gap-2 rounded-full border px-4 text-[12px] font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--stone-trail-brand-focus,#4A463F)] ${filterCount
-              ? 'border-[var(--text,#1F1E1B)] text-[var(--text,#1F1E1B)]'
-              : 'border-[var(--border,#E1D3B9)] text-[var(--text-muted,#6B645B)]'
-              }`}
-            aria-haspopup="dialog"
-            aria-controls={FILTERS_DIALOG_ID}
-            aria-expanded={filtersOpen}
-            title={filterLabel}
-            data-testid="topbar-filters"
-          >
-            <span>Filters</span>
-            {filterCount ? <CountBadge count={filterCount} /> : null}
-          </button>
-          <button
-            type="button"
-            ref={shortcutsButtonRef}
-            onClick={() => {
-              if (shortcutsOpen) {
-                closeShortcuts()
-              } else {
-                setShortcutsOpen(true)
-                syncShortcutsAnchor()
-              }
-            }}
-            className={`inline-flex h-9 min-w-[130px] items-center justify-center gap-2 rounded-full border px-4 text-[12px] font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--stone-trail-brand-focus,#4A463F)] ${shortcutsOpen
-              ? 'border-[var(--text,#1F1E1B)] text-[var(--text,#1F1E1B)]'
-              : 'border-[var(--border,#E1D3B9)] text-[var(--text-muted,#6B645B)]'
-              }`}
-            aria-haspopup="dialog"
-            aria-expanded={shortcutsOpen}
-            aria-controls={SHORTCUTS_LEGEND_ID}
-            data-testid="topbar-shortcuts"
-          >
-            <span aria-hidden="true">⌨</span>
-            <span>Shortcuts</span>
-          </button>
-          {accountControl ? <div className="flex items-center ml-auto">{accountControl}</div> : null}
+          {accountControl ? <div className="ml-2">{accountControl}</div> : null}
         </div>
       </div>
-      {
-        filtersOpen ? (
-          <FiltersDialog
-            controls={filters}
-            onReset={() => {
-              onResetFilters()
-              closeFilters()
-            }}
-            onClose={closeFilters}
-            anchorRect={filtersAnchorRect}
-          />
-        ) : null
-      }
-      {
-        shortcutsOpen ? (
-          <ShortcutsDialog onClose={closeShortcuts} anchorRect={shortcutsAnchorRect} />
-        ) : null
-      }
-    </header >
+
+      {filtersOpen ? (
+        <FiltersDialog
+          controls={filters}
+          onReset={() => {
+            onResetFilters()
+            closeFilters()
+          }}
+          onClose={closeFilters}
+          anchorRect={filtersAnchorRect}
+        />
+      ) : null}
+      {shortcutsOpen ? (
+        <ShortcutsDialog onClose={closeShortcuts} anchorRect={shortcutsAnchorRect} />
+      ) : null}
+    </header>
   )
 }
 

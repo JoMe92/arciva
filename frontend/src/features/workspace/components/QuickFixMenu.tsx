@@ -1,3 +1,4 @@
+import { Button } from '../../../components/Button'
 import React, { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 
@@ -37,22 +38,20 @@ export function QuickFixMenu({
 
     return (
         <>
-            <button
+            <Button
                 ref={buttonRef}
-                type="button"
+                variant={open ? 'solid' : 'outline'}
+                size="sm"
                 onClick={(e) => {
                     e.stopPropagation()
                     setOpen(!open)
                 }}
                 disabled={disabled}
-                className={`inline-flex h-9 items-center justify-center gap-2 rounded-full border px-4 text-[12px] font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--stone-trail-brand-focus,#4A463F)] ${open
-                        ? 'border-[var(--text,#1F1E1B)] bg-[var(--sand-100,#F3EBDD)] text-[var(--text,#1F1E1B)]'
-                        : 'border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] text-[var(--text,#1F1E1B)]'
-                    } ${disabled ? 'cursor-not-allowed opacity-60' : ''}`}
+                className="max-w-[140px] gap-2 px-3 shadow-sm text-xs"
             >
                 <span>Quick Fix</span>
-                <span className="text-[10px] text-[var(--text-muted,#6B645B)]">▼</span>
-            </button>
+                <span className="text-[10px] opacity-60">▼</span>
+            </Button>
             {open &&
                 createPortal(
                     <div

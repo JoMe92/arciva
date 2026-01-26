@@ -1,3 +1,4 @@
+import { Button } from '../../../components/Button'
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import {
   Photo,
@@ -714,24 +715,26 @@ export function DetailView({
               aria-label="Image paginator"
               className="pointer-events-none absolute inset-y-0 left-0 right-0 z-10 flex items-center justify-between px-4 opacity-0 transition-opacity duration-150 focus:opacity-100 focus-visible:opacity-100 focus-within:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100"
             >
-              <button
-                type="button"
+              <Button
+                variant="outline"
+                size="icon"
                 aria-label="Previous image"
                 onClick={() => canPrev && setIndex(Math.max(0, index - 1))}
                 disabled={!canPrev}
-                className="pointer-events-auto inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] text-[var(--text,#1F1E1B)] shadow-[0_10px_30px_rgba(31,30,27,0.18)] transition hover:bg-[var(--surface-hover,#F4EBDD)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)] disabled:cursor-default disabled:opacity-40 disabled:shadow-none"
+                className="pointer-events-auto h-10 w-10 shadow-[0_10px_30px_rgba(31,30,27,0.18)] disabled:shadow-none bg-[var(--surface,#FFFFFF)]"
               >
                 <ChevronLeftIcon className="h-4 w-4" aria-hidden="true" />
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
                 aria-label="Next image"
                 onClick={() => canNext && setIndex(Math.min(items.length - 1, index + 1))}
                 disabled={!canNext}
-                className="pointer-events-auto inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border,#E1D3B9)] bg-[var(--surface,#FFFFFF)] text-[var(--text,#1F1E1B)] shadow-[0_10px_30px_rgba(31,30,27,0.18)] transition hover:bg-[var(--surface-hover,#F4EBDD)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)] disabled:cursor-default disabled:opacity-40 disabled:shadow-none"
+                className="pointer-events-auto h-10 w-10 shadow-[0_10px_30px_rgba(31,30,27,0.18)] disabled:shadow-none bg-[var(--surface,#FFFFFF)]"
               >
                 <ChevronRightIcon className="h-4 w-4" aria-hidden="true" />
-              </button>
+              </Button>
             </div>
           ) : null}
           <div ref={setStripRef} className="thumb-strip min-w-0">

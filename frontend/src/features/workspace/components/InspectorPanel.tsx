@@ -1,3 +1,4 @@
+import { Button } from '../../../components/Button'
 import React, { useState, useRef, useEffect, useCallback, useMemo, useId } from 'react'
 import { RawPlaceholder, RawPlaceholderFrame } from '../../../components/RawPlaceholder'
 import {
@@ -15,7 +16,7 @@ import {
   ChevronLeftIcon,
   InspectorIcon,
 } from './icons'
-import { InspectorRailButton, RailDivider } from './Buttons'
+import { RailDivider } from './Buttons'
 import { StarRow, ColorSwatch, Badge } from './Common'
 import {
   Photo,
@@ -331,21 +332,23 @@ export function InspectorPanel({
           {!isMobilePanel ? (
             <header className="sticky top-0 z-10 border-b border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] pb-3">
               <div className="flex items-center gap-3 mb-3">
-                <button
-                  type="button"
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={onCollapse}
                   aria-label="Collapse Image Details panel"
                   aria-controls={RIGHT_PANEL_CONTENT_ID}
-                  onClick={onCollapse}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border,#EDE1C6)] text-[var(--text,#1F1E1B)] transition hover:border-[var(--text,#1F1E1B)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)]"
                 >
                   <ChevronRightIcon className="h-4 w-4" aria-hidden="true" />
-                </button>
-                <InspectorIcon className="h-4 w-4 text-[var(--text,#1F1E1B)]" aria-hidden="true" />
-                <span className="text-sm font-semibold text-[var(--text,#1F1E1B)]">
-                  Image Details
-                </span>
+                </Button>
+                <div className="flex items-center gap-2">
+                  <InspectorIcon className="h-4 w-4 text-[var(--text,#1F1E1B)]" aria-hidden="true" />
+                  <span className="text-sm font-semibold text-[var(--text,#1F1E1B)]">
+                    Image Details
+                  </span>
+                </div>
               </div>
-              <div role="tablist" className="grid grid-cols-2 rounded-lg bg-[var(--surface-muted,#F3EBDD)] p-1">
+              <div role="tablist" className="grid grid-cols-2 gap-1 rounded-lg bg-[var(--surface-muted,#F3EBDD)] p-1">
                 <button
                   type="button"
                   role="tab"
@@ -979,42 +982,66 @@ function InspectorRail({
       className="pointer-events-auto flex h-full w-full flex-col items-center rounded-[var(--r-lg,20px)] border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] px-1 py-3 shadow-[0_20px_40px_rgba(31,30,27,0.18)]"
     >
       <div className="flex flex-col items-center gap-2">
-        <InspectorRailButton
-          icon={<ChevronLeftIcon className="h-4 w-4" />}
-          label="Expand Image Details panel"
+        <Button
+          variant="ghost"
+          size="icon"
+          className="rounded-[12px] h-10 w-10"
           onClick={onExpand}
-        />
+          aria-label="Expand Image Details panel"
+        >
+          <ChevronLeftIcon className="h-4 w-4" />
+        </Button>
         <RailDivider />
       </div>
       <div className="mt-3 flex flex-1 flex-col items-center gap-2">
-        <InspectorRailButton
-          icon={<InfoIcon className="h-4 w-4" />}
-          label="Key data"
+        <Button
+          variant="ghost"
+          size="icon"
+          className="rounded-[12px] h-10 w-10"
           onClick={onKeyData}
-        />
-        <InspectorRailButton
-          icon={<FolderIcon className="h-4 w-4" />}
-          label="Projects"
+          aria-label="Key data"
+        >
+          <InfoIcon className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="rounded-[12px] h-10 w-10"
           onClick={onProjects}
-        />
-        <InspectorRailButton
-          icon={<CameraIcon className="h-4 w-4" />}
-          label="Metadata"
+          aria-label="Projects"
+        >
+          <FolderIcon className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="rounded-[12px] h-10 w-10"
           onClick={onMetadata}
-        />
-        <InspectorRailButton
-          icon={<CalendarClockIcon className="h-4 w-4" />}
-          label="Dates"
+          aria-label="Metadata"
+        >
+          <CameraIcon className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="rounded-[12px] h-10 w-10"
           onClick={onMetadata}
-        />
+          aria-label="Dates"
+        >
+          <CalendarClockIcon className="h-4 w-4" />
+        </Button>
       </div>
       <div className="mt-auto flex flex-col items-center gap-2">
         <RailDivider />
-        <InspectorRailButton
-          icon={<SettingsIcon className="h-4 w-4" />}
-          label="Image Details settings"
+        <Button
+          variant="ghost"
+          size="icon"
+          className="rounded-[12px] h-10 w-10"
           onClick={onMetadata}
-        />
+          aria-label="Image Details settings"
+        >
+          <SettingsIcon className="h-4 w-4" />
+        </Button>
       </div>
     </div>
   )

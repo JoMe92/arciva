@@ -1,3 +1,4 @@
+import { Button } from '../../../components/Button'
 import React, { useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import DialogHeader from '../../../components/DialogHeader'
@@ -41,11 +42,11 @@ export function OverlayDialog({
   const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 0
   const anchorStyle = anchorRect
     ? {
-        position: 'absolute' as const,
-        top: Math.min(anchorRect.bottom + 12, viewportHeight - 24),
-        right: Math.max(16, viewportWidth - anchorRect.right),
-        maxHeight: 'calc(100vh - 48px)',
-      }
+      position: 'absolute' as const,
+      top: Math.min(anchorRect.bottom + 12, viewportHeight - 24),
+      right: Math.max(16, viewportWidth - anchorRect.right),
+      maxHeight: 'calc(100vh - 48px)',
+    }
     : undefined
 
   return createPortal(
@@ -96,13 +97,14 @@ export function FiltersDialog({
       title="Filters"
       onClose={onClose}
       headerAction={
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={onReset}
-          className="text-[11px] font-medium text-[var(--river-500,#6B7C7A)] hover:underline"
+          className="text-[var(--river-500,#6B7C7A)] hover:text-[var(--river-600,#5A6B69)] hover:bg-transparent px-0 h-auto font-medium"
         >
           Reset
-        </button>
+        </Button>
       }
       anchorRect={anchorRect}
     >
@@ -111,16 +113,17 @@ export function FiltersDialog({
           <div className="text-[11px] font-semibold text-[var(--text,#1F1E1B)]">Date</div>
           <div className="mt-1 flex items-center justify-between text-[11px] text-[var(--text-muted,#6B645B)]">
             <span className="truncate">{controls.selectedDayLabel ?? 'Custom date range'}</span>
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={() => {
                 controls.clearDateFilter()
                 onClose()
               }}
-              className="font-medium text-[var(--river-500,#6B7C7A)] hover:underline"
+              className="text-[var(--river-500,#6B7C7A)] hover:text-[var(--river-600,#5A6B69)] hover:bg-transparent px-0 h-auto font-medium"
             >
               Clear
-            </button>
+            </Button>
           </div>
         </div>
       ) : null}

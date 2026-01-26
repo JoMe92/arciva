@@ -1,3 +1,4 @@
+import { Button } from '../../../components/Button'
 import React from 'react'
 import {
   ImportIcon,
@@ -29,44 +30,41 @@ export function MobileProjectNav({
     icon: React.ReactNode
     active?: boolean
   }> = [
-    {
-      label: 'Import',
-      onClick: onImport,
-      icon: <ImportIcon className="h-4 w-4" aria-hidden="true" />,
-    },
-    {
-      label: 'Overview',
-      onClick: onOverview,
-      icon: <LayoutListIcon className="h-4 w-4" aria-hidden="true" />,
-    },
-    {
-      label: 'Date',
-      onClick: onDate,
-      icon: <CalendarIcon className="h-4 w-4" aria-hidden="true" />,
-      active: hasDateFilter,
-    },
-    {
-      label: 'Folders',
-      onClick: onFolder,
-      icon: <FolderIcon className="h-4 w-4" aria-hidden="true" />,
-    },
-  ]
+      {
+        label: 'Import',
+        onClick: onImport,
+        icon: <ImportIcon className="h-4 w-4" aria-hidden="true" />,
+      },
+      {
+        label: 'Overview',
+        onClick: onOverview,
+        icon: <LayoutListIcon className="h-4 w-4" aria-hidden="true" />,
+      },
+      {
+        label: 'Date',
+        onClick: onDate,
+        icon: <CalendarIcon className="h-4 w-4" aria-hidden="true" />,
+        active: hasDateFilter,
+      },
+      {
+        label: 'Folders',
+        onClick: onFolder,
+        icon: <FolderIcon className="h-4 w-4" aria-hidden="true" />,
+      },
+    ]
   return (
     <div className="mt-3 flex flex-wrap gap-2 px-1">
       {buttons.map((button) => (
-        <button
+        <Button
           key={button.label}
-          type="button"
+          variant={button.active ? 'solid' : 'outline'}
+          size="sm"
           onClick={button.onClick}
-          className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-semibold text-[var(--text,#1F1E1B)] shadow-[0_1px_2px_rgba(0,0,0,0.06)] transition ${
-            button.active
-              ? 'border-[var(--text,#1F1E1B)] bg-[var(--sand-100,#F3EBDD)]'
-              : 'border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)]'
-          }`}
+          className="rounded-full shadow-[0_1px_2px_rgba(0,0,0,0.06)] pl-2 pr-3"
         >
-          <span className="text-[var(--text-muted,#6B645B)]">{button.icon}</span>
+          <span className="text-[var(--text-muted,#6B645B)] -ml-0.5">{button.icon}</span>
           {button.label}
-        </button>
+        </Button>
       ))}
     </div>
   )
@@ -81,21 +79,18 @@ export function MobilePhotosModeToggle({
 }) {
   return (
     <div className="px-4 pt-3 pb-2">
-      <div className="inline-flex w-full max-w-sm rounded-full border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] p-1 text-[12px] font-medium text-[var(--text-muted,#6B645B)] shadow-[0_4px_12px_rgba(31,30,27,0.08)]">
+      <div className="inline-flex w-full max-w-sm rounded-full border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] p-1 text-[12px] font-medium text-[var(--text-muted,#6B645B)] shadow-[0_4px_12px_rgba(31,30,27,0.08)] gap-1">
         {(['grid', 'detail'] as const).map((mode) => (
-          <button
+          <Button
             key={mode}
-            type="button"
+            variant={view === mode ? 'solid' : 'ghost'}
+            size="sm"
             onClick={() => onChange(mode)}
-            className={`flex-1 rounded-full px-3 py-1 capitalize transition ${
-              view === mode
-                ? 'bg-[var(--sand-100,#F3EBDD)] text-[var(--text,#1F1E1B)] shadow-[0_2px_8px_rgba(31,30,27,0.18)]'
-                : ''
-            }`}
             aria-pressed={view === mode}
+            className={`flex-1 rounded-full capitalize ${view !== mode ? 'hover:bg-transparent' : ''}`}
           >
             {mode}
-          </button>
+          </Button>
         ))}
       </div>
     </div>
@@ -138,17 +133,15 @@ export function MobileBottomBar({
           onClick={() => onSelectPanel('details')}
           disabled={detailsDisabled}
         />
-        <button
-          type="button"
+        <Button
+          variant="outline"
           onClick={onOpenExport}
           disabled={!canExport}
-          className={`flex flex-col items-center justify-center rounded-2xl border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] px-2 py-1 text-center text-[11px] font-semibold transition ${
-            canExport ? 'text-[var(--text,#1F1E1B)]' : 'text-[var(--text-muted,#6B645B)] opacity-60'
-          }`}
+          className={`flex flex-col items-center justify-center rounded-2xl h-auto py-1 px-2 gap-0 ${canExport ? 'text-[var(--text,#1F1E1B)]' : 'text-[var(--text-muted,#6B645B)] opacity-60'}`}
         >
-          <ExportIcon className="h-5 w-5" aria-hidden="true" />
+          <ExportIcon className="h-5 w-5 mb-0.5" aria-hidden="true" />
           <span>Export</span>
-        </button>
+        </Button>
       </div>
     </nav>
   )
@@ -170,20 +163,16 @@ function MobileNavButton({
   disabled?: boolean
 }) {
   const activeClasses = active ? 'text-[var(--text,#1F1E1B)]' : 'text-[var(--text-muted,#6B645B)]'
-  const highlightClasses = highlight
-    ? 'border-[var(--text,#1F1E1B)]'
-    : 'border-[var(--border,#EDE1C6)]'
+
   return (
-    <button
-      type="button"
+    <Button
+      variant={highlight ? 'outline' : 'ghost'}
       onClick={onClick}
       disabled={disabled}
-      className={`flex flex-col items-center justify-center rounded-2xl border bg-[var(--surface,#FFFFFF)] px-2 py-1 text-center text-[11px] font-semibold transition ${activeClasses} ${highlightClasses} ${
-        disabled ? 'opacity-50' : ''
-      }`}
+      className={`flex flex-col items-center justify-center rounded-2xl h-auto py-1 px-2 gap-0 ${activeClasses} ${highlight ? 'border-[var(--text,#1F1E1B)]' : ''} ${disabled ? 'opacity-50' : ''}`}
     >
-      {icon}
+      <span className="mb-0.5">{icon}</span>
       <span>{label}</span>
-    </button>
+    </Button>
   )
 }

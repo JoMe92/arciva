@@ -1,4 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { Button } from '../../../components/Button'
+
+// ...
+
 import { RawPlaceholder, RawPlaceholderFrame } from '../../../components/RawPlaceholder'
 import {
   ChevronRightIcon,
@@ -14,7 +18,7 @@ import {
   CalendarIcon,
   ChevronLeftIcon,
 } from './icons'
-import { InspectorRailButton, RailDivider } from './Buttons'
+import { RailDivider } from './Buttons'
 import { DateTreeYearNode, DateTreeMonthNode, DateTreeDayNode, ProjectOverviewData } from '../types'
 import {
   projectInitials,
@@ -170,19 +174,22 @@ export function Sidebar({
         className={`h-full min-h-0 ${isMobilePanel ? '' : `transition-opacity duration-150 ${collapsedState ? 'pointer-events-none opacity-0' : 'opacity-100'}`}`}
       >
         <div className={panelShellClass}>
+
           {!isMobilePanel ? (
             <header className="sticky top-0 z-10 flex items-center gap-3 border-b border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] pb-3">
-              <button
-                type="button"
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={onCollapse}
                 aria-label="Collapse sidebar"
                 aria-controls={LEFT_PANEL_CONTENT_ID}
-                onClick={onCollapse}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border,#EDE1C6)] text-[var(--text,#1F1E1B)] transition hover:border-[var(--text,#1F1E1B)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)]"
               >
                 <ChevronLeftIcon className="h-4 w-4" aria-hidden="true" />
-              </button>
-              <LayoutListIcon className="h-4 w-4 text-[var(--text,#1F1E1B)]" aria-hidden="true" />
-              <span className="text-sm font-semibold text-[var(--text,#1F1E1B)]">Project</span>
+              </Button>
+              <div className="flex items-center gap-2">
+                <LayoutListIcon className="h-4 w-4 text-[var(--text,#1F1E1B)]" aria-hidden="true" />
+                <span className="text-sm font-semibold text-[var(--text,#1F1E1B)]">Project</span>
+              </div>
             </header>
           ) : (
             <div className="flex items-center gap-2 px-1 text-sm font-semibold text-[var(--text,#1F1E1B)]">
@@ -229,15 +236,14 @@ export function Sidebar({
                 <p className="text-xs text-[var(--text-muted,#6B645B)]">
                   Add photos to this project.
                 </p>
-                <button
-                  type="button"
+                <Button
                   onClick={onOpenImport}
                   data-testid="nav-import-action"
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-[var(--text,#1F1E1B)] px-4 py-2 text-sm font-semibold text-[var(--surface,#FFFFFF)] shadow-sm transition hover:bg-[var(--text-muted,#6B645B)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring,#1A73E8)]"
+                  className="w-full gap-2 shadow-sm"
                 >
                   <ImportIcon className="h-4 w-4" aria-hidden="true" />
                   Import Photos
-                </button>
+                </Button>
               </div>
             </InspectorSection>
 
@@ -359,51 +365,74 @@ export function Sidebar({
               className="pointer-events-auto flex h-full w-full flex-col items-center rounded-[var(--r-lg,20px)] border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] px-1 py-3 shadow-[0_20px_40px_rgba(31,30,27,0.18)]"
             >
               <div className="flex flex-col items-center gap-2">
-                <InspectorRailButton
-                  icon={<ChevronRightIcon className="h-4 w-4" aria-hidden="true" />}
-                  label="Expand Project Overview panel"
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="rounded-[12px] h-10 w-10"
                   onClick={onExpand}
-                />
+                  aria-label="Expand Project Overview panel"
+                >
+                  <ChevronRightIcon className="h-4 w-4" aria-hidden="true" />
+                </Button>
                 <RailDivider />
               </div>
               <div className="mt-3 flex flex-1 flex-col items-center gap-2">
-                <InspectorRailButton
-                  icon={<LayoutListIcon className="h-4 w-4" aria-hidden="true" />}
-                  label="Overview"
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={`rounded-[12px] h-10 w-10 ${overviewSectionOpen ? 'border-[var(--border,#EDE1C6)] bg-[var(--surface-subtle,#FBF7EF)]' : ''}`}
                   onClick={() => handleRailSelect('overview')}
-                  ariaControls={LEFT_OVERVIEW_SECTION_ID}
-                  ariaExpanded={overviewSectionOpen}
-                />
-                <InspectorRailButton
-                  icon={<ImportIcon className="h-4 w-4" aria-hidden="true" />}
-                  label="Import"
+                  aria-label="Overview"
+                  aria-controls={LEFT_OVERVIEW_SECTION_ID}
+                  aria-expanded={overviewSectionOpen}
+                >
+                  <LayoutListIcon className="h-4 w-4" aria-hidden="true" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={`rounded-[12px] h-10 w-10 ${importSectionOpen ? 'border-[var(--border,#EDE1C6)] bg-[var(--surface-subtle,#FBF7EF)]' : ''}`}
                   onClick={() => handleRailSelect('import')}
-                  ariaControls={LEFT_IMPORT_SECTION_ID}
-                  ariaExpanded={importSectionOpen}
-                />
-                <InspectorRailButton
-                  icon={<CalendarIcon className="h-4 w-4" aria-hidden="true" />}
-                  label="Date"
+                  aria-label="Import"
+                  aria-controls={LEFT_IMPORT_SECTION_ID}
+                  aria-expanded={importSectionOpen}
+                >
+                  <ImportIcon className="h-4 w-4" aria-hidden="true" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={`rounded-[12px] h-10 w-10 ${dateSectionOpen || hasDateFilter ? 'border-[var(--border,#EDE1C6)] bg-[var(--surface-subtle,#FBF7EF)]' : ''}`}
                   onClick={() => handleRailSelect('date')}
-                  ariaControls={LEFT_DATE_SECTION_ID}
-                  ariaExpanded={dateSectionOpen}
-                  isActive={hasDateFilter}
-                />
-                <InspectorRailButton
-                  icon={<FolderIcon className="h-4 w-4" aria-hidden="true" />}
-                  label="Folders"
+                  aria-label="Date"
+                  aria-controls={LEFT_DATE_SECTION_ID}
+                  aria-expanded={dateSectionOpen}
+                >
+                  <CalendarIcon className="h-4 w-4" aria-hidden="true" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={`rounded-[12px] h-10 w-10 ${folderSectionOpen ? 'border-[var(--border,#EDE1C6)] bg-[var(--surface-subtle,#FBF7EF)]' : ''}`}
                   onClick={() => handleRailSelect('folder')}
-                  ariaControls={LEFT_FOLDER_SECTION_ID}
-                  ariaExpanded={folderSectionOpen}
-                />
+                  aria-label="Folders"
+                  aria-controls={LEFT_FOLDER_SECTION_ID}
+                  aria-expanded={folderSectionOpen}
+                >
+                  <FolderIcon className="h-4 w-4" aria-hidden="true" />
+                </Button>
               </div>
               <div className="mt-auto flex flex-col items-center gap-2">
                 <RailDivider />
-                <InspectorRailButton
-                  icon={<SettingsIcon className="h-4 w-4" aria-hidden="true" />}
-                  label="Import settings"
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="rounded-[12px] h-10 w-10"
                   onClick={() => handleRailSelect('folder')} // Placeholder
-                />
+                  aria-label="Import settings"
+                >
+                  <SettingsIcon className="h-4 w-4" aria-hidden="true" />
+                </Button>
               </div>
             </div>
           ) : null}
@@ -620,17 +649,18 @@ function ProjectOverviewDetails({
         <div className="mt-2 flex flex-wrap gap-2">
           {tags.length ? (
             tags.map((tag) => (
-              <button
+              <Button
                 key={tag}
-                type="button"
+                variant="outline"
+                size="sm"
                 onClick={() => handleRemoveTag(tag)}
                 disabled={updatePending}
                 aria-label={`Remove tag ${tag}`}
-                className="inline-flex items-center gap-1 rounded-full border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] px-3 py-0.5 text-[11px] text-[var(--text,#1F1E1B)] transition hover:border-[var(--text,#1F1E1B)]"
+                rightIcon={<span aria-hidden="true">✕</span>}
+                className="h-7 px-3 py-0.5 text-[11px] font-normal"
               >
-                <span>{tag}</span>
-                <span aria-hidden="true">✕</span>
-              </button>
+                {tag}
+              </Button>
             ))
           ) : (
             <span className="text-[12px] text-[var(--text-muted,#6B645B)]">No tags</span>
@@ -650,14 +680,14 @@ function ProjectOverviewDetails({
             placeholder="Add tag"
             className="h-9 min-w-0 flex-auto basis-full rounded-full border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] px-3 text-[12px] text-[var(--text,#1F1E1B)] focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring,#1A73E8)] sm:basis-[65%]"
           />
-          <button
-            type="button"
+          <Button
             onClick={handleAddTag}
             disabled={updatePending}
-            className="inline-flex h-9 flex-none items-center rounded-full border border-[var(--border,#EDE1C6)] px-4 text-[12px] font-semibold text-[var(--text,#1F1E1B)]"
+            className="h-9 flex-none px-4 text-[12px] font-semibold border border-[var(--border,#EDE1C6)] bg-transparent hover:bg-[var(--surface-subtle,#FBF7EF)]"
+            variant="ghost"
           >
             Add
-          </button>
+          </Button>
         </div>
       </div>
       <div className="grid gap-2 rounded-[18px] border border-[var(--border,#EDE1C6)] bg-[var(--surface-subtle,#FBF7EF)] p-3 text-[12px] text-[var(--text-muted,#6B645B)] sm:grid-cols-2">

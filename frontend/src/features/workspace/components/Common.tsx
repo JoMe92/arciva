@@ -1,3 +1,4 @@
+import { Button } from '../../../components/Button'
 import React, { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { ColorTag } from '../types'
@@ -7,9 +8,8 @@ import DialogHeader from '../../../components/DialogHeader'
 export function CountBadge({ count, className = '' }: { count: number; className?: string }) {
   return (
     <span
-      className={`inline-flex items-center justify-center rounded-full bg-[var(--sand-100,#F3EBDD)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]${
-        className ? ` ${className}` : ''
-      }`}
+      className={`inline-flex items-center justify-center rounded-full bg-[var(--sand-100,#F3EBDD)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted,#6B645B)]${className ? ` ${className}` : ''
+        }`}
     >
       {count}
     </span>
@@ -50,11 +50,11 @@ export function OverlayDialog({
   const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 0
   const anchorStyle = anchorRect
     ? {
-        position: 'absolute' as const,
-        top: Math.min(anchorRect.bottom + 12, viewportHeight - 24),
-        right: Math.max(16, viewportWidth - anchorRect.right),
-        maxHeight: 'calc(100vh - 48px)',
-      }
+      position: 'absolute' as const,
+      top: Math.min(anchorRect.bottom + 12, viewportHeight - 24),
+      right: Math.max(16, viewportWidth - anchorRect.right),
+      maxHeight: 'calc(100vh - 48px)',
+    }
     : undefined
 
   return createPortal(
@@ -217,12 +217,14 @@ export function NoResults({ onReset }: { onReset: () => void }) {
           Your filters hide all photos. Try lowering the minimum rating or clearing the color/type
           filters.
         </div>
-        <button
+        <Button
+          variant="outline"
+          size="sm"
           onClick={onReset}
-          className="mt-1 px-3 py-2 rounded-md border border-[var(--border,#E1D3B9)] text-xs"
+          className="mt-1"
         >
           Reset filters
-        </button>
+        </Button>
       </div>
     </div>
   )

@@ -1,3 +1,4 @@
+import { Button } from '../../../components/Button'
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CropAspectRatioId, CropOrientation, CropSettings } from '../types'
 import { CROP_RATIO_OPTIONS } from '../cropUtils'
@@ -357,7 +358,7 @@ function QuickFixPanelComponent({
           </div>
           <div className="space-y-2">
             <span className="text-xs font-medium text-[var(--text,#1F1E1B)]">Orientation</span>
-            <div className="flex rounded-lg border border-[var(--border,#EDE1C6)] bg-[var(--surface-muted,#F3EBDD)] p-1">
+            <div className="flex gap-2 p-1 rounded-lg border border-[var(--border,#EDE1C6)] bg-[var(--surface-muted,#F3EBDD)]">
               {(['horizontal', 'vertical'] as const).map((opt) => {
                 const selected = orientation === opt
                 const label = opt === 'horizontal' ? 'Horizontal' : 'Vertical'
@@ -395,14 +396,14 @@ function QuickFixPanelComponent({
                 onChange={(event) => onAngleChange(Number(event.target.value))}
                 className="h-1.5 flex-1 cursor-pointer appearance-none rounded-full bg-[var(--border,#EDE1C6)] accent-[var(--focus-ring,#1A73E8)]"
               />
-              <button
-                type="button"
+              <Button
+                variant="outline"
+                size="sm"
                 disabled={cropControlsDisabled}
                 onClick={onReset}
-                className="rounded border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] px-2 py-1 text-xs font-medium text-[var(--text,#1F1E1B)] transition hover:bg-[var(--surface-muted,#F3EBDD)] disabled:opacity-60"
               >
                 Reset
-              </button>
+              </Button>
             </div>
           </div>
           <div className="space-y-2">
@@ -415,14 +416,14 @@ function QuickFixPanelComponent({
                 Switch to Detail view to use crop tools.
               </p>
             ) : null}
-            <button
-              type="button"
+            <Button
+              variant="outline"
               disabled={controlsDisabled || !cropSettings}
               onClick={() => onCropApplyChange(!cropApplied)}
-              className="w-full rounded border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] px-3 py-2 text-xs font-semibold text-[var(--text,#1F1E1B)] transition hover:bg-[var(--surface-muted,#F3EBDD)] disabled:opacity-60"
+              className="w-full justify-center"
             >
               {cropApplied ? 'Re-Crop' : 'Apply Crop'}
-            </button>
+            </Button>
           </div>
         </div>
       </QuickFixGroup>

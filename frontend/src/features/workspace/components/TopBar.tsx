@@ -118,11 +118,7 @@ export function TopBar({
     }
   }, [shortcutsOpen, syncShortcutsAnchor])
 
-  useEffect(() => {
-    if (!editing) {
-      setDraft(projectName)
-    }
-  }, [projectName, editing])
+
 
   useEffect(() => {
     if (!editing) return

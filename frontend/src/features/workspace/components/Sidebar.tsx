@@ -251,85 +251,96 @@ export function Sidebar({
 
       {/* 4. Content Area */}
       {filesViewMode === 'date' ? (
-        dateTree.length ? (
-          <ul className="space-y-0.5">
-            {dateTree.map((yearNode) => {
-              const isYearExpanded = expandedYears.has(yearNode.id)
-              return (
-                <li key={yearNode.id}>
-                  <button
-                    type="button"
-                    onClick={() => toggleYear(yearNode.id)}
-                    aria-expanded={isYearExpanded}
-                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm font-medium text-[var(--text,#1F1E1B)] hover:bg-[var(--surface-subtle,#FBF7EF)]"
-                  >
-                    <ChevronRightIcon
-                      className={`h-3 w-3 text-[var(--text-muted,#6B645B)] transition-transform ${isYearExpanded ? 'rotate-90' : ''}`}
-                      aria-hidden="true"
-                    />
-                    <span>{yearNode.year}</span>
-                    <span className="ml-auto text-xs text-[var(--text-muted,#6B645B)] opacity-60">
-                      {yearNode.count}
-                    </span>
-                  </button>
-                  {isYearExpanded ? (
-                    <ul className="ml-[11px] mt-0.5 space-y-0.5 border-l border-[var(--border,#EDE1C6)] pl-2">
-                      {yearNode.months.map((monthNode) => {
-                        const isMonthExpanded = expandedMonths.has(monthNode.id)
-                        return (
-                          <li key={monthNode.id}>
-                            <button
-                              type="button"
-                              onClick={() => toggleMonth(monthNode.id)}
-                              aria-expanded={isMonthExpanded}
-                              className="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs font-medium text-[var(--text,#1F1E1B)] hover:bg-[var(--surface-subtle,#FBF7EF)]"
-                            >
-                              <ChevronRightIcon
-                                className={`h-3 w-3 text-[var(--text-muted,#6B645B)] transition-transform ${isMonthExpanded ? 'rotate-90' : ''}`}
-                                aria-hidden="true"
-                              />
-                              <span>{monthNode.label}</span>
-                              <span className="ml-auto text-[10px] text-[var(--text-muted,#6B645B)] opacity-60">
-                                {monthNode.count}
-                              </span>
-                            </button>
-                            {isMonthExpanded ? (
-                              <ul className="ml-[11px] mt-0.5 space-y-0.5 border-l border-[var(--border,#EDE1C6)] pl-2">
-                                {monthNode.days.map((dayNode) => {
-                                  const isSelected = selectedDayKey === dayNode.id
-                                  return (
-                                    <li key={dayNode.id}>
-                                      <button
-                                        type="button"
-                                        onClick={() => onSelectDay(dayNode)}
-                                        aria-current={isSelected ? 'date' : undefined}
-                                        className={`flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition ${isSelected
-                                          ? 'bg-[var(--surface-muted,#F3EBDD)] font-semibold text-[var(--text,#1F1E1B)]' /* Active: Warm beige */
-                                          : 'text-[var(--text,#1F1E1B)] hover:bg-[var(--surface-subtle,#FBF7EF)]' /* Default/Hover */
-                                          }`}
-                                      >
-                                        <span>{dayNode.label}</span>
-                                        <span className="ml-auto text-[10px] opacity-60">
-                                          {dayNode.count}
-                                        </span>
-                                      </button>
-                                    </li>
-                                  )
-                                })}
-                              </ul>
-                            ) : null}
-                          </li>
-                        )
-                      })}
-                    </ul>
-                  ) : null}
-                </li>
-              )
-            })}
-          </ul>
-        ) : (
-          <p className="px-2 text-xs italic text-[var(--text-muted,#6B645B)] mt-4">No dates available.</p>
-        )
+        <div className="flex flex-col gap-4">
+          {/* Timeline Header & Tree */}
+          <div>
+            <div className="mb-2 px-2 text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">
+              Timeline
+            </div>
+            {dateTree.length ? (
+              <ul className="space-y-0.5">
+                {dateTree.map((yearNode) => {
+                  const isYearExpanded = expandedYears.has(yearNode.id)
+                  return (
+                    <li key={yearNode.id}>
+                      <button
+                        type="button"
+                        onClick={() => toggleYear(yearNode.id)}
+                        aria-expanded={isYearExpanded}
+                        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm font-medium text-[var(--text,#1F1E1B)] hover:bg-[var(--surface-subtle,#FBF7EF)]"
+                      >
+                        <ChevronRightIcon
+                          className={`h-3 w-3 text-[var(--text-muted,#6B645B)] transition-transform ${isYearExpanded ? 'rotate-90' : ''}`}
+                          aria-hidden="true"
+                        />
+                        <CalendarIcon className="h-3.5 w-3.5 text-[var(--text-muted,#6B645B)]" />
+                        <span>{yearNode.year}</span>
+                        <span className="ml-auto text-xs text-[var(--text-muted,#6B645B)] opacity-60">
+                          {yearNode.count}
+                        </span>
+                      </button>
+                      {isYearExpanded ? (
+                        <ul className="ml-[11px] mt-0.5 space-y-0.5 border-l border-[var(--border,#EDE1C6)] pl-2">
+                          {yearNode.months.map((monthNode) => {
+                            const isMonthExpanded = expandedMonths.has(monthNode.id)
+                            return (
+                              <li key={monthNode.id}>
+                                <button
+                                  type="button"
+                                  onClick={() => toggleMonth(monthNode.id)}
+                                  aria-expanded={isMonthExpanded}
+                                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs font-medium text-[var(--text,#1F1E1B)] hover:bg-[var(--surface-subtle,#FBF7EF)]"
+                                >
+                                  <ChevronRightIcon
+                                    className={`h-3 w-3 text-[var(--text-muted,#6B645B)] transition-transform ${isMonthExpanded ? 'rotate-90' : ''}`}
+                                    aria-hidden="true"
+                                  />
+                                  <CalendarIcon className="h-3.5 w-3.5 text-[var(--text-muted,#6B645B)] opacity-70" />
+                                  <span>{monthNode.label}</span>
+                                  <span className="ml-auto text-[10px] text-[var(--text-muted,#6B645B)] opacity-60">
+                                    {monthNode.count}
+                                  </span>
+                                </button>
+                                {isMonthExpanded ? (
+                                  <ul className="ml-[11px] mt-0.5 space-y-0.5 border-l border-[var(--border,#EDE1C6)] pl-2">
+                                    {monthNode.days.map((dayNode) => {
+                                      const isSelected = selectedDayKey === dayNode.id
+                                      return (
+                                        <li key={dayNode.id}>
+                                          <button
+                                            type="button"
+                                            onClick={() => onSelectDay(dayNode)}
+                                            aria-current={isSelected ? 'date' : undefined}
+                                            className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition ${isSelected
+                                              ? 'bg-[var(--surface-muted,#F3EBDD)] font-semibold text-[var(--text,#1F1E1B)]' /* Active: Warm beige */
+                                              : 'text-[var(--text,#1F1E1B)] hover:bg-[var(--surface-subtle,#FBF7EF)]' /* Default/Hover */
+                                              }`}
+                                          >
+                                            <CalendarIcon className="h-3.5 w-3.5 text-[var(--text-muted,#6B645B)] opacity-70" />
+                                            <span>{dayNode.label}</span>
+                                            <span className="ml-auto text-[10px] opacity-60">
+                                              {dayNode.count}
+                                            </span>
+                                          </button>
+                                        </li>
+                                      )
+                                    })}
+                                  </ul>
+                                ) : null}
+                              </li>
+                            )
+                          })}
+                        </ul>
+                      ) : null}
+                    </li>
+                  )
+                })}
+              </ul>
+            ) : (
+              <p className="px-2 text-xs italic text-[var(--text-muted,#6B645B)]">No dates available.</p>
+            )}
+          </div>
+        </div>
       ) : (
         // Folder View with Smart Collections (Mock)
         <div className="flex flex-col gap-4">

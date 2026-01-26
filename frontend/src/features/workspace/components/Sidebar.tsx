@@ -68,6 +68,7 @@ export function Sidebar({
   mode?: 'sidebar' | 'mobile'
 }) {
   const [activeTab, setActiveTab] = useState<SidebarTab>('files')
+  const [filesViewMode, setFilesViewMode] = useState<'folder' | 'date'>('date')
   const [expandedYears, setExpandedYears] = useState<Set<string>>(() => new Set())
   const [expandedMonths, setExpandedMonths] = useState<Set<string>>(() => new Set())
 
@@ -95,13 +96,13 @@ export function Sidebar({
     : 'flex h-full min-h-0 flex-col overflow-hidden rounded-[var(--r-lg,20px)] border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] shadow-[0_30px_80px_rgba(31,30,27,0.16)]'
 
   const TabSwitcher = () => (
-    <div className="mx-4 mb-4 flex rounded-lg bg-[var(--surface-subtle,#FBF7EF)] p-1">
+    <div className="mx-4 mb-4 grid grid-cols-2 gap-1 rounded-lg bg-[var(--surface-muted,#F3EBDD)] p-1">
       <button
         type="button"
         onClick={() => setActiveTab('files')}
-        className={`flex-1 rounded-md py-1.5 text-xs font-medium transition-all ${activeTab === 'files'
-          ? 'bg-[var(--surface,#FFFFFF)] text-[var(--text,#1F1E1B)] shadow-sm'
-          : 'text-[var(--text-muted,#6B645B)] hover:text-[var(--text,#1F1E1B)]'
+        className={`rounded-md py-1.5 text-xs font-semibold transition-all ${activeTab === 'files'
+            ? 'bg-[var(--surface,#FFFFFF)] text-[var(--text,#1F1E1B)] shadow-sm'
+            : 'text-[var(--text-muted,#6B645B)] hover:text-[var(--text,#1F1E1B)]'
           }`}
       >
         Files
@@ -109,138 +110,168 @@ export function Sidebar({
       <button
         type="button"
         onClick={() => setActiveTab('info')}
-        className={`flex-1 rounded-md py-1.5 text-xs font-medium transition-all ${activeTab === 'info'
-          ? 'bg-[var(--surface,#FFFFFF)] text-[var(--text,#1F1E1B)] shadow-sm'
-          : 'text-[var(--text-muted,#6B645B)] hover:text-[var(--text,#1F1E1B)]'
+        className={`rounded-md py-1.5 text-xs font-semibold transition-all ${activeTab === 'info'
+            ? 'bg-[var(--surface,#FFFFFF)] text-[var(--text,#1F1E1B)] shadow-sm'
+            : 'text-[var(--text-muted,#6B645B)] hover:text-[var(--text,#1F1E1B)]'
           }`}
       >
-        Info
+        Project Info
       </button>
     </div>
   )
 
   const FilesContent = () => (
-    <div className="flex flex-col gap-6 px-4 pb-4">
-      {/* Import Action (Sticky-ish if we wanted, but top of flow is fine) */}
+    <div className="flex flex-col gap-4 px-4 pb-4">
+      {/* Import Action */}
       <div>
         <Button
           onClick={onOpenImport}
           data-testid="nav-import-action"
-          className="w-full gap-2 shadow-sm justify-center"
-          variant="solid" // Make it prominent
+          className="w-full gap-2 justify-center"
+          variant="outline" // "Ghost" / Outline style
         >
           <ImportIcon className="h-4 w-4" aria-hidden="true" />
           Import Photos
         </Button>
       </div>
 
-      {/* Date Filter */}
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">
-          <CalendarIcon className="h-3.5 w-3.5" />
-          <span>Dates</span>
-          {/* Allow clearing filter if active */}
-          {selectedDayKey && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                onClearDateFilter()
-              }}
-              className="ml-auto text-[10px] text-[var(--river-500,#6B7C7A)] hover:underline"
-            >
-              Clear selection
-            </button>
-          )}
+      {/* View Toggle (Folder vs Date) */}
+      <div>
+        <div className="flex items-center gap-2 mb-2">
+          <button
+            onClick={() => setFilesViewMode('folder')}
+            className={`flex-1 flex items-center justify-center gap-2 rounded-md border py-1.5 text-[11px] font-semibold transition-colors ${filesViewMode === 'folder'
+                ? 'border-[var(--text,#1F1E1B)] bg-[var(--text,#1F1E1B)] text-white'
+                : 'border-[var(--border,#E1D3B9)] bg-transparent text-[var(--text-muted,#6B645B)] hover:text-[var(--text,#1F1E1B)]'
+              }`}
+          >
+            <FolderIcon className="h-3.5 w-3.5" />
+            Folder View
+          </button>
+          <button
+            onClick={() => setFilesViewMode('date')}
+            className={`flex-1 flex items-center justify-center gap-2 rounded-md border py-1.5 text-[11px] font-semibold transition-colors ${filesViewMode === 'date'
+                ? 'border-[var(--text,#1F1E1B)] bg-[var(--text,#1F1E1B)] text-white'
+                : 'border-[var(--border,#E1D3B9)] bg-transparent text-[var(--text-muted,#6B645B)] hover:text-[var(--text,#1F1E1B)]'
+              }`}
+          >
+            <CalendarIcon className="h-3.5 w-3.5" />
+            Date View
+          </button>
         </div>
-        {dateTree.length ? (
-          <ul className="space-y-0.5">
-            {dateTree.map((yearNode) => {
-              const isYearExpanded = expandedYears.has(yearNode.id)
-              return (
-                <li key={yearNode.id}>
-                  <button
-                    type="button"
-                    onClick={() => toggleYear(yearNode.id)}
-                    aria-expanded={isYearExpanded}
-                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm font-medium text-[var(--text,#1F1E1B)] hover:bg-[var(--surface-subtle,#FBF7EF)]"
-                  >
-                    <ChevronRightIcon
-                      className={`h-3 w-3 text-[var(--text-muted,#6B645B)] transition-transform ${isYearExpanded ? 'rotate-90' : ''}`}
-                      aria-hidden="true"
-                    />
-                    <span>{yearNode.year}</span>
-                    <span className="ml-auto text-xs text-[var(--text-muted,#6B645B)] opacity-60">
-                      {yearNode.count}
-                    </span>
-                  </button>
-                  {isYearExpanded ? (
-                    <ul className="ml-[11px] mt-0.5 space-y-0.5 border-l border-[var(--border,#EDE1C6)] pl-2">
-                      {yearNode.months.map((monthNode) => {
-                        const isMonthExpanded = expandedMonths.has(monthNode.id)
-                        return (
-                          <li key={monthNode.id}>
-                            <button
-                              type="button"
-                              onClick={() => toggleMonth(monthNode.id)}
-                              aria-expanded={isMonthExpanded}
-                              className="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs font-medium text-[var(--text,#1F1E1B)] hover:bg-[var(--surface-subtle,#FBF7EF)]"
-                            >
-                              <ChevronRightIcon
-                                className={`h-3 w-3 text-[var(--text-muted,#6B645B)] transition-transform ${isMonthExpanded ? 'rotate-90' : ''}`}
-                                aria-hidden="true"
-                              />
-                              <span>{monthNode.label}</span>
-                              <span className="ml-auto text-[10px] text-[var(--text-muted,#6B645B)] opacity-60">
-                                {monthNode.count}
-                              </span>
-                            </button>
-                            {isMonthExpanded ? (
-                              <ul className="ml-[11px] mt-0.5 space-y-0.5 border-l border-[var(--border,#EDE1C6)] pl-2">
-                                {monthNode.days.map((dayNode) => {
-                                  const isSelected = selectedDayKey === dayNode.id
-                                  return (
-                                    <li key={dayNode.id}>
-                                      <button
-                                        type="button"
-                                        onClick={() => onSelectDay(dayNode)}
-                                        aria-current={isSelected ? 'date' : undefined}
-                                        className={`flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition ${isSelected
-                                          ? 'bg-[var(--river-100,#E3F2F4)] font-semibold text-[var(--river-700,#2F5F62)]'
-                                          : 'text-[var(--text,#1F1E1B)] hover:bg-[var(--surface-subtle,#FBF7EF)]'
-                                          }`}
-                                      >
-                                        <span>{dayNode.label}</span>
-                                        <span className="ml-auto text-[10px] opacity-60">
-                                          {dayNode.count}
-                                        </span>
-                                      </button>
-                                    </li>
-                                  )
-                                })}
-                              </ul>
-                            ) : null}
-                          </li>
-                        )
-                      })}
-                    </ul>
-                  ) : null}
-                </li>
-              )
-            })}
-          </ul>
-        ) : (
-          <p className="px-2 text-xs italic text-[var(--text-muted,#6B645B)]">No dates available.</p>
-        )}
-      </div>
 
-      {/* Folders */}
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">
-          <FolderIcon className="h-3.5 w-3.5" />
-          <span>Folders</span>
-        </div>
-        <div className="rounded-lg border border-[var(--border,#EDE1C6)] bg-[var(--surface-subtle,#FBF7EF)] p-4 text-center">
-          <p className="text-xs text-[var(--text-muted,#6B645B)]">Folder structure view coming soon.</p>
+        {/* Filters (Date Range) - Only relevant for Date View or general filtering? 
+             User said: "Integrate Date/Time filters here (e.g., above the folder list), as they relate to finding files."
+             If we are in Folder view, date filtering might still apply? Assuming yes for now.
+             Actually, if we have a Date View (Tree), that *is* the date filter.
+             Let's keep the active filter display if it exists.
+          */}
+        <div className="flex flex-col gap-2">
+          {selectedDayKey && (
+            <div className="rounded-md border border-[var(--border,#E1D3B9)] bg-[var(--sand-50,#FBF7EF)] px-3 py-2">
+              <div className="text-[10px] font-semibold text-[var(--text,#1F1E1B)]">Active Date Filter</div>
+              <div className="mt-1 flex items-center justify-between text-[11px] text-[var(--text-muted,#6B645B)]">
+                <span className="truncate">{selectedDay?.label ?? 'Custom selection'}</span>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onClearDateFilter()
+                  }}
+                  className="text-[10px] font-medium text-[var(--river-500,#6B7C7A)] hover:underline"
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Content Area Switch */}
+          {filesViewMode === 'date' ? (
+            dateTree.length ? (
+              <ul className="space-y-0.5 mt-2">
+                {dateTree.map((yearNode) => {
+                  const isYearExpanded = expandedYears.has(yearNode.id)
+                  return (
+                    <li key={yearNode.id}>
+                      <button
+                        type="button"
+                        onClick={() => toggleYear(yearNode.id)}
+                        aria-expanded={isYearExpanded}
+                        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm font-medium text-[var(--text,#1F1E1B)] hover:bg-[var(--surface-subtle,#FBF7EF)]"
+                      >
+                        <ChevronRightIcon
+                          className={`h-3 w-3 text-[var(--text-muted,#6B645B)] transition-transform ${isYearExpanded ? 'rotate-90' : ''}`}
+                          aria-hidden="true"
+                        />
+                        <span>{yearNode.year}</span>
+                        <span className="ml-auto text-xs text-[var(--text-muted,#6B645B)] opacity-60">
+                          {yearNode.count}
+                        </span>
+                      </button>
+                      {isYearExpanded ? (
+                        <ul className="ml-[11px] mt-0.5 space-y-0.5 border-l border-[var(--border,#EDE1C6)] pl-2">
+                          {yearNode.months.map((monthNode) => {
+                            const isMonthExpanded = expandedMonths.has(monthNode.id)
+                            return (
+                              <li key={monthNode.id}>
+                                <button
+                                  type="button"
+                                  onClick={() => toggleMonth(monthNode.id)}
+                                  aria-expanded={isMonthExpanded}
+                                  className="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs font-medium text-[var(--text,#1F1E1B)] hover:bg-[var(--surface-subtle,#FBF7EF)]"
+                                >
+                                  <ChevronRightIcon
+                                    className={`h-3 w-3 text-[var(--text-muted,#6B645B)] transition-transform ${isMonthExpanded ? 'rotate-90' : ''}`}
+                                    aria-hidden="true"
+                                  />
+                                  <span>{monthNode.label}</span>
+                                  <span className="ml-auto text-[10px] text-[var(--text-muted,#6B645B)] opacity-60">
+                                    {monthNode.count}
+                                  </span>
+                                </button>
+                                {isMonthExpanded ? (
+                                  <ul className="ml-[11px] mt-0.5 space-y-0.5 border-l border-[var(--border,#EDE1C6)] pl-2">
+                                    {monthNode.days.map((dayNode) => {
+                                      const isSelected = selectedDayKey === dayNode.id
+                                      return (
+                                        <li key={dayNode.id}>
+                                          <button
+                                            type="button"
+                                            onClick={() => onSelectDay(dayNode)}
+                                            aria-current={isSelected ? 'date' : undefined}
+                                            className={`flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition ${isSelected
+                                              ? 'bg-[var(--river-100,#E3F2F4)] font-semibold text-[var(--river-700,#2F5F62)]'
+                                              : 'text-[var(--text,#1F1E1B)] hover:bg-[var(--surface-subtle,#FBF7EF)]'
+                                              }`}
+                                          >
+                                            <span>{dayNode.label}</span>
+                                            <span className="ml-auto text-[10px] opacity-60">
+                                              {dayNode.count}
+                                            </span>
+                                          </button>
+                                        </li>
+                                      )
+                                    })}
+                                  </ul>
+                                ) : null}
+                              </li>
+                            )
+                          })}
+                        </ul>
+                      ) : null}
+                    </li>
+                  )
+                })}
+              </ul>
+            ) : (
+              <p className="px-2 text-xs italic text-[var(--text-muted,#6B645B)] mt-4">No dates available.</p>
+            )
+          ) : (
+            // Folder View
+            <div className="mt-4 rounded-lg border border-[var(--border,#EDE1C6)] bg-[var(--surface-subtle,#FBF7EF)] p-4 text-center">
+              <p className="text-xs text-[var(--text-muted,#6B645B)]">Folder structure view coming soon.</p>
+            </div>
+          )}
         </div>
       </div>
     </div>

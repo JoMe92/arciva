@@ -11,6 +11,9 @@ import {
   ImportIcon,
   CalendarIcon,
   ChevronLeftIcon,
+  StarIcon,
+  ClockIcon,
+  ImageIcon,
 } from './icons'
 import { RailDivider } from './Buttons'
 import { DateTreeYearNode, DateTreeMonthNode, DateTreeDayNode, ProjectOverviewData } from '../types'
@@ -72,6 +75,21 @@ export function Sidebar({
   const [expandedYears, setExpandedYears] = useState<Set<string>>(() => new Set())
   const [expandedMonths, setExpandedMonths] = useState<Set<string>>(() => new Set())
 
+  // Filter States (Visual only for now)
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+  const [sortBy, setSortBy] = useState('date-desc')
+
+  // Mock folder tree state
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set(['root', '2024', 'archive']))
+
+  const toggleFolder = (id: string) => {
+    const next = new Set(expandedFolders)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    setExpandedFolders(next)
+  }
+
   const toggleYear = (id: string) => {
     const next = new Set(expandedYears)
     if (next.has(id)) next.delete(id)
@@ -121,45 +139,81 @@ export function Sidebar({
   )
 
   const FilesContent = () => (
-    <div className="flex flex-col gap-4 px-4 pb-4">
-      {/* Import Action (Sticky-ish if we wanted, but top of flow is fine) */}
+    <div className="flex flex-col gap-5 px-4 pb-4">
+      {/* 1. Import Action */}
       <div>
         <Button
           onClick={onOpenImport}
           data-testid="nav-import-action"
           className="w-full gap-2 justify-center"
-          variant="outline" // "Ghost" / Outline style
+          variant="outline"
         >
           <ImportIcon className="h-4 w-4" aria-hidden="true" />
           Import Photos
         </Button>
       </div>
 
-      {/* HEADER: Label + View Icons */}
-      <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted,#6B645B)] mt-2 border-b border-[var(--border,#EDE1C6)] pb-2">
-        {/* Left Side: Label based on current view */}
-        <div className="flex items-center gap-2">
-          {filesViewMode === 'date' ? (
-            <>
-              <CalendarIcon className="h-3.5 w-3.5" />
-              <span>Dates</span>
-            </>
-          ) : (
-            <>
-              <FolderIcon className="h-3.5 w-3.5" />
-              <span>Folders</span>
-            </>
-          )}
+      {/* 2. Filter Section */}
+      <div className="flex flex-col gap-3">
+        {/* Date Inputs */}
+        <div className="grid grid-cols-2 gap-2">
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] font-semibold text-[var(--text-muted,#6B645B)]">Start Date</label>
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="--"
+                value={dateFrom}
+                onChange={e => setDateFrom(e.target.value)}
+                className="w-full rounded-md border border-[var(--border,#EDE1C6)] bg-white px-2 py-1.5 text-xs text-[var(--text,#1F1E1B)] placeholder:text-gray-300 focus:border-[var(--focus-ring,#1A73E8)] focus:outline-none"
+              />
+              <CalendarIcon className="pointer-events-none absolute right-2 top-1.5 h-3.5 w-3.5 text-gray-400" />
+            </div>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] font-semibold text-[var(--text-muted,#6B645B)]">End Date</label>
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="--"
+                value={dateTo}
+                onChange={e => setDateTo(e.target.value)}
+                className="w-full rounded-md border border-[var(--border,#EDE1C6)] bg-white px-2 py-1.5 text-xs text-[var(--text,#1F1E1B)] placeholder:text-gray-300 focus:border-[var(--focus-ring,#1A73E8)] focus:outline-none"
+              />
+              <CalendarIcon className="pointer-events-none absolute right-2 top-1.5 h-3.5 w-3.5 text-gray-400" />
+            </div>
+          </div>
         </div>
 
-        {/* Right Side: Tiny Icon Toggle */}
+        {/* Sort Dropdown */}
+        <div className="relative">
+          <select
+            value={sortBy}
+            onChange={e => setSortBy(e.target.value)}
+            className="w-full appearance-none rounded-md border border-[var(--border,#EDE1C6)] bg-white px-2 py-1.5 text-xs text-[var(--text,#1F1E1B)] focus:border-[var(--focus-ring,#1A73E8)] focus:outline-none"
+          >
+            <option value="date-desc">Date (Newest First)</option>
+            <option value="date-asc">Date (Oldest First)</option>
+            <option value="name">Name</option>
+          </select>
+          <ChevronRightIcon className="pointer-events-none absolute right-2 top-2 h-3 w-3 rotate-90 text-gray-400" />
+        </div>
+      </div>
+
+      {/* 3. Section Header (Label + View Toggle) */}
+      <div className="flex items-center justify-between border-b border-[var(--border,#EDE1C6)] pb-2 pt-1">
+        <span className="text-[11px] font-bold uppercase tracking-wide text-[var(--text,#1F1E1B)]">
+          {filesViewMode === 'date' ? 'Timeline' : 'Folders'}
+        </span>
+
+        {/* Icon Toggle */}
         <div className="flex items-center gap-1">
           <button
             onClick={() => setFilesViewMode('date')}
             title="Date View"
             className={`p-1.5 rounded-md transition-colors ${filesViewMode === 'date'
-                ? 'bg-[var(--surface-muted,#F3EBDD)] text-[var(--text,#1F1E1B)]'
-                : 'text-[var(--text-muted,#6B645B)] hover:text-[var(--text,#1F1E1B)] hover:bg-[var(--surface-subtle,#FBF7EF)]'
+              ? 'bg-[var(--surface-muted,#F3EBDD)] text-[var(--text,#1F1E1B)]'
+              : 'text-[var(--text-muted,#6B645B)] hover:text-[var(--text,#1F1E1B)] hover:bg-[var(--surface-subtle,#FBF7EF)]'
               }`}
           >
             <CalendarIcon className="h-3.5 w-3.5" />
@@ -168,8 +222,8 @@ export function Sidebar({
             onClick={() => setFilesViewMode('folder')}
             title="Folder View"
             className={`p-1.5 rounded-md transition-colors ${filesViewMode === 'folder'
-                ? 'bg-[var(--surface-muted,#F3EBDD)] text-[var(--text,#1F1E1B)]'
-                : 'text-[var(--text-muted,#6B645B)] hover:text-[var(--text,#1F1E1B)] hover:bg-[var(--surface-subtle,#FBF7EF)]'
+              ? 'bg-[var(--surface-muted,#F3EBDD)] text-[var(--text,#1F1E1B)]'
+              : 'text-[var(--text-muted,#6B645B)] hover:text-[var(--text,#1F1E1B)] hover:bg-[var(--surface-subtle,#FBF7EF)]'
               }`}
           >
             <FolderIcon className="h-3.5 w-3.5" />
@@ -195,7 +249,7 @@ export function Sidebar({
         </div>
       )}
 
-      {/* Content Area Switch */}
+      {/* 4. Content Area */}
       {filesViewMode === 'date' ? (
         dateTree.length ? (
           <ul className="space-y-0.5">
@@ -250,8 +304,8 @@ export function Sidebar({
                                         onClick={() => onSelectDay(dayNode)}
                                         aria-current={isSelected ? 'date' : undefined}
                                         className={`flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition ${isSelected
-                                          ? 'bg-[var(--river-100,#E3F2F4)] font-semibold text-[var(--river-700,#2F5F62)]'
-                                          : 'text-[var(--text,#1F1E1B)] hover:bg-[var(--surface-subtle,#FBF7EF)]'
+                                          ? 'bg-[var(--surface-muted,#F3EBDD)] font-semibold text-[var(--text,#1F1E1B)]' /* Active: Warm beige */
+                                          : 'text-[var(--text,#1F1E1B)] hover:bg-[var(--surface-subtle,#FBF7EF)]' /* Default/Hover */
                                           }`}
                                       >
                                         <span>{dayNode.label}</span>
@@ -277,9 +331,89 @@ export function Sidebar({
           <p className="px-2 text-xs italic text-[var(--text-muted,#6B645B)] mt-4">No dates available.</p>
         )
       ) : (
-        // Folder View
-        <div className="mt-2 rounded-lg border border-[var(--border,#EDE1C6)] bg-[var(--surface-subtle,#FBF7EF)] p-4 text-center">
-          <p className="text-xs text-[var(--text-muted,#6B645B)]">Folder structure view coming soon.</p>
+        // Folder View with Smart Collections (Mock)
+        <div className="flex flex-col gap-4">
+          {/* Smart Collections */}
+          <ul className="space-y-0.5">
+            {[
+              { id: 'all', label: 'All Photos', icon: ImageIcon, count: 1240 },
+              { id: 'fav', label: 'Favorites', icon: StarIcon, count: 48 },
+              { id: 'recent', label: 'Recent Imports', icon: ClockIcon, count: 12 },
+            ].map(item => (
+              <li key={item.id}>
+                <button
+                  className="flex w-full items-center gap-3 rounded-md px-2 py-1.5 text-left text-sm font-medium text-[var(--text,#1F1E1B)] hover:bg-[var(--surface-subtle,#FBF7EF)]"
+                >
+                  <item.icon className="h-4 w-4 text-[var(--text-muted,#6B645B)]" />
+                  <span>{item.label}</span>
+                  <span className="ml-auto text-xs text-[var(--text-muted,#6B645B)] opacity-60">{item.count}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+
+          {/* Folder Tree */}
+          <div>
+            <div className="mb-2 px-2 text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">
+              Project Folders
+            </div>
+            <ul className="space-y-0.5">
+              {/* Mock Folder: 2024 Shoot */}
+              <li>
+                <button
+                  onClick={() => toggleFolder('2024')}
+                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm font-medium text-[var(--text,#1F1E1B)] hover:bg-[var(--surface-subtle,#FBF7EF)]"
+                >
+                  <ChevronRightIcon className={`h-3 w-3 text-[var(--text-muted,#6B645B)] transition-transform ${expandedFolders.has('2024') ? 'rotate-90' : ''}`} />
+                  <FolderIcon className="h-3.5 w-3.5 text-[var(--text-muted,#6B645B)]" />
+                  <span>2024 Shoot</span>
+                  <span className="ml-auto text-xs text-[var(--text-muted,#6B645B)] opacity-60">850</span>
+                </button>
+                {expandedFolders.has('2024') && (
+                  <ul className="ml-[11px] mt-0.5 space-y-0.5 border-l border-[var(--border,#EDE1C6)] pl-2">
+                    <li>
+                      <button className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-[var(--text,#1F1E1B)] hover:bg-[var(--surface-subtle,#FBF7EF)]">
+                        <FolderIcon className="h-3.5 w-3.5 text-[var(--text-muted,#6B645B)] opacity-70" />
+                        <span>Studio Session A</span>
+                        <span className="ml-auto text-[10px] text-[var(--text-muted,#6B645B)] opacity-60">320</span>
+                      </button>
+                    </li>
+                    <li>
+                      <button className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-[var(--text,#1F1E1B)] hover:bg-[var(--surface-subtle,#FBF7EF)]">
+                        <FolderIcon className="h-3.5 w-3.5 text-[var(--text-muted,#6B645B)] opacity-70" />
+                        <span>Outdoor Location</span>
+                        <span className="ml-auto text-[10px] text-[var(--text-muted,#6B645B)] opacity-60">530</span>
+                      </button>
+                    </li>
+                  </ul>
+                )}
+              </li>
+
+              {/* Mock Folder: Archive */}
+              <li>
+                <button
+                  onClick={() => toggleFolder('archive')}
+                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm font-medium text-[var(--text,#1F1E1B)] hover:bg-[var(--surface-subtle,#FBF7EF)]"
+                >
+                  <ChevronRightIcon className={`h-3 w-3 text-[var(--text-muted,#6B645B)] transition-transform ${expandedFolders.has('archive') ? 'rotate-90' : ''}`} />
+                  <FolderIcon className="h-3.5 w-3.5 text-[var(--text-muted,#6B645B)]" />
+                  <span>Archive</span>
+                  <span className="ml-auto text-xs text-[var(--text-muted,#6B645B)] opacity-60">390</span>
+                </button>
+                {expandedFolders.has('archive') && (
+                  <ul className="ml-[11px] mt-0.5 space-y-0.5 border-l border-[var(--border,#EDE1C6)] pl-2">
+                    <li>
+                      <button className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-[var(--text,#1F1E1B)] hover:bg-[var(--surface-subtle,#FBF7EF)]">
+                        <FolderIcon className="h-3.5 w-3.5 text-[var(--text-muted,#6B645B)] opacity-70" />
+                        <span>Raw Imports</span>
+                        <span className="ml-auto text-[10px] text-[var(--text-muted,#6B645B)] opacity-60">390</span>
+                      </button>
+                    </li>
+                  </ul>
+                )}
+              </li>
+            </ul>
+          </div>
         </div>
       )}
     </div>

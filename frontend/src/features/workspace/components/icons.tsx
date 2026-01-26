@@ -345,3 +345,54 @@ export function SettingsIcon(props: React.SVGProps<SVGSVGElement>) {
     </svg>
   )
 }
+
+export function StarIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      {...props}
+    >
+      <path d="M8 1.5 9.9 5.8l4.7.4-3.6 3.2 1.1 4.6L8 11.6l-4.1 2.4 1.1-4.6-3.6-3.2 4.7-.4L8 1.5Z" />
+    </svg>
+  )
+}
+
+export function ClockIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      {...props}
+    >
+      <circle cx="8" cy="8" r="6" />
+      <path d="M8 4.5V8l2.5 1.5" />
+    </svg>
+  )
+}
+
+export function ImageIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      {...props}
+    >
+      <rect x="2" y="3" width="12" height="10" rx="2" />
+      <circle cx="5.5" cy="6.5" r="1.5" />
+      <path d="m14 10-3.5-3.5-5.5 5.5" />
+    </svg>
+  )
+}

@@ -3,15 +3,9 @@ import { Button } from '../../../components/Button'
 
 // ...
 
-import { RawPlaceholder, RawPlaceholderFrame } from '../../../components/RawPlaceholder'
 import {
   ChevronRightIcon,
-  PlusIcon,
-  MinusIcon,
   FolderIcon,
-  CalendarClockIcon,
-  CameraIcon,
-  PreviewIcon,
   SettingsIcon,
   LayoutListIcon,
   ImportIcon,
@@ -27,15 +21,10 @@ import {
   makeDayKey,
   PROJECT_DATE_FORMAT,
 } from '../utils'
-import { CountBadge } from './Common'
 const LEFT_PANEL_ID = 'workspace-sidebar'
 const LEFT_PANEL_CONTENT_ID = `${LEFT_PANEL_ID}-content`
-const LEFT_OVERVIEW_SECTION_ID = `${LEFT_PANEL_ID}-overview`
-const LEFT_IMPORT_SECTION_ID = `${LEFT_PANEL_ID}-import`
-const LEFT_DATE_SECTION_ID = `${LEFT_PANEL_ID}-date`
-const LEFT_FOLDER_SECTION_ID = `${LEFT_PANEL_ID}-folder`
 
-type LeftPanelTarget = 'overview' | 'import' | 'date' | 'folder'
+type SidebarTab = 'files' | 'info'
 
 export function Sidebar({
   dateTree,
@@ -78,17 +67,9 @@ export function Sidebar({
   onExpand: () => void
   mode?: 'sidebar' | 'mobile'
 }) {
+  const [activeTab, setActiveTab] = useState<SidebarTab>('files')
   const [expandedYears, setExpandedYears] = useState<Set<string>>(() => new Set())
   const [expandedMonths, setExpandedMonths] = useState<Set<string>>(() => new Set())
-  const [overviewSectionOpen, setOverviewSectionOpen] = useState(true)
-  const [importSectionOpen, setImportSectionOpen] = useState(true)
-  const [dateSectionOpen, setDateSectionOpen] = useState(true)
-  const [folderSectionOpen, setFolderSectionOpen] = useState(true)
-  const pendingTargetRef = useRef<LeftPanelTarget | null>(null)
-  const overviewSectionRef = useRef<HTMLDivElement | null>(null)
-  const importSectionRef = useRef<HTMLDivElement | null>(null)
-  const dateSectionRef = useRef<HTMLDivElement | null>(null)
-  const folderSectionRef = useRef<HTMLDivElement | null>(null)
 
   const toggleYear = (id: string) => {
     const next = new Set(expandedYears)
@@ -104,68 +85,191 @@ export function Sidebar({
     setExpandedMonths(next)
   }
 
-  const ensureSectionOpen = useCallback((target: LeftPanelTarget) => {
-    if (target === 'overview') setOverviewSectionOpen(true)
-    else if (target === 'import') setImportSectionOpen(true)
-    else if (target === 'date') setDateSectionOpen(true)
-    else if (target === 'folder') setFolderSectionOpen(true)
-  }, [])
-
-  const scrollToTarget = useCallback((target: LeftPanelTarget) => {
-    const refMap: Record<LeftPanelTarget, React.RefObject<HTMLDivElement | null>> = {
-      overview: overviewSectionRef,
-      import: importSectionRef,
-      date: dateSectionRef,
-      folder: folderSectionRef,
-    }
-    const ref = refMap[target]?.current
-    if (ref) {
-      ref.scrollIntoView({ block: 'start', behavior: 'smooth' })
-      if (typeof ref.focus === 'function') {
-        ref.focus({ preventScroll: true })
-      }
-    }
-  }, [])
-
-  useEffect(() => {
-    if (collapsed) return
-    const target = pendingTargetRef.current
-    if (!target) return
-    ensureSectionOpen(target)
-    scrollToTarget(target)
-    pendingTargetRef.current = null
-  }, [collapsed, ensureSectionOpen, scrollToTarget])
-
-  const handleRailSelect = useCallback(
-    (target: LeftPanelTarget) => {
-      ensureSectionOpen(target)
-      if (collapsed) {
-        pendingTargetRef.current = target
-        onExpand()
-        return
-      }
-      scrollToTarget(target)
-    },
-    [collapsed, ensureSectionOpen, onExpand, scrollToTarget]
-  )
-
   const isMobilePanel = mode === 'mobile'
   const collapsedState = isMobilePanel ? false : collapsed
-  const panelShellClass = isMobilePanel
-    ? 'flex h-full min-h-0 flex-col gap-3 overflow-y-auto px-1'
-    : 'flex h-full min-h-0 flex-col overflow-hidden rounded-[var(--r-lg,20px)] border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] p-4 shadow-[0_30px_80px_rgba(31,30,27,0.16)]'
-  const panelContentClass = isMobilePanel
-    ? 'flex flex-1 min-h-0 flex-col gap-3 pb-4'
-    : 'flex flex-1 min-h-0 flex-col gap-3 overflow-y-auto pr-4'
 
-  const hasDateFilter = !!selectedDayKey
+  // Base classes for the outer container
+  // We want a cohesive container look.
+  const panelShellClass = isMobilePanel
+    ? 'flex h-full min-h-0 flex-col overflow-hidden bg-[var(--surface,#FFFFFF)]'
+    : 'flex h-full min-h-0 flex-col overflow-hidden rounded-[var(--r-lg,20px)] border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] shadow-[0_30px_80px_rgba(31,30,27,0.16)]'
+
+  const TabSwitcher = () => (
+    <div className="mx-4 mb-4 flex rounded-lg bg-[var(--surface-subtle,#FBF7EF)] p-1">
+      <button
+        type="button"
+        onClick={() => setActiveTab('files')}
+        className={`flex-1 rounded-md py-1.5 text-xs font-medium transition-all ${activeTab === 'files'
+          ? 'bg-[var(--surface,#FFFFFF)] text-[var(--text,#1F1E1B)] shadow-sm'
+          : 'text-[var(--text-muted,#6B645B)] hover:text-[var(--text,#1F1E1B)]'
+          }`}
+      >
+        Files
+      </button>
+      <button
+        type="button"
+        onClick={() => setActiveTab('info')}
+        className={`flex-1 rounded-md py-1.5 text-xs font-medium transition-all ${activeTab === 'info'
+          ? 'bg-[var(--surface,#FFFFFF)] text-[var(--text,#1F1E1B)] shadow-sm'
+          : 'text-[var(--text-muted,#6B645B)] hover:text-[var(--text,#1F1E1B)]'
+          }`}
+      >
+        Info
+      </button>
+    </div>
+  )
+
+  const FilesContent = () => (
+    <div className="flex flex-col gap-6 px-4 pb-4">
+      {/* Import Action (Sticky-ish if we wanted, but top of flow is fine) */}
+      <div>
+        <Button
+          onClick={onOpenImport}
+          data-testid="nav-import-action"
+          className="w-full gap-2 shadow-sm justify-center"
+          variant="solid" // Make it prominent
+        >
+          <ImportIcon className="h-4 w-4" aria-hidden="true" />
+          Import Photos
+        </Button>
+      </div>
+
+      {/* Date Filter */}
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">
+          <CalendarIcon className="h-3.5 w-3.5" />
+          <span>Dates</span>
+          {/* Allow clearing filter if active */}
+          {selectedDayKey && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                onClearDateFilter()
+              }}
+              className="ml-auto text-[10px] text-[var(--river-500,#6B7C7A)] hover:underline"
+            >
+              Clear selection
+            </button>
+          )}
+        </div>
+        {dateTree.length ? (
+          <ul className="space-y-0.5">
+            {dateTree.map((yearNode) => {
+              const isYearExpanded = expandedYears.has(yearNode.id)
+              return (
+                <li key={yearNode.id}>
+                  <button
+                    type="button"
+                    onClick={() => toggleYear(yearNode.id)}
+                    aria-expanded={isYearExpanded}
+                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm font-medium text-[var(--text,#1F1E1B)] hover:bg-[var(--surface-subtle,#FBF7EF)]"
+                  >
+                    <ChevronRightIcon
+                      className={`h-3 w-3 text-[var(--text-muted,#6B645B)] transition-transform ${isYearExpanded ? 'rotate-90' : ''}`}
+                      aria-hidden="true"
+                    />
+                    <span>{yearNode.year}</span>
+                    <span className="ml-auto text-xs text-[var(--text-muted,#6B645B)] opacity-60">
+                      {yearNode.count}
+                    </span>
+                  </button>
+                  {isYearExpanded ? (
+                    <ul className="ml-[11px] mt-0.5 space-y-0.5 border-l border-[var(--border,#EDE1C6)] pl-2">
+                      {yearNode.months.map((monthNode) => {
+                        const isMonthExpanded = expandedMonths.has(monthNode.id)
+                        return (
+                          <li key={monthNode.id}>
+                            <button
+                              type="button"
+                              onClick={() => toggleMonth(monthNode.id)}
+                              aria-expanded={isMonthExpanded}
+                              className="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs font-medium text-[var(--text,#1F1E1B)] hover:bg-[var(--surface-subtle,#FBF7EF)]"
+                            >
+                              <ChevronRightIcon
+                                className={`h-3 w-3 text-[var(--text-muted,#6B645B)] transition-transform ${isMonthExpanded ? 'rotate-90' : ''}`}
+                                aria-hidden="true"
+                              />
+                              <span>{monthNode.label}</span>
+                              <span className="ml-auto text-[10px] text-[var(--text-muted,#6B645B)] opacity-60">
+                                {monthNode.count}
+                              </span>
+                            </button>
+                            {isMonthExpanded ? (
+                              <ul className="ml-[11px] mt-0.5 space-y-0.5 border-l border-[var(--border,#EDE1C6)] pl-2">
+                                {monthNode.days.map((dayNode) => {
+                                  const isSelected = selectedDayKey === dayNode.id
+                                  return (
+                                    <li key={dayNode.id}>
+                                      <button
+                                        type="button"
+                                        onClick={() => onSelectDay(dayNode)}
+                                        aria-current={isSelected ? 'date' : undefined}
+                                        className={`flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition ${isSelected
+                                          ? 'bg-[var(--river-100,#E3F2F4)] font-semibold text-[var(--river-700,#2F5F62)]'
+                                          : 'text-[var(--text,#1F1E1B)] hover:bg-[var(--surface-subtle,#FBF7EF)]'
+                                          }`}
+                                      >
+                                        <span>{dayNode.label}</span>
+                                        <span className="ml-auto text-[10px] opacity-60">
+                                          {dayNode.count}
+                                        </span>
+                                      </button>
+                                    </li>
+                                  )
+                                })}
+                              </ul>
+                            ) : null}
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  ) : null}
+                </li>
+              )
+            })}
+          </ul>
+        ) : (
+          <p className="px-2 text-xs italic text-[var(--text-muted,#6B645B)]">No dates available.</p>
+        )}
+      </div>
+
+      {/* Folders */}
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted,#6B645B)]">
+          <FolderIcon className="h-3.5 w-3.5" />
+          <span>Folders</span>
+        </div>
+        <div className="rounded-lg border border-[var(--border,#EDE1C6)] bg-[var(--surface-subtle,#FBF7EF)] p-4 text-center">
+          <p className="text-xs text-[var(--text-muted,#6B645B)]">Folder structure view coming soon.</p>
+        </div>
+      </div>
+    </div>
+  )
+
+  const InfoContent = () => (
+    <div className="px-4 pb-4">
+      {projectOverview ? (
+        <ProjectOverviewDetails
+          data={projectOverview}
+          onRename={onRenameProject}
+          renamePending={renamePending}
+          renameError={renameError}
+          onUpdate={onProjectOverviewChange}
+          updatePending={projectOverviewPending}
+          updateError={projectOverviewError}
+        />
+      ) : (
+        <div className="py-4 text-center text-sm text-[var(--text-muted,#6B645B)]">Loading details…</div>
+      )}
+    </div>
+  )
 
   return (
     <aside
       id={LEFT_PANEL_ID}
       role="complementary"
       aria-label="Sidebar"
-      className={`relative h-full min-h-0 ${isMobilePanel ? 'px-3 py-4' : 'px-2 py-4'}`}
+      className={`relative h-full min-h-0 ${isMobilePanel ? 'px-0 py-0' : 'px-2 py-4'}`}
       data-state={collapsedState ? 'collapsed' : 'expanded'}
     >
       <div
@@ -174,184 +278,36 @@ export function Sidebar({
         className={`h-full min-h-0 ${isMobilePanel ? '' : `transition-opacity duration-150 ${collapsedState ? 'pointer-events-none opacity-0' : 'opacity-100'}`}`}
       >
         <div className={panelShellClass}>
-
-          {!isMobilePanel ? (
-            <header className="sticky top-0 z-10 flex items-center gap-3 border-b border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] pb-3">
+          {/* Header */}
+          <div className="flex items-center justify-between border-b border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] px-4 py-3">
+            <div className="flex items-center gap-2 text-sm font-semibold text-[var(--text,#1F1E1B)]">
+              <LayoutListIcon className="h-4 w-4" aria-hidden="true" />
+              <span>Project</span>
+            </div>
+            {!isMobilePanel && (
               <Button
-                variant="outline"
+                variant="ghost"
                 size="icon"
                 onClick={onCollapse}
+                className="h-6 w-6 text-[var(--text-muted,#6B645B)]"
                 aria-label="Collapse sidebar"
-                aria-controls={LEFT_PANEL_CONTENT_ID}
               >
-                <ChevronLeftIcon className="h-4 w-4" aria-hidden="true" />
+                <ChevronLeftIcon className="h-3.5 w-3.5" />
               </Button>
-              <div className="flex items-center gap-2">
-                <LayoutListIcon className="h-4 w-4 text-[var(--text,#1F1E1B)]" aria-hidden="true" />
-                <span className="text-sm font-semibold text-[var(--text,#1F1E1B)]">Project</span>
-              </div>
-            </header>
-          ) : (
-            <div className="flex items-center gap-2 px-1 text-sm font-semibold text-[var(--text,#1F1E1B)]">
-              <LayoutListIcon className="h-4 w-4" aria-hidden="true" />
-              Project
+            )}
+          </div>
+
+          {/* Tabs - Only show active content area */}
+          <div className="flex flex-1 min-h-0 flex-col overflow-hidden pt-4">
+            <TabSwitcher />
+            <div id={LEFT_PANEL_CONTENT_ID} className="flex-1 overflow-y-auto">
+              {activeTab === 'files' ? <FilesContent /> : <InfoContent />}
             </div>
-          )}
-
-          <div id={LEFT_PANEL_CONTENT_ID} className={panelContentClass}>
-            <InspectorSection
-              id={LEFT_OVERVIEW_SECTION_ID}
-              ref={overviewSectionRef}
-              icon={<LayoutListIcon className="h-4 w-4" aria-hidden="true" />}
-              label="Overview"
-              open={overviewSectionOpen}
-              onToggle={() => setOverviewSectionOpen((open) => !open)}
-              data-testid="nav-overview"
-            >
-              {projectOverview ? (
-                <ProjectOverviewDetails
-                  data={projectOverview}
-                  onRename={onRenameProject}
-                  renamePending={renamePending}
-                  renameError={renameError}
-                  onUpdate={onProjectOverviewChange}
-                  updatePending={projectOverviewPending}
-                  updateError={projectOverviewError}
-                />
-              ) : (
-                <p className="text-sm text-[var(--text-muted,#6B645B)]">Loading project details…</p>
-              )}
-            </InspectorSection>
-
-            <InspectorSection
-              id={LEFT_IMPORT_SECTION_ID}
-              ref={importSectionRef}
-              icon={<ImportIcon className="h-4 w-4" aria-hidden="true" />}
-              label="Import"
-              open={importSectionOpen}
-              onToggle={() => setImportSectionOpen((open) => !open)}
-              data-testid="nav-import"
-            >
-              <div className="space-y-3">
-                <p className="text-xs text-[var(--text-muted,#6B645B)]">
-                  Add photos to this project.
-                </p>
-                <Button
-                  onClick={onOpenImport}
-                  data-testid="nav-import-action"
-                  className="w-full gap-2 shadow-sm"
-                >
-                  <ImportIcon className="h-4 w-4" aria-hidden="true" />
-                  Import Photos
-                </Button>
-              </div>
-            </InspectorSection>
-
-            <InspectorSection
-              id={LEFT_DATE_SECTION_ID}
-              ref={dateSectionRef}
-              icon={<CalendarIcon className="h-4 w-4" aria-hidden="true" />}
-              label="Date"
-              open={dateSectionOpen}
-              onToggle={() => setDateSectionOpen((open) => !open)}
-              data-testid="nav-date"
-            >
-              {dateTree.length ? (
-                <ul className="space-y-1">
-                  {dateTree.map((yearNode) => {
-                    const isYearExpanded = expandedYears.has(yearNode.id)
-                    return (
-                      <li key={yearNode.id}>
-                        <button
-                          type="button"
-                          onClick={() => toggleYear(yearNode.id)}
-                          aria-expanded={isYearExpanded}
-                          className="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-sm font-medium text-[var(--text,#1F1E1B)] hover:bg-[var(--surface-subtle,#FBF7EF)]"
-                        >
-                          <ChevronRightIcon
-                            className={`h-3 w-3 text-[var(--text-muted,#6B645B)] transition-transform ${isYearExpanded ? 'rotate-90' : ''}`}
-                            aria-hidden="true"
-                          />
-                          <span>{yearNode.year}</span>
-                          <span className="ml-auto text-xs text-[var(--text-muted,#6B645B)]">
-                            {yearNode.count}
-                          </span>
-                        </button>
-                        {isYearExpanded ? (
-                          <ul className="ml-4 mt-1 space-y-1 border-l border-[var(--border,#EDE1C6)] pl-2">
-                            {yearNode.months.map((monthNode) => {
-                              const isMonthExpanded = expandedMonths.has(monthNode.id)
-                              return (
-                                <li key={monthNode.id}>
-                                  <button
-                                    type="button"
-                                    onClick={() => toggleMonth(monthNode.id)}
-                                    aria-expanded={isMonthExpanded}
-                                    className="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs font-medium text-[var(--text,#1F1E1B)] hover:bg-[var(--surface-subtle,#FBF7EF)]"
-                                  >
-                                    <ChevronRightIcon
-                                      className={`h-3 w-3 text-[var(--text-muted,#6B645B)] transition-transform ${isMonthExpanded ? 'rotate-90' : ''}`}
-                                      aria-hidden="true"
-                                    />
-                                    <span>{monthNode.label}</span>
-                                    <span className="ml-auto text-[10px] text-[var(--text-muted,#6B645B)]">
-                                      {monthNode.count}
-                                    </span>
-                                  </button>
-                                  {isMonthExpanded ? (
-                                    <ul className="ml-4 mt-1 space-y-0.5 border-l border-[var(--border,#EDE1C6)] pl-2">
-                                      {monthNode.days.map((dayNode) => {
-                                        const isSelected = selectedDayKey === dayNode.id
-                                        return (
-                                          <li key={dayNode.id}>
-                                            <button
-                                              type="button"
-                                              onClick={() => onSelectDay(dayNode)}
-                                              aria-current={isSelected ? 'date' : undefined}
-                                              className={`flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition ${isSelected
-                                                ? 'bg-[var(--river-100,#E3F2F4)] font-semibold text-[var(--river-700,#2F5F62)]'
-                                                : 'text-[var(--text,#1F1E1B)] hover:bg-[var(--surface-subtle,#FBF7EF)]'
-                                                }`}
-                                            >
-                                              <span>{dayNode.label}</span>
-                                              <span className="ml-auto text-[10px] opacity-70">
-                                                {dayNode.count}
-                                              </span>
-                                            </button>
-                                          </li>
-                                        )
-                                      })}
-                                    </ul>
-                                  ) : null}
-                                </li>
-                              )
-                            })}
-                          </ul>
-                        ) : null}
-                      </li>
-                    )
-                  })}
-                </ul>
-              ) : (
-                <p className="text-xs text-[var(--text-muted,#6B645B)]">No dates available.</p>
-              )}
-            </InspectorSection>
-
-            <InspectorSection
-              id={LEFT_FOLDER_SECTION_ID}
-              ref={folderSectionRef}
-              icon={<FolderIcon className="h-4 w-4" aria-hidden="true" />}
-              label="Folders"
-              open={folderSectionOpen}
-              onToggle={() => setFolderSectionOpen((open) => !open)}
-              data-testid="nav-folders"
-            >
-              <p className="text-xs text-[var(--text-muted,#6B645B)]">Folder view coming soon.</p>
-            </InspectorSection>
           </div>
         </div>
       </div>
 
+      {/* Collapsed Rail View */}
       {!isMobilePanel ? (
         <div
           data-panel="rail"
@@ -370,69 +326,37 @@ export function Sidebar({
                   size="icon"
                   className="rounded-[12px] h-10 w-10"
                   onClick={onExpand}
-                  aria-label="Expand Project Overview panel"
+                  aria-label="Expand Project panel"
                 >
                   <ChevronRightIcon className="h-4 w-4" aria-hidden="true" />
                 </Button>
                 <RailDivider />
               </div>
-              <div className="mt-3 flex flex-1 flex-col items-center gap-2">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className={`rounded-[12px] h-10 w-10 ${overviewSectionOpen ? 'border-[var(--border,#EDE1C6)] bg-[var(--surface-subtle,#FBF7EF)]' : ''}`}
-                  onClick={() => handleRailSelect('overview')}
-                  aria-label="Overview"
-                  aria-controls={LEFT_OVERVIEW_SECTION_ID}
-                  aria-expanded={overviewSectionOpen}
+              <div className="mt-3 flex flex-1 flex-col items-center gap-4">
+                {/* Mini Icons for quick access - could toggle expanding to specific tab */}
+                <button
+                  onClick={() => { setActiveTab('files'); onExpand(); }}
+                  className="flex h-10 w-10 items-center justify-center rounded-xl text-[var(--text-muted,#6B645B)] hover:bg-[var(--surface-subtle,#FBF7EF)] hover:text-[var(--text,#1F1E1B)]"
+                  title="Files"
                 >
-                  <LayoutListIcon className="h-4 w-4" aria-hidden="true" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className={`rounded-[12px] h-10 w-10 ${importSectionOpen ? 'border-[var(--border,#EDE1C6)] bg-[var(--surface-subtle,#FBF7EF)]' : ''}`}
-                  onClick={() => handleRailSelect('import')}
-                  aria-label="Import"
-                  aria-controls={LEFT_IMPORT_SECTION_ID}
-                  aria-expanded={importSectionOpen}
+                  <FolderIcon className="h-5 w-5" />
+                </button>
+                <div className="h-px w-6 bg-[var(--border,#EDE1C6)]" />
+                <button
+                  onClick={() => { setActiveTab('files'); onExpand(); }} // Date is in files now
+                  className={`flex h-10 w-10 items-center justify-center rounded-xl hover:bg-[var(--surface-subtle,#FBF7EF)] ${selectedDayKey ? 'text-[var(--river-700,#2F5F62)] bg-[var(--river-100,#E3F2F4)]' : 'text-[var(--text-muted,#6B645B)] hover:text-[var(--text,#1F1E1B)]'}`}
+                  title="Dates"
                 >
-                  <ImportIcon className="h-4 w-4" aria-hidden="true" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className={`rounded-[12px] h-10 w-10 ${dateSectionOpen || hasDateFilter ? 'border-[var(--border,#EDE1C6)] bg-[var(--surface-subtle,#FBF7EF)]' : ''}`}
-                  onClick={() => handleRailSelect('date')}
-                  aria-label="Date"
-                  aria-controls={LEFT_DATE_SECTION_ID}
-                  aria-expanded={dateSectionOpen}
+                  <CalendarIcon className="h-5 w-5" />
+                </button>
+                <div className="h-px w-6 bg-[var(--border,#EDE1C6)]" />
+                <button
+                  onClick={() => { setActiveTab('info'); onExpand(); }}
+                  className="flex h-10 w-10 items-center justify-center rounded-xl text-[var(--text-muted,#6B645B)] hover:bg-[var(--surface-subtle,#FBF7EF)] hover:text-[var(--text,#1F1E1B)]"
+                  title="Info"
                 >
-                  <CalendarIcon className="h-4 w-4" aria-hidden="true" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className={`rounded-[12px] h-10 w-10 ${folderSectionOpen ? 'border-[var(--border,#EDE1C6)] bg-[var(--surface-subtle,#FBF7EF)]' : ''}`}
-                  onClick={() => handleRailSelect('folder')}
-                  aria-label="Folders"
-                  aria-controls={LEFT_FOLDER_SECTION_ID}
-                  aria-expanded={folderSectionOpen}
-                >
-                  <FolderIcon className="h-4 w-4" aria-hidden="true" />
-                </Button>
-              </div>
-              <div className="mt-auto flex flex-col items-center gap-2">
-                <RailDivider />
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="rounded-[12px] h-10 w-10"
-                  onClick={() => handleRailSelect('folder')} // Placeholder
-                  aria-label="Import settings"
-                >
-                  <SettingsIcon className="h-4 w-4" aria-hidden="true" />
-                </Button>
+                  <SettingsIcon className="h-5 w-5" />
+                </button>
               </div>
             </div>
           ) : null}
@@ -441,53 +365,6 @@ export function Sidebar({
     </aside>
   )
 }
-
-type InspectorSectionProps = {
-  id: string
-  icon: React.ReactNode
-  label: string
-  open: boolean
-  onToggle: () => void
-  children: React.ReactNode
-  grow?: boolean
-}
-
-const InspectorSection = React.forwardRef<HTMLDivElement | null, InspectorSectionProps>(
-  function InspectorSection({ id, icon, label, open, onToggle, children, grow = false }, ref) {
-    const growClasses = grow && open ? 'flex-1 min-h-0' : ''
-    return (
-      <section
-        id={id}
-        ref={ref}
-        tabIndex={-1}
-        className={`flex shrink-0 flex-col rounded-[18px] border border-[var(--border,#EDE1C6)] bg-[var(--surface,#FFFFFF)] shadow-[0_18px_40px_rgba(31,30,27,0.12)] ${growClasses}`}
-      >
-        <button
-          type="button"
-          aria-expanded={open}
-          aria-controls={`${id}-content`}
-          onClick={onToggle}
-          className="flex items-center gap-3 px-4 py-2 text-sm font-semibold text-[var(--text,#1F1E1B)]"
-        >
-          <span className="inline-flex items-center gap-2">
-            <span className="text-[var(--text-muted,#6B645B)]">{icon}</span>
-            {label}
-          </span>
-          <span className="ml-auto text-[11px] font-medium uppercase tracking-wide text-[var(--text-muted,#6B645B)]">
-            {open ? 'Hide' : 'Show'}
-          </span>
-        </button>
-        <div
-          id={`${id}-content`}
-          aria-hidden={!open}
-          className={`${open ? `${grow ? 'flex flex-col overflow-y-auto ' : ''}px-4 pb-4 pt-1` : 'hidden'} ${growClasses}`}
-        >
-          {children}
-        </div>
-      </section>
-    )
-  }
-)
 
 type ProjectOverviewDetailsProps = {
   data: ProjectOverviewData

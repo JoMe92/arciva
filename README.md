@@ -203,4 +203,4 @@ Add the secrets in the repo settings so releases can always push the multi-archi
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).
